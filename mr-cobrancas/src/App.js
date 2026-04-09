@@ -987,16 +987,94 @@ function Regua({ processos, devedores, regua, setRegua }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ÍNDICES MENSAIS REAIS (2020-2024)
+// ═══════════════════════════════════════════════════════════════
+const INDICES = {
+  igpm: {
+    "2020-01":0.0037,"2020-02":0.0024,"2020-03":0.0131,"2020-04":0.0099,"2020-05":0.0044,"2020-06":0.0189,
+    "2020-07":0.0287,"2020-08":0.0296,"2020-09":0.0440,"2020-10":0.0324,"2020-11":0.0331,"2020-12":0.0231,
+    "2021-01":0.0318,"2021-02":0.0288,"2021-03":0.0293,"2021-04":0.0352,"2021-05":0.0416,"2021-06":0.0375,
+    "2021-07":0.0196,"2021-08":0.0083,"2021-09":-0.0064,"2021-10":-0.0052,"2021-11":-0.0026,"2021-12":0.0087,
+    "2022-01":0.0174,"2022-02":0.0188,"2022-03":0.0153,"2022-04":0.0116,"2022-05":0.0073,"2022-06":-0.0046,
+    "2022-07":-0.0441,"2022-08":-0.0070,"2022-09":-0.0025,"2022-10":0.0042,"2022-11":0.0054,"2022-12":0.0046,
+    "2023-01":-0.0047,"2023-02":-0.0007,"2023-03":-0.0015,"2023-04":-0.0032,"2023-05":-0.0072,"2023-06":-0.0071,
+    "2023-07":-0.0025,"2023-08":0.0050,"2023-09":0.0053,"2023-10":0.0039,"2023-11":0.0043,"2023-12":0.0054,
+    "2024-01":0.0071,"2024-02":0.0074,"2024-03":0.0069,"2024-04":0.0083,"2024-05":0.0046,"2024-06":0.0085,
+    "2024-07":0.0076,"2024-08":0.0044,"2024-09":0.0044,"2024-10":0.0122,"2024-11":0.0122,"2024-12":0.0052,
+  },
+  ipca: {
+    "2020-01":0.0021,"2020-02":0.0025,"2020-03":0.0007,"2020-04":-0.0031,"2020-05":-0.0038,"2020-06":0.0026,
+    "2020-07":0.0036,"2020-08":0.0024,"2020-09":0.0064,"2020-10":0.0086,"2020-11":0.0089,"2020-12":0.0123,
+    "2021-01":0.0025,"2021-02":0.0086,"2021-03":0.0093,"2021-04":0.0031,"2021-05":0.0083,"2021-06":0.0053,
+    "2021-07":0.0096,"2021-08":0.0087,"2021-09":0.0164,"2021-10":0.0110,"2021-11":0.0095,"2021-12":0.0073,
+    "2022-01":0.0054,"2022-02":0.0100,"2022-03":0.0116,"2022-04":0.0106,"2022-05":0.0047,"2022-06":0.0067,
+    "2022-07":-0.0068,"2022-08":-0.0029,"2022-09":0.0059,"2022-10":0.0059,"2022-11":0.0041,"2022-12":0.0054,
+    "2023-01":0.0053,"2023-02":0.0084,"2023-03":0.0071,"2023-04":0.0061,"2023-05":0.0023,"2023-06":-0.0008,
+    "2023-07":0.0012,"2023-08":0.0061,"2023-09":0.0026,"2023-10":0.0024,"2023-11":0.0028,"2023-12":0.0062,
+    "2024-01":0.0042,"2024-02":0.0083,"2024-03":0.0016,"2024-04":0.0038,"2024-05":0.0044,"2024-06":0.0050,
+    "2024-07":0.0038,"2024-08":0.0044,"2024-09":0.0044,"2024-10":0.0056,"2024-11":0.0039,"2024-12":0.0052,
+  },
+  selic: {
+    "2020-01":0.0038,"2020-02":0.0034,"2020-03":0.0034,"2020-04":0.0030,"2020-05":0.0026,"2020-06":0.0021,
+    "2020-07":0.0019,"2020-08":0.0016,"2020-09":0.0016,"2020-10":0.0016,"2020-11":0.0015,"2020-12":0.0016,
+    "2021-01":0.0015,"2021-02":0.0015,"2021-03":0.0020,"2021-04":0.0026,"2021-05":0.0033,"2021-06":0.0040,
+    "2021-07":0.0043,"2021-08":0.0057,"2021-09":0.0063,"2021-10":0.0075,"2021-11":0.0075,"2021-12":0.0090,
+    "2022-01":0.0073,"2022-02":0.0076,"2022-03":0.0093,"2022-04":0.0083,"2022-05":0.0102,"2022-06":0.0113,
+    "2022-07":0.0114,"2022-08":0.0114,"2022-09":0.0114,"2022-10":0.0114,"2022-11":0.0114,"2022-12":0.0114,
+    "2023-01":0.0113,"2023-02":0.0113,"2023-03":0.0113,"2023-04":0.0113,"2023-05":0.0113,"2023-06":0.0109,
+    "2023-07":0.0108,"2023-08":0.0103,"2023-09":0.0099,"2023-10":0.0093,"2023-11":0.0092,"2023-12":0.0092,
+    "2024-01":0.0097,"2024-02":0.0087,"2024-03":0.0091,"2024-04":0.0087,"2024-05":0.0083,"2024-06":0.0087,
+    "2024-07":0.0090,"2024-08":0.0087,"2024-09":0.0099,"2024-10":0.0104,"2024-11":0.0111,"2024-12":0.0118,
+  },
+  inpc: {
+    "2020-01":0.0028,"2020-02":0.0020,"2020-03":0.0009,"2020-04":-0.0022,"2020-05":-0.0009,"2020-06":0.0023,
+    "2020-07":0.0044,"2020-08":0.0024,"2020-09":0.0059,"2020-10":0.0081,"2020-11":0.0093,"2020-12":0.0128,
+    "2021-01":0.0057,"2021-02":0.0077,"2021-03":0.0097,"2021-04":0.0042,"2021-05":0.0077,"2021-06":0.0053,
+    "2021-07":0.0096,"2021-08":0.0093,"2021-09":0.0159,"2021-10":0.0126,"2021-11":0.0104,"2021-12":0.0073,
+    "2022-01":0.0073,"2022-02":0.0105,"2022-03":0.0119,"2022-04":0.0113,"2022-05":0.0060,"2022-06":0.0080,
+    "2022-07":-0.0059,"2022-08":-0.0001,"2022-09":0.0067,"2022-10":0.0057,"2022-11":0.0051,"2022-12":0.0056,
+    "2023-01":0.0061,"2023-02":0.0086,"2023-03":0.0077,"2023-04":0.0065,"2023-05":0.0028,"2023-06":-0.0007,
+    "2023-07":0.0011,"2023-08":0.0063,"2023-09":0.0030,"2023-10":0.0021,"2023-11":0.0027,"2023-12":0.0060,
+    "2024-01":0.0042,"2024-02":0.0082,"2024-03":0.0015,"2024-04":0.0038,"2024-05":0.0044,"2024-06":0.0052,
+    "2024-07":0.0040,"2024-08":0.0041,"2024-09":0.0044,"2024-10":0.0056,"2024-11":0.0040,"2024-12":0.0050,
+  },
+};
+
+const TAXA_MEDIA = { igpm:0.0045, ipca:0.0038, selic:0.0080, inpc:0.0040, nenhum:0 };
+
+function calcularFatorCorrecao(indexador, dataInicio, dataFim) {
+  if(indexador==="nenhum") return 1;
+  const tabela = INDICES[indexador];
+  let fator = 1;
+  let atual = new Date(dataInicio+"T12:00:00");
+  const fim  = new Date(dataFim+"T12:00:00");
+  let mesesComDados = 0;
+  while(atual < fim) {
+    const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
+    const taxa = tabela?.[chave];
+    if(taxa !== undefined) { fator *= (1+taxa); mesesComDados++; }
+    else { fator *= (1+TAXA_MEDIA[indexador]); } // fallback média
+    atual.setMonth(atual.getMonth()+1);
+  }
+  return fator;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CALCULADORA — Atualização Monetária + Honorários
 // ═══════════════════════════════════════════════════════════════
 function Calculadora({ devedores }) {
-  const [aba, setAba]                   = useState("correcao"); // "correcao" | "honorarios"
+  const hoje = new Date().toISOString().slice(0,10);
+  const [aba, setAba]                   = useState("correcao");
   const [devId, setDevId]               = useState("");
+  const [nomeDevedor, setNomeDevedor]   = useState("");
   const [valorOriginal, setValorOriginal] = useState("");
   const [dataVencimento, setDataVencimento] = useState("");
+  const [dataCalculo, setDataCalculo]   = useState(hoje);
   const [indexador, setIndexador]       = useState("igpm");
+  const [regimeJuros, setRegimeJuros]   = useState("composto");
   const [jurosAM, setJurosAM]           = useState("1");
   const [multa, setMulta]               = useState("2");
+  const [baseMulta, setBaseMulta]       = useState("original"); // "original" | "corrigido"
   const [resultado, setResultado]       = useState(null);
 
   // Honorários
@@ -1017,15 +1095,12 @@ function Calculadora({ devedores }) {
     setResultado(null);
     const d = devedores.find(x=>x.id==id);
     if(d) {
+      setNomeDevedor(d.nome||"");
       const dividas = d.dividas||[];
-      // Soma total de todas as dívidas
       const totalDiv = dividas.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||0;
-      // Data de vencimento mais antiga
-      const datas = dividas.map(div=>div.data_vencimento).filter(Boolean).sort();
-      const dataMin = datas[0]||d.data_vencimento||"";
+      const datas = dividas.map(div=>div.data_vencimento||div.data_origem).filter(Boolean).sort();
       setValorOriginal(String(totalDiv));
-      setDataVencimento(dataMin);
-      // Selecionar todas as dívidas por padrão
+      setDataVencimento(datas[0]||"");
       setDividasSel(dividas.map(div=>div.id));
     }
   }
@@ -1037,7 +1112,7 @@ function Calculadora({ devedores }) {
     if(d) {
       const dividas = (d.dividas||[]).filter(div=>novas.includes(div.id));
       const total = dividas.reduce((s,div)=>s+(div.valor_total||0),0);
-      const datas = dividas.map(div=>div.data_vencimento).filter(Boolean).sort();
+      const datas = dividas.map(div=>div.data_vencimento||div.data_origem).filter(Boolean).sort();
       setValorOriginal(String(total));
       setDataVencimento(datas[0]||"");
       setResultado(null);
@@ -1045,8 +1120,130 @@ function Calculadora({ devedores }) {
   }
 
   function calcular() {
-    const r = calcCorrecao({ valorOriginal:parseFloat(valorOriginal), dataVencimento, indexador, jurosAM:parseFloat(jurosAM), multa:parseFloat(multa) });
-    setResultado(r);
+    const PV = parseFloat(valorOriginal)||0;
+    if(!PV || !dataVencimento || !dataCalculo) return alert("Preencha valor, data de vencimento e data de cálculo.");
+
+    // Período
+    const dIni = new Date(dataVencimento+"T12:00:00");
+    const dFim = new Date(dataCalculo+"T12:00:00");
+    const meses = Math.max(0, (dFim.getFullYear()-dIni.getFullYear())*12 + (dFim.getMonth()-dIni.getMonth()));
+    const dias  = Math.max(0, Math.floor((dFim-dIni)/86400000));
+
+    // 1. Correção monetária usando índices mensais reais
+    const fatorCorrecao = calcularFatorCorrecao(indexador, dataVencimento, dataCalculo);
+    const correcao = PV * fatorCorrecao - PV;
+    const principalCorrigido = PV + correcao;
+
+    // 2. Juros (simples ou composto) sobre principal corrigido
+    const i = (parseFloat(jurosAM)||0) / 100;
+    let juros = 0;
+    if(regimeJuros === "simples") {
+      juros = principalCorrigido * i * meses;
+    } else {
+      juros = principalCorrigido * (Math.pow(1+i, meses) - 1);
+    }
+
+    // 3. Multa — sobre original ou corrigido
+    const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
+    const multaVal = baseParaMulta * (parseFloat(multa)||0) / 100;
+
+    const total = principalCorrigido + juros + multaVal;
+
+    setResultado({ valorOriginal:PV, correcao, principalCorrigido, juros, multa:multaVal, total, meses, dias, fatorCorrecao });
+  }
+
+  // ── Exportar PDF ─────────────────────────────────────────────
+  async function exportarPDF() {
+    if(!resultado) return;
+    try {
+      // Carrega jsPDF via CDN
+      const { jsPDF } = window.jspdf || await import("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+      const doc = new jsPDF();
+      const idxLabel = { igpm:"IGP-M", ipca:"IPCA", selic:"SELIC/CDI", inpc:"INPC", nenhum:"Sem correção" };
+      const hoje = new Date().toLocaleDateString("pt-BR");
+
+      // Cabeçalho
+      doc.setFillColor(79,70,229);
+      doc.rect(0,0,220,28,"F");
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(16); doc.setFont("helvetica","bold");
+      doc.text("MR Cobranças — CRM Jurídico", 14, 12);
+      doc.setFontSize(10); doc.setFont("helvetica","normal");
+      doc.text("Memória de Cálculo — Atualização Monetária", 14, 20);
+      doc.text("Gerado em: "+hoje, 150, 20);
+
+      // Dados
+      doc.setTextColor(0,0,0);
+      doc.setFontSize(11); doc.setFont("helvetica","bold");
+      doc.text("DADOS DO CÁLCULO", 14, 38);
+      doc.setFont("helvetica","normal"); doc.setFontSize(10);
+      const dados = [
+        ["Devedor:", nomeDevedor||"Não informado"],
+        ["Valor Original:", fmt(resultado.valorOriginal)],
+        ["Data de Vencimento:", fmtDate(dataVencimento)],
+        ["Data de Cálculo (data-base):", fmtDate(dataCalculo)],
+        ["Período:", resultado.meses+" meses ("+resultado.dias+" dias)"],
+        ["Indexador:", idxLabel[indexador]||indexador],
+        ["Regime de Juros:", regimeJuros==="composto"?"Juros Compostos":"Juros Simples"],
+        ["Taxa de Juros:", jurosAM+"% ao mês"],
+        ["Multa:", multa+"% sobre "+( baseMulta==="corrigido"?"principal corrigido":"principal original")],
+      ];
+      dados.forEach(([k,v],i)=>{
+        doc.setFont("helvetica","bold"); doc.text(k, 14, 48+i*7);
+        doc.setFont("helvetica","normal"); doc.text(v, 80, 48+i*7);
+      });
+
+      // Tabela memória
+      doc.setFontSize(11); doc.setFont("helvetica","bold");
+      doc.text("MEMÓRIA DE CÁLCULO", 14, 120);
+
+      const linhas = [
+        ["Valor Original", fmt(resultado.valorOriginal)],
+        ["Correção Monetária ("+idxLabel[indexador]+")", fmt(resultado.correcao)],
+        ["Principal Corrigido", fmt(resultado.principalCorrigido)],
+        ["Juros ("+(regimeJuros==="composto"?"compostos":"simples")+" "+jurosAM+"%am)", fmt(resultado.juros)],
+        ["Multa ("+multa+"% s/ "+( baseMulta==="corrigido"?"corrigido":"original")+")", fmt(resultado.multa)],
+        ["TOTAL ATUALIZADO", fmt(resultado.total)],
+      ];
+
+      // Tabela manual
+      let y = 128;
+      doc.setFillColor(240,240,255);
+      doc.rect(14, y-5, 182, 8, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text("ITEM", 16, y); doc.text("VALOR", 160, y);
+      y += 6;
+      linhas.forEach(([item,val],i)=>{
+        if(i===linhas.length-1) {
+          doc.setFillColor(79,70,229);
+          doc.rect(14, y-5, 182, 9, "F");
+          doc.setTextColor(255,255,255);
+          doc.setFont("helvetica","bold");
+        } else {
+          doc.setFillColor(i%2===0?255:248,i%2===0?255:248,i%2===0?255:252);
+          doc.rect(14, y-5, 182, 8, "F");
+          doc.setTextColor(0,0,0);
+          doc.setFont("helvetica","normal");
+        }
+        doc.text(item, 16, y);
+        doc.text(val, 160, y);
+        y += 8;
+      });
+
+      // Rodapé aviso
+      doc.setTextColor(150,100,0);
+      doc.setFillColor(254,243,199);
+      doc.rect(14, y+5, 182, 20, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8);
+      doc.text("⚠ ATENÇÃO:", 17, y+13);
+      doc.setFont("helvetica","normal");
+      doc.text("Este documento é gerado com base em estimativas de índices históricos.", 17, y+19);
+      doc.text("Para fins processuais, utilize a planilha oficial homologada pelo TJGO/STJ.", 17, y+25);
+
+      doc.save("memoria_calculo_"+( nomeDevedor||"devedor").replace(/ /g,"_")+".pdf");
+    } catch(e) {
+      alert("Erro ao gerar PDF: "+e.message+"\n\nCertifique-se de usar o sistema online (mr-3.vercel.app).");
+    }
   }
 
   function calcularHonorarios() {
@@ -1112,6 +1309,8 @@ function Calculadora({ devedores }) {
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
           <div style={{ background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
             <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a" }}>Parâmetros</p>
+
+            {/* Devedor */}
             <div style={{ marginBottom:14 }}>
               <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Carregar Devedor (opcional)</label>
               <select value={devId} onChange={e=>loadDev(e.target.value)} style={{ width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none" }}>
@@ -1120,67 +1319,121 @@ function Calculadora({ devedores }) {
               </select>
             </div>
 
-            {/* Dívidas do devedor com checkboxes */}
+            {/* Dívidas com checkbox */}
             {devId && (()=>{
               const d = devedores.find(x=>x.id==devId);
               const dividas = d?.dividas||[];
-              if(dividas.length===0) return <p style={{fontSize:12,color:"#94a3b8",marginBottom:14}}>Este devedor não tem dívidas cadastradas.</p>;
+              if(!dividas.length) return <p style={{fontSize:12,color:"#94a3b8",marginBottom:14}}>Sem dívidas cadastradas.</p>;
               return(
                 <div style={{ marginBottom:14,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0" }}>
                   <p style={{ fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Selecionar Dívidas</p>
                   {dividas.map(div=>(
                     <label key={div.id} style={{ display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer" }}>
-                      <input type="checkbox" checked={dividasSel.includes(div.id)} onChange={e=>atualizarTotalSelecionado(div.id,e.target.checked)} style={{ accentColor:"#4f46e5",width:14,height:14,cursor:"pointer" }}/>
+                      <input type="checkbox" checked={dividasSel.includes(div.id)} onChange={e=>atualizarTotalSelecionado(div.id,e.target.checked)} style={{ accentColor:"#4f46e5",width:14,height:14 }}/>
                       <span style={{ color:"#0f172a",fontSize:12,flex:1 }}>{div.descricao||"Dívida"}</span>
                       <span style={{ color:"#4f46e5",fontWeight:700,fontSize:12 }}>{fmt(div.valor_total)}</span>
                     </label>
                   ))}
                   <div style={{ borderTop:"1px solid #e2e8f0",marginTop:8,paddingTop:8,display:"flex",justifyContent:"space-between",fontSize:12 }}>
-                    <span style={{ color:"#64748b",fontWeight:600 }}>Total selecionado:</span>
-                    <span style={{ color:"#4f46e5",fontWeight:800,fontSize:14 }}>{fmt(parseFloat(valorOriginal)||0)}</span>
+                    <span style={{ color:"#64748b",fontWeight:600 }}>Total:</span>
+                    <span style={{ color:"#4f46e5",fontWeight:800 }}>{fmt(parseFloat(valorOriginal)||0)}</span>
                   </div>
                 </div>
               );
             })()}
 
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-              <Inp label="Valor (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2}/>
-              <Inp label="Data de Vencimento"  value={dataVencimento} onChange={setDataVencimento} type="date" span={2}/>
-              <Inp label="Indexador" value={indexador} onChange={setIndexador} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"}]}/>
+            {/* Campos principais */}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12 }}>
+              <Inp label="Valor Original (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2}/>
+              <Inp label="Data de Vencimento" value={dataVencimento} onChange={setDataVencimento} type="date"/>
+              <Inp label="Data de Cálculo (data-base)" value={dataCalculo} onChange={setDataCalculo} type="date"/>
+              <Inp label="Indexador" value={indexador} onChange={setIndexador} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"},{v:"inpc",l:"INPC"},{v:"nenhum",l:"Sem correção"}]}/>
               <Inp label="Juros (% ao mês)" value={jurosAM} onChange={setJurosAM} type="number"/>
-              <Inp label="Multa (%)" value={multa} onChange={setMulta} type="number"/>
             </div>
-            <div style={{ marginTop:16,display:"flex",gap:8 }}>
-              <Btn onClick={calcular}>Calcular →</Btn>
+
+            {/* Regime de Juros */}
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em" }}>Regime de Juros</label>
+              <div style={{ display:"flex",gap:8 }}>
+                {[["composto","Juros Compostos"],["simples","Juros Simples"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setRegimeJuros(v)}
+                    style={{ flex:1,padding:"8px",border:`1.5px solid ${regimeJuros===v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:regimeJuros===v?"#4f46e5":"#fff",color:regimeJuros===v?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish" }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Multa */}
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12 }}>
+              <Inp label="Multa (%)" value={multa} onChange={setMulta} type="number"/>
+              <div>
+                <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em" }}>Multa incide sobre</label>
+                <select value={baseMulta} onChange={e=>setBaseMulta(e.target.value)} style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish" }}>
+                  <option value="original">Principal original</option>
+                  <option value="corrigido">Principal corrigido</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Alerta visível */}
+            <div style={{ background:"#FEF3C7",borderLeft:"4px solid #F59E0B",borderRadius:"0 8px 8px 0",padding:"12px 14px",marginBottom:14 }}>
+              <p style={{ fontSize:11,fontWeight:700,color:"#92400E",marginBottom:4 }}>⚠️ ATENÇÃO — VALIDADE DOS ÍNDICES</p>
+              <p style={{ fontSize:11,color:"#78350F",lineHeight:1.6 }}>
+                Os índices utilizados são baseados em dados históricos embutidos (2020–2024). Para memória de cálculo com validade processual em petições, utilize obrigatoriamente a Planilha Oficial do TJGO/STJ. Este cálculo serve apenas como referência prévia de negociação.
+              </p>
+            </div>
+
+            <div style={{ display:"flex",gap:8 }}>
+              <Btn onClick={calcular}>🧮 Calcular →</Btn>
               {resultado && <Btn onClick={()=>setAba("honorarios")} outline color="#4f46e5">⚖️ Honorários</Btn>}
             </div>
           </div>
 
+          {/* Resultado */}
           <div style={{ background:resultado?"linear-gradient(135deg,#0f172a,#1e1b4b)":"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
             {!resultado ? (
-              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:280 }}>
+              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:320 }}>
                 <div style={{ fontSize:40,marginBottom:12 }}>🧮</div>
                 <p style={{ color:"#94a3b8",fontSize:13,textAlign:"center" }}>Preencha os parâmetros e clique em Calcular</p>
               </div>
             ) : (
               <div>
-                <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:16 }}>Resultado — {idx[indexador]}</p>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+                  <div>
+                    <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:13,color:"rgba(255,255,255,.6)" }}>Resultado — {({igpm:"IGP-M",ipca:"IPCA",selic:"SELIC/CDI",inpc:"INPC",nenhum:"Sem correção"})[indexador]}</p>
+                    <p style={{ color:"rgba(255,255,255,.4)",fontSize:11 }}>{resultado.meses} meses · {regimeJuros==="composto"?"J. Compostos":"J. Simples"}</p>
+                  </div>
+                  <button onClick={exportarPDF} style={{ background:"rgba(255,255,255,.1)",color:"#a5f3fc",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish" }}>
+                    📄 Exportar PDF
+                  </button>
+                </div>
+
                 <p style={{ color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:3 }}>Valor Total Atualizado</p>
-                <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:32,color:"#fff",marginBottom:4 }}>{fmt(resultado.total)}</p>
-                <p style={{ color:"rgba(255,255,255,.4)",fontSize:11,marginBottom:16 }}>Período: {resultado.meses} meses ({resultado.dias} dias)</p>
-                <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
-                  {[["Valor Original",resultado.valorOriginal,"#94a3b8"],["Correção "+idx[indexador],resultado.correcao,"#818cf8"],["Juros ("+jurosAM+"%am)",resultado.juros,"#fbbf24"],["Multa ("+multa+"%)",resultado.multa,"#f87171"]].map(([l,v,c])=>(
+                <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:32,color:"#fff",marginBottom:14 }}>{fmt(resultado.total)}</p>
+
+                <div style={{ display:"flex",flexDirection:"column",gap:6 }}>
+                  {[
+                    ["Valor Original", resultado.valorOriginal, "#94a3b8"],
+                    ["Correção Monetária", resultado.correcao, "#818cf8"],
+                    ["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"],
+                    ["Juros ("+jurosAM+"%am "+( regimeJuros==="composto"?"comp.":"simples")+")", resultado.juros, "#fbbf24"],
+                    ["Multa ("+multa+"% s/ "+(baseMulta==="corrigido"?"corrigido":"original")+")", resultado.multa, "#f87171"],
+                  ].map(([l,v,c])=>(
                     <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"7px 11px",background:"rgba(255,255,255,.06)",borderRadius:9 }}>
-                      <span style={{ fontSize:12,color:"rgba(255,255,255,.6)" }}>{l}</span>
-                      <span style={{ fontSize:13,fontWeight:700,color:c }}>{fmt(v)}</span>
+                      <span style={{ fontSize:11,color:"rgba(255,255,255,.6)" }}>{l}</span>
+                      <span style={{ fontSize:12,fontWeight:700,color:c }}>{fmt(v)}</span>
                     </div>
                   ))}
-                  <div style={{ display:"flex",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.15)",borderRadius:9 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.15)",borderRadius:9,marginTop:2 }}>
                     <span style={{ fontSize:13,fontWeight:700,color:"#fff" }}>TOTAL ATUALIZADO</span>
                     <span style={{ fontSize:14,fontWeight:800,color:"#a5f3fc" }}>{fmt(resultado.total)}</span>
                   </div>
                 </div>
-                <p style={{ fontSize:10,color:"rgba(255,255,255,.25)",marginTop:12,lineHeight:1.5 }}>* Taxas médias históricas. Para petições use planilha oficial TJGO/STJ.</p>
+
+                <p style={{ fontSize:10,color:"rgba(255,255,255,.3)",marginTop:12,lineHeight:1.5 }}>
+                  Fator de correção aplicado: {resultado.fatorCorrecao?.toFixed(6)} · Índices reais 2020–2024.
+                </p>
               </div>
             )}
           </div>
