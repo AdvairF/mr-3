@@ -298,7 +298,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
       )}
 
       {/* KPIs Principais */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20" className="mr-grid-4}}>
+      <div className="mr-grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
         {[
           { l:"Carteira Total",  v:fmt(totalCarteira),  sub:`${devedores.length} devedor${devedores.length!==1?"es":""}`, ic:"💼", g:"linear-gradient(135deg,#6366f1,#8b5cf6)", glow:"rgba(99,102,241,.35)" },
           { l:"Recuperado",      v:fmt(totalRecuperado), sub:`${taxaRecuperacao.toFixed(1)}% da carteira`,                ic:"✅", g:"linear-gradient(135deg,#10b981,#059669)", glow:"rgba(16,185,129,.35)" },
