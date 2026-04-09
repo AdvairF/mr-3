@@ -854,6 +854,18 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   });
   const FL = (k,v) => setFormLem(f=>({...f,[k]:v}));
 
+  // Relatório livre — carregado do localStorage por devedor
+  const relKey = `mr_relatorio_${sel.id}`;
+  const [relTexto, setRelTexto] = useState(()=>{ try{return localStorage.getItem(relKey)||"";}catch{return "";} });
+  const [relSalvo, setRelSalvo] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+
+  function salvarRelatorio() {
+    setSalvando(true);
+    try { localStorage.setItem(relKey, relTexto); } catch(e){}
+    setTimeout(()=>{ setSalvando(false); setRelSalvo(true); }, 600);
+  }
+
   // Carregar lembretes do devedor do localStorage
   function getLems() {
     try { return JSON.parse(localStorage.getItem("mr_lembretes")||"[]"); } catch{ return []; }
@@ -908,6 +920,46 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
 
   return (
     <div>
+
+      {/* ── RELATÓRIO LIVRE ─────────────────────────────────── */}
+      <div style={{background:"#fff",borderRadius:14,padding:16,border:"1.5px solid #e2e8f0",marginBottom:18}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div>
+            <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>📝 Relatório do Devedor</p>
+            <p style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Anotações livres, histórico narrativo, observações estratégicas</p>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {!relSalvo&&<span style={{fontSize:10,color:"#d97706",fontWeight:600}}>● não salvo</span>}
+            {relSalvo&&relTexto&&<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ salvo</span>}
+            <button onClick={salvarRelatorio} disabled={relSalvo&&!salvando}
+              style={{background:relSalvo?"#f1f5f9":"#4f46e5",color:relSalvo?"#94a3b8":"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:relSalvo?"default":"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish",transition:"all .2s"}}>
+              {salvando?"Salvando...":"💾 Salvar"}
+            </button>
+          </div>
+        </div>
+        <textarea
+          value={relTexto}
+          onChange={e=>{setRelTexto(e.target.value);setRelSalvo(false);}}
+          placeholder={`Escreva o relatório do processo de cobrança de ${sel.nome.split(" ")[0]}...
+
+Exemplo:
+• 10/04/2026 — Cliente informou dificuldade financeira, prometeu pagar até dia 15.
+• 12/04/2026 — Sem resposta ao WhatsApp. Aguardar retorno.
+• 15/04/2026 — Confirmou pagamento de R$ 500 para amanhã.`}
+          rows={8}
+          style={{width:"100%",padding:"12px 14px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical",lineHeight:1.7,color:"#0f172a",background:"#fafafe"}}
+        />
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+          <span style={{fontSize:10,color:"#94a3b8"}}>{relTexto.length} caracteres</span>
+          {relTexto&&(
+            <button onClick={()=>{if(window.confirm("Limpar todo o relatório?"))setRelTexto("");}}
+              style={{fontSize:10,color:"#dc2626",background:"none",border:"none",cursor:"pointer"}}>
+              🗑 Limpar
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* KPIs */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}>
         {[
@@ -1501,15 +1553,22 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           </div>
         </div>
 
-        {/* Abas */}
-        <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid #f1f5f9",overflowX:"auto"}}>
-          {[["dados","📋 Dados"],["contatos","📞 Contatos"],["dividas","💳 Dívidas"],["acordos","🤝 Acordos"],["processos","⚖️ Processos"],["relatorio","📊 Relatório"]].map(([id,label])=>(
-            <button key={id} onClick={()=>setAbaFicha(id)}
-              style={{padding:"9px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2,whiteSpace:"nowrap"}}>
-              {label}
-              {id==="acordos"&&acordos.length>0&&<span style={{marginLeft:5,background:"#4f46e5",color:"#fff",borderRadius:99,fontSize:9,padding:"1px 5px"}}>{acordos.length}</span>}
-            </button>
-          ))}
+        {/* Abas com scroll */}
+        <div style={{position:"relative",marginBottom:16}}>
+          <div style={{display:"flex",gap:0,borderBottom:"2px solid #f1f5f9",overflowX:"auto",scrollbarWidth:"thin",scrollbarColor:"#e2e8f0 transparent",WebkitOverflowScrolling:"touch"}}>
+            <style>{`.tab-scroll::-webkit-scrollbar{height:3px}.tab-scroll::-webkit-scrollbar-track{background:transparent}.tab-scroll::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:99px}`}</style>
+            {[["dados","📋 Dados"],["contatos","📞 Contatos"],["dividas","💳 Dívidas"],["acordos","🤝 Acordos"],["processos","⚖️ Processos"],["relatorio","📊 Relatório"]].map(([id,label])=>(
+              <button key={id} onClick={()=>setAbaFicha(id)}
+                style={{padding:"10px 18px",border:"none",background:abaFicha===id?"#fafafe":"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2,whiteSpace:"nowrap",flexShrink:0,transition:"all .15s"}}>
+                {label}
+                {id==="acordos"&&acordos.length>0&&<span style={{marginLeft:5,background:"#4f46e5",color:"#fff",borderRadius:99,fontSize:9,padding:"1px 5px"}}>{acordos.length}</span>}
+              </button>
+            ))}
+          </div>
+          {/* Indicador de scroll */}
+          <div style={{position:"absolute",right:0,top:0,bottom:2,width:28,background:"linear-gradient(to left,#fff 60%,transparent)",pointerEvents:"none",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:4}}>
+            <span style={{fontSize:10,color:"#c4b5fd"}}>›</span>
+          </div>
         </div>
 
         <div style={{background:"#fff",borderRadius:16,padding:20,border:"1px solid #f1f5f9"}}>
