@@ -345,10 +345,23 @@ function Devedores({ devedores, setDevedores, credores, onModalChange }) {
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
     try {
-      const payload = { ...form, credor_id:form.credor_id?parseInt(form.credor_id):null, dividas:JSON.stringify([]), valor_original:0 };
-      const res = await dbInsert("devedores", payload);
+      // Tenta com coluna dividas primeiro
+      let payload = { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo, telefone:form.telefone, email:form.email, cidade:form.cidade, status:form.status, credor_id:form.credor_id?parseInt(form.credor_id):null, dividas:JSON.stringify([]), valor_original:0 };
+      let res = await dbInsert("devedores", payload);
+      // Se falhar (coluna dividas não existe), tenta sem ela
+      if(!res || (Array.isArray(res) && res.length===0) || res.code) {
+        const {dividas:_, ...semDividas} = payload;
+        res = await dbInsert("devedores", semDividas);
+      }
       const novo = Array.isArray(res)?res[0]:res;
-      if(novo) { setDevedores(p=>[...p,{...novo,dividas:[]}]); fecharModal(); setForm(FORM_DEV); }
+      if(novo && novo.id) {
+        setDevedores(p=>[...p,{...novo,dividas:[]}]);
+        fecharModal();
+        setForm(FORM_DEV);
+        alert(`Devedor "${novo.nome}" cadastrado!`);
+      } else {
+        alert("Erro ao salvar. Verifique se o SQL do Supabase foi executado.");
+      }
     } catch(e){ alert("Erro: "+e.message); }
     setLoading(false);
   }
@@ -936,12 +949,39 @@ function Calculadora({ devedores }) {
   const [faseProcessual, setFaseProcessual] = useState("extrajudicial");
   const [resultadoHon, setResultadoHon] = useState(null);
 
+  // Dívidas selecionadas para calcular
+  const [dividasSel, setDividasSel] = useState([]); // ids das dívidas selecionadas
+
   function loadDev(id) {
     setDevId(id);
+    setDividasSel([]);
+    setResultado(null);
     const d = devedores.find(x=>x.id==id);
     if(d) {
-      setValorOriginal(String(d.valor_original));
-      setDataVencimento(d.data_vencimento||"");
+      const dividas = d.dividas||[];
+      // Soma total de todas as dívidas
+      const totalDiv = dividas.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||0;
+      // Data de vencimento mais antiga
+      const datas = dividas.map(div=>div.data_vencimento).filter(Boolean).sort();
+      const dataMin = datas[0]||d.data_vencimento||"";
+      setValorOriginal(String(totalDiv));
+      setDataVencimento(dataMin);
+      // Selecionar todas as dívidas por padrão
+      setDividasSel(dividas.map(div=>div.id));
+    }
+  }
+
+  function atualizarTotalSelecionado(id, checked) {
+    const novas = checked ? [...dividasSel, id] : dividasSel.filter(x=>x!==id);
+    setDividasSel(novas);
+    const d = devedores.find(x=>x.id==devId);
+    if(d) {
+      const dividas = (d.dividas||[]).filter(div=>novas.includes(div.id));
+      const total = dividas.reduce((s,div)=>s+(div.valor_total||0),0);
+      const datas = dividas.map(div=>div.data_vencimento).filter(Boolean).sort();
+      setValorOriginal(String(total));
+      setDataVencimento(datas[0]||"");
+      setResultado(null);
     }
   }
 
@@ -1020,8 +1060,32 @@ function Calculadora({ devedores }) {
                 {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
               </select>
             </div>
+
+            {/* Dívidas do devedor com checkboxes */}
+            {devId && (()=>{
+              const d = devedores.find(x=>x.id==devId);
+              const dividas = d?.dividas||[];
+              if(dividas.length===0) return <p style={{fontSize:12,color:"#94a3b8",marginBottom:14}}>Este devedor não tem dívidas cadastradas.</p>;
+              return(
+                <div style={{ marginBottom:14,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0" }}>
+                  <p style={{ fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Selecionar Dívidas</p>
+                  {dividas.map(div=>(
+                    <label key={div.id} style={{ display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer" }}>
+                      <input type="checkbox" checked={dividasSel.includes(div.id)} onChange={e=>atualizarTotalSelecionado(div.id,e.target.checked)} style={{ accentColor:"#4f46e5",width:14,height:14,cursor:"pointer" }}/>
+                      <span style={{ color:"#0f172a",fontSize:12,flex:1 }}>{div.descricao||"Dívida"}</span>
+                      <span style={{ color:"#4f46e5",fontWeight:700,fontSize:12 }}>{fmt(div.valor_total)}</span>
+                    </label>
+                  ))}
+                  <div style={{ borderTop:"1px solid #e2e8f0",marginTop:8,paddingTop:8,display:"flex",justifyContent:"space-between",fontSize:12 }}>
+                    <span style={{ color:"#64748b",fontWeight:600 }}>Total selecionado:</span>
+                    <span style={{ color:"#4f46e5",fontWeight:800,fontSize:14 }}>{fmt(parseFloat(valorOriginal)||0)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-              <Inp label="Valor Original (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2}/>
+              <Inp label="Valor (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2}/>
               <Inp label="Data de Vencimento"  value={dataVencimento} onChange={setDataVencimento} type="date" span={2}/>
               <Inp label="Indexador" value={indexador} onChange={setIndexador} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"}]}/>
               <Inp label="Juros (% ao mês)" value={jurosAM} onChange={setJurosAM} type="number"/>
@@ -1029,7 +1093,7 @@ function Calculadora({ devedores }) {
             </div>
             <div style={{ marginTop:16,display:"flex",gap:8 }}>
               <Btn onClick={calcular}>Calcular →</Btn>
-              {resultado && <Btn onClick={()=>setAba("honorarios")} outline color="#4f46e5">⚖️ Calcular Honorários</Btn>}
+              {resultado && <Btn onClick={()=>setAba("honorarios")} outline color="#4f46e5">⚖️ Honorários</Btn>}
             </div>
           </div>
 
