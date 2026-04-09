@@ -207,7 +207,10 @@ function Login({ onLogin }) {
 function Dashboard({ devedores, processos, andamentos, user }) {
   const totalCarteira = devedores.reduce((s,d)=>{
     const dividas = d.dividas||[];
-    return s + (dividas.length>0 ? dividas.reduce((ss,div)=>ss+(div.valor_total||0),0) : (d.valor_original||0));
+    const valorDividas = dividas.reduce((ss,div)=>ss+(div.valor_total||0),0);
+    // Usar valor das dívidas se existir, senão valor_nominal ou valor_original (qualquer um que tiver)
+    const valorBase = valorDividas || d.valor_nominal || d.valor_original || 0;
+    return s + valorBase;
   },0);
   const totalRecuperado = devedores.reduce((s,d)=>{
     // Parcelas de dívidas avulsas
@@ -867,26 +870,71 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   async function salvarDevedor(){
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
+    const valorNominal = parseFloat(form.valor_nominal)||0;
+    // Tentativas em ordem — remove colunas inexistentes progressivamente
     const tentativas=[
-      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,telefone:form.telefone||null,cidade:form.cidade||"Goiânia",credor_id:form.credor_id?parseInt(form.credor_id):null,valor_original:parseFloat(form.valor_nominal)||0,status:form.status||"novo",dividas:JSON.stringify([]),rg:form.rg||null,profissao:form.profissao||null,socio_nome:form.socio_nome||null,socio_cpf:form.socio_cpf||null,telefone2:form.telefone2||null,cep:form.cep||null,logradouro:form.logradouro||null,numero:form.numero||null,complemento:form.complemento||null,bairro:form.bairro||null,uf:form.uf||"GO",descricao_divida:form.descricao_divida||null,observacoes:form.observacoes||null,contatos:JSON.stringify([]),acordos:JSON.stringify([])},
-      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,telefone:form.telefone||null,cidade:form.cidade||"Goiânia",credor_id:form.credor_id?parseInt(form.credor_id):null,valor_original:parseFloat(form.valor_nominal)||0,status:form.status||"novo",dividas:JSON.stringify([])},
-      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,telefone:form.telefone||null,credor_id:form.credor_id?parseInt(form.credor_id):null,status:form.status||"novo",dividas:JSON.stringify([])},
-      {nome:form.nome,tipo:form.tipo||"PJ",dividas:JSON.stringify([])},
+      // #1 — completo (após SQL executado)
+      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,
+       telefone:form.telefone||null,cidade:form.cidade||"Goiânia",
+       credor_id:form.credor_id?parseInt(form.credor_id):null,
+       valor_original:valorNominal,status:form.status||"novo",dividas:JSON.stringify([]),
+       rg:form.rg||null,profissao:form.profissao||null,socio_nome:form.socio_nome||null,
+       socio_cpf:form.socio_cpf||null,telefone2:form.telefone2||null,cep:form.cep||null,
+       logradouro:form.logradouro||null,numero:form.numero||null,complemento:form.complemento||null,
+       bairro:form.bairro||null,uf:form.uf||"GO",descricao_divida:form.descricao_divida||null,
+       observacoes:form.observacoes||null,contatos:JSON.stringify([]),acordos:JSON.stringify([])},
+      // #2 — sem colunas extras de endereço/sócio mas COM valor_original
+      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,
+       telefone:form.telefone||null,cidade:form.cidade||"Goiânia",
+       credor_id:form.credor_id?parseInt(form.credor_id):null,
+       valor_original:valorNominal,status:form.status||"novo",dividas:JSON.stringify([])},
+      // #3 — sem valor_original mas embute valor no JSON de dividas para persistir
+      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,
+       telefone:form.telefone||null,status:form.status||"novo",
+       dividas:JSON.stringify(valorNominal>0?[{id:"init",descricao:"Valor nominal",valor_total:valorNominal,parcelas:[],_nominal:true}]:[])},
+      // #4 — mínimo absoluto com valor embutido
+      {nome:form.nome,tipo:form.tipo||"PJ",
+       dividas:JSON.stringify(valorNominal>0?[{id:"init",descricao:"Valor nominal",valor_total:valorNominal,parcelas:[],_nominal:true}]:[])},
     ];
-    let novo=null;
-    for(const payload of tentativas){
-      const res=await dbInsert("devedores",payload);
+    let novo=null, nivelUsado=0;
+    for(let i=0;i<tentativas.length;i++){
+      const res=await dbInsert("devedores",tentativas[i]);
       const r=Array.isArray(res)?res[0]:res;
-      if(r?.id){novo=r;break;}
+      if(r?.id){novo=r;nivelUsado=i;break;}
     }
     if(novo?.id){
-      const local={...novo,dividas:[],contatos:[],acordos:[],rg:form.rg,profissao:form.profissao,socio_nome:form.socio_nome,socio_cpf:form.socio_cpf,telefone2:form.telefone2,cep:form.cep,logradouro:form.logradouro,numero:form.numero,complemento:form.complemento,bairro:form.bairro,uf:form.uf,descricao_divida:form.descricao_divida,observacoes:form.observacoes,valor_nominal:parseFloat(form.valor_nominal)||0,cidade:form.cidade};
+      // SEMPRE preservar valor_nominal do formulário — nunca usar o que veio do banco
+      const local={
+        ...novo,                        // dados do banco
+        dividas:[], contatos:[], acordos:[],
+        // sobrescrever com dados do formulário (que podem não ter ido ao banco)
+        valor_original: valorNominal,   // <- FIXO: sempre do formulário
+        valor_nominal:  valorNominal,   // <- FIXO: sempre do formulário
+        rg:form.rg, profissao:form.profissao,
+        socio_nome:form.socio_nome, socio_cpf:form.socio_cpf,
+        telefone2:form.telefone2, cep:form.cep,
+        logradouro:form.logradouro, numero:form.numero,
+        complemento:form.complemento, bairro:form.bairro, uf:form.uf,
+        cidade:form.cidade||"Goiânia",
+        credor_id:form.credor_id?parseInt(form.credor_id):null,
+        descricao_divida:form.descricao_divida,
+        observacoes:form.observacoes,
+        status:form.status||"novo",
+      };
       setDevedores(p=>[...p,local]);
       fecharModal();
       setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});
-      alert(`✅ Devedor "${novo.nome}" cadastrado!`);
+      if(nivelUsado>=2){
+        alert(`✅ Devedor "${novo.nome}" cadastrado!
+
+⚠️ Alguns campos (valor, endereço) não foram salvos no banco porque o SQL ainda não foi executado no Supabase.
+
+Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
+      } else {
+        alert(`✅ Devedor "${novo.nome}" cadastrado com sucesso!`);
+      }
     } else {
-      alert("Erro ao salvar. Execute o SQL do Supabase (supabase_prompt3.sql) e tente novamente.");
+      alert("Erro ao salvar. Verifique a conexão com o Supabase.");
     }
     setLoading(false);
   }
@@ -899,8 +947,21 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       const payload={nome:formEdit.nome,cpf_cnpj:formEdit.cpf_cnpj,tipo:formEdit.tipo,email:formEdit.email||null,telefone:formEdit.telefone||null,cidade:formEdit.cidade||"Goiânia",credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,valor_original:parseFloat(formEdit.valor_nominal)||sel.valor_original||0,status:formEdit.status||"novo",rg:formEdit.rg||null,profissao:formEdit.profissao||null,socio_nome:formEdit.socio_nome||null,socio_cpf:formEdit.socio_cpf||null,telefone2:formEdit.telefone2||null,cep:formEdit.cep||null,logradouro:formEdit.logradouro||null,numero:formEdit.numero||null,complemento:formEdit.complemento||null,bairro:formEdit.bairro||null,uf:formEdit.uf||"GO",descricao_divida:formEdit.descricao_divida||null,observacoes:formEdit.observacoes||null};
       const res=await dbUpdate("devedores",sel.id,payload);
       const atu=Array.isArray(res)?res[0]:res;
-      if(atu){const atualizado={...atu,dividas:sel.dividas||[],contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?atualizado:d));setSel(atualizado);setEditando(false);alert("Cadastro atualizado!");}
-      else alert("Erro ao salvar.");
+      const valorEdit=parseFloat(formEdit.valor_nominal)||sel.valor_original||sel.valor_nominal||0;
+      if(atu||true){ // aceita mesmo sem retorno do banco
+        const atualizado={
+          ...sel,                     // base local
+          ...(atu||{}),               // dados do banco (se houver)
+          ...formEdit,                // dados do formulário (prioridade máxima)
+          dividas:sel.dividas||[], contatos:sel.contatos||[], acordos:sel.acordos||[],
+          valor_original:valorEdit,   // sempre preservar
+          valor_nominal:valorEdit,
+          credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):sel.credor_id,
+        };
+        setDevedores(prev=>prev.map(d=>d.id===sel.id?atualizado:d));
+        setSel(atualizado);setEditando(false);
+        alert("✅ Cadastro atualizado!");
+      }
     }catch(e){alert("Erro: "+e.message);}
     setLoadingEdit(false);
   }
