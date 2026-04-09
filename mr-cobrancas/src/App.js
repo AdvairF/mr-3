@@ -322,20 +322,25 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
         ))}
       </div>
 
-      {/* Segunda linha: métricas de cobrança */}
+      {/* Segunda linha: métricas de cobrança — clicáveis */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:24}}>
         {[
-          {l:"🆕 Novos",           v:porStatus.novo||0,           cor:"#64748b",bg:"#f1f5f9"},
-          {l:"🔍 Em Localização",  v:porStatus.em_localizacao||0, cor:"#2563eb",bg:"#dbeafe"},
-          {l:"🤝 Em Negociação",   v:porStatus.em_negociacao||0,  cor:"#d97706",bg:"#fef3c7"},
-          {l:"⚖️ Ajuizados",        v:porStatus.ajuizado||0,       cor:"#c2410c",bg:"#ffedd5"},
+          {l:"🆕 Novos",           v:porStatus.novo||0,           cor:"#64748b",bg:"#f1f5f9", s:"novo"},
+          {l:"🔍 Em Localização",  v:porStatus.em_localizacao||0, cor:"#2563eb",bg:"#dbeafe", s:"em_localizacao"},
+          {l:"🤝 Em Negociação",   v:porStatus.em_negociacao||0,  cor:"#d97706",bg:"#fef3c7", s:"em_negociacao"},
+          {l:"⚖️ Ajuizados",        v:porStatus.ajuizado||0,       cor:"#c2410c",bg:"#ffedd5", s:"ajuizado"},
         ].map(k=>(
-          <div key={k.l} style={{background:k.bg,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div key={k.l}
+            onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:{tab:"devedores",filtroStatus:k.s}}))}
+            style={{background:k.bg,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"transform .12s, box-shadow .12s",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 6px 20px ${k.cor}30`;}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.06)";}}>
             <div>
               <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
               <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:k.cor}}>{k.v}</p>
+              <p style={{fontSize:10,color:k.cor,opacity:.6,marginTop:3}}>clique para ver →</p>
             </div>
-            <div style={{width:48,height:48,borderRadius:99,background:`${k.cor}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+            <div style={{width:48,height:48,borderRadius:99,background:`${k.cor}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"Syne",fontWeight:800,color:k.cor}}>
               {k.v>0?k.v:"—"}
             </div>
           </div>
@@ -436,14 +441,19 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
             const qtd=porStatus[s.v]||0;
             const maxQtd=Math.max(...Object.values(porStatus),1);
             const pct=Math.round(qtd/maxQtd*100);
+            const ir=()=>qtd>0&&window.dispatchEvent(new CustomEvent("mr_goto",{detail:{tab:"devedores",filtroStatus:s.v}}));
             return(
-              <div key={s.v} style={{textAlign:"center"}}>
+              <div key={s.v} style={{textAlign:"center",cursor:qtd>0?"pointer":"default"}} onClick={ir}
+                title={qtd>0?`Ver ${qtd} devedor${qtd>1?"es":""} com status "${s.l}" →`:""}>
                 <div style={{height:80,display:"flex",alignItems:"flex-end",justifyContent:"center",marginBottom:6}}>
-                  <div style={{width:"100%",maxWidth:32,borderRadius:"6px 6px 0 0",background:qtd>0?s.cor:s.bg,height:`${Math.max(pct,qtd>0?8:4)}%`,transition:"height .5s",position:"relative"}}>
+                  <div style={{width:"100%",maxWidth:32,borderRadius:"6px 6px 0 0",background:qtd>0?s.cor:s.bg,height:`${Math.max(pct,qtd>0?8:4)}%`,transition:"height .5s, opacity .2s",position:"relative",opacity:qtd>0?1:.4}}
+                    onMouseEnter={e=>{if(qtd>0)e.currentTarget.style.opacity=".7";}}
+                    onMouseLeave={e=>{if(qtd>0)e.currentTarget.style.opacity="1";}}>
                     {qtd>0&&<span style={{position:"absolute",top:-18,left:"50%",transform:"translateX(-50%)",fontSize:11,fontWeight:800,color:s.cor}}>{qtd}</span>}
                   </div>
                 </div>
-                <p style={{fontSize:9,color:"#64748b",fontWeight:600,lineHeight:1.2}}>{s.l}</p>
+                <p style={{fontSize:9,color:qtd>0?s.cor:"#94a3b8",fontWeight:700,lineHeight:1.2}}>{s.l}</p>
+                {qtd>0&&<p style={{fontSize:8,color:s.cor,opacity:.7,marginTop:1}}>ver →</p>}
               </div>
             );
           })}
@@ -1428,6 +1438,15 @@ function CustasAvulsasForm({ onSalvar }) {
 function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos=[], setTab }) {
   const [search,setSearch]=useState("");
   const [filtroStatus,setFiltroStatus]=useState("");
+
+  // Escuta filtro vindo do Dashboard
+  useEffect(()=>{
+    const handler = e => {
+      if(e.detail?.filtroStatus !== undefined) setFiltroStatus(e.detail.filtroStatus);
+    };
+    window.addEventListener("mr_filtro", handler);
+    return () => window.removeEventListener("mr_filtro", handler);
+  }, []);
   const [filtroCredor,setFiltroCredor]=useState("");
   const [modal,setModal]=useState(null);
   const [sel,setSel]=useState(null);
@@ -4617,8 +4636,17 @@ export default function App() {
   useEffect(() => { if(user) carregarTudo(); }, [user, carregarTudo]);
 
   // Listener para navegação via alerta do dashboard
+  // detail pode ser string (tab) ou objeto {tab, filtroStatus}
   useEffect(() => {
-    const handler = e => setTab(e.detail);
+    const handler = e => {
+      if(typeof e.detail === "object" && e.detail.tab) {
+        setTab(e.detail.tab);
+        // Emite evento secundário para o módulo destino aplicar filtro
+        setTimeout(()=>window.dispatchEvent(new CustomEvent("mr_filtro", {detail: e.detail})), 50);
+      } else {
+        setTab(e.detail);
+      }
+    };
     window.addEventListener("mr_goto", handler);
     return () => window.removeEventListener("mr_goto", handler);
   }, []);
