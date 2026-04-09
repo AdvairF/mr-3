@@ -2389,12 +2389,14 @@ function calcularFatorCorrecao(indexador, dataInicio, dataFim) {
   return fator;
 }
 
+
 // ═══════════════════════════════════════════════════════════════
-// CALCULADORA — Atualização Monetária + Honorários
+// CALCULADORA — Atualização Monetária com Honorários integrados
 // ═══════════════════════════════════════════════════════════════
 function Calculadora({ devedores }) {
   const hoje = new Date().toISOString().slice(0,10);
-  const [aba, setAba]                   = useState("correcao");
+
+  // Parâmetros da dívida
   const [devId, setDevId]               = useState("");
   const [nomeDevedor, setNomeDevedor]   = useState("");
   const [valorOriginal, setValorOriginal] = useState("");
@@ -2404,25 +2406,22 @@ function Calculadora({ devedores }) {
   const [regimeJuros, setRegimeJuros]   = useState("composto");
   const [jurosAM, setJurosAM]           = useState("1");
   const [multa, setMulta]               = useState("2");
-  const [baseMulta, setBaseMulta]       = useState("original"); // "original" | "corrigido"
+  const [baseMulta, setBaseMulta]       = useState("original");
+  // Honorários integrados
+  const [honorariosPct, setHonorariosPct] = useState("20");
+  const [incluirHonorarios, setIncluirHonorarios] = useState(true);
+  // Encargos extras
+  const [encargos, setEncargos]         = useState("0");
+  const [bonificacao, setBonificacao]   = useState("0");
+  // Resultado
   const [resultado, setResultado]       = useState(null);
+  const [dividasSel, setDividasSel]     = useState([]);
 
-  // Honorários
-  const [baseCalculo, setBaseCalculo]   = useState("total_atualizado"); // "divida_original" | "total_atualizado" | "personalizado"
-  const [valorBase, setValorBase]       = useState("");
-  const [tipoHonorario, setTipoHonorario] = useState("percentual"); // "percentual" | "fixo"
-  const [percentual, setPercentual]     = useState("20");
-  const [valorFixo, setValorFixo]       = useState("");
-  const [faseProcessual, setFaseProcessual] = useState("extrajudicial");
-  const [resultadoHon, setResultadoHon] = useState(null);
-
-  // Dívidas selecionadas para calcular
-  const [dividasSel, setDividasSel] = useState([]); // ids das dívidas selecionadas
+  // Labels de índice
+  const IDX_LABEL = { igpm:"IGP-M", ipca:"IPCA", selic:"SELIC/CDI", inpc:"INPC", nenhum:"Sem correção" };
 
   function loadDev(id) {
-    setDevId(id);
-    setDividasSel([]);
-    setResultado(null);
+    setDevId(id); setDividasSel([]); setResultado(null);
     const d = devedores.find(x=>x.id==id);
     if(d) {
       setNomeDevedor(d.nome||"");
@@ -2432,6 +2431,9 @@ function Calculadora({ devedores }) {
       setValorOriginal(String(totalDiv));
       setDataVencimento(datas[0]||"");
       setDividasSel(dividas.map(div=>div.id));
+      // Pré-carregar honorários do cadastro da dívida
+      const pct = dividas[0]?.honorarios_pct;
+      if(pct) setHonorariosPct(String(pct));
     }
   }
 
@@ -2449,472 +2451,466 @@ function Calculadora({ devedores }) {
     }
   }
 
+  // ── Calcular linha por linha (estilo Resumo de Débito) ────────
   function calcular() {
     const PV = parseFloat(valorOriginal)||0;
     if(!PV || !dataVencimento || !dataCalculo) return alert("Preencha valor, data de vencimento e data de cálculo.");
 
-    // Período
     const dIni = new Date(dataVencimento+"T12:00:00");
     const dFim = new Date(dataCalculo+"T12:00:00");
-    const meses = Math.max(0, (dFim.getFullYear()-dIni.getFullYear())*12 + (dFim.getMonth()-dIni.getMonth()));
-    const dias  = Math.max(0, Math.floor((dFim-dIni)/86400000));
+    const meses = Math.max(0,(dFim.getFullYear()-dIni.getFullYear())*12+(dFim.getMonth()-dIni.getMonth()));
+    const dias  = Math.max(0,Math.floor((dFim-dIni)/86400000));
 
-    // 1. Correção monetária usando índices mensais reais
+    // Correção acumulada mês a mês
     const fatorCorrecao = calcularFatorCorrecao(indexador, dataVencimento, dataCalculo);
     const correcao = PV * fatorCorrecao - PV;
     const principalCorrigido = PV + correcao;
 
-    // 2. Juros (simples ou composto) sobre principal corrigido
-    const i = (parseFloat(jurosAM)||0) / 100;
+    // Juros sobre principal corrigido
+    const i = (parseFloat(jurosAM)||0)/100;
     let juros = 0;
-    if(regimeJuros === "simples") {
-      juros = principalCorrigido * i * meses;
-    } else {
-      juros = principalCorrigido * (Math.pow(1+i, meses) - 1);
-    }
+    if(regimeJuros==="simples") juros = principalCorrigido * i * meses;
+    else juros = principalCorrigido * (Math.pow(1+i,meses)-1);
 
-    // 3. Multa — sobre original ou corrigido
-    const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
-    const multaVal = baseParaMulta * (parseFloat(multa)||0) / 100;
+    // Multa
+    const baseParaMulta = baseMulta==="corrigido" ? principalCorrigido : PV;
+    const multaVal = baseParaMulta * (parseFloat(multa)||0)/100;
 
-    const total = principalCorrigido + juros + multaVal;
+    // Encargos e bonificação
+    const encargosVal = parseFloat(encargos)||0;
+    const bonificacaoVal = parseFloat(bonificacao)||0;
 
-    setResultado({ valorOriginal:PV, correcao, principalCorrigido, juros, multa:multaVal, total, meses, dias, fatorCorrecao });
+    // Subtotal antes dos honorários
+    const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
+
+    // Honorários sobre o subtotal
+    const honPct = incluirHonorarios ? (parseFloat(honorariosPct)||0) : 0;
+    const honorariosVal = subtotal * honPct / 100;
+
+    const total = subtotal + honorariosVal;
+
+    // Planilha mês a mês (estilo Resumo de Débito)
+    const linhasMes = gerarLinhasMensais(PV, dIni, dFim, multa, baseMulta, jurosAM, regimeJuros, encargosVal, bonificacaoVal, honPct);
+
+    setResultado({
+      valorOriginal:PV, correcao, principalCorrigido,
+      juros, multa:multaVal, encargos:encargosVal, bonificacao:bonificacaoVal,
+      honorarios:honorariosVal, honPct, subtotal, total,
+      meses, dias, fatorCorrecao, linhasMes,
+    });
   }
 
-  // ── Exportar PDF ─────────────────────────────────────────────
+  // Gera linhas mensais como no Resumo de Débito da imagem
+  function gerarLinhasMensais(PV, dIni, dFim, multaPct, baseMulta, jurosAM, regimeJuros, encargos, bonificacao, honPct) {
+    const linhas = [];
+    let atual = new Date(dIni);
+    let mesNum = 0;
+    const multaVal = (baseMulta==="corrigido" ? PV : PV) * parseFloat(multaPct)/100; // simplificado por linha
+    const i = parseFloat(jurosAM)/100;
+
+    while(atual <= dFim) {
+      const proxMes = new Date(atual);
+      proxMes.setMonth(proxMes.getMonth()+1);
+      const fimMes = proxMes > dFim ? dFim : proxMes;
+      const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
+
+      // Correção deste mês
+      const taxaCorr = (INDICES[indexador]?.[chave] ?? TAXA_MEDIA[indexador] ?? 0);
+      const corrMes = PV * taxaCorr;
+
+      // Juros acumulados até este mês
+      let jurosMes = 0;
+      if(regimeJuros==="simples") jurosMes = PV * i;
+      else jurosMes = PV * i; // simplificado para linha
+
+      // Multa apenas no primeiro mês
+      const multaMes = mesNum===0 ? multaVal : 0;
+
+      // Vecto (data de vencimento da parcela)
+      const vecto = new Date(dIni);
+      vecto.setMonth(vecto.getMonth()+mesNum);
+
+      const totalLinha = PV + corrMes + jurosMes + multaMes + encargos - bonificacao;
+      const honLinha = totalLinha * honPct/100;
+
+      linhas.push({
+        mesRef: chave.slice(0,7),
+        vecto: vecto.toISOString().slice(0,10),
+        valor: PV,
+        multa: multaMes,
+        correcao: corrMes,
+        juros: jurosMes,
+        encargos: mesNum===0 ? encargos : 0,
+        bonificacao: mesNum===0 ? bonificacao : 0,
+        honorarios: honLinha,
+        total: totalLinha + honLinha,
+      });
+
+      atual = proxMes;
+      mesNum++;
+      if(mesNum > 60) break; // segurança
+    }
+    return linhas;
+  }
+
+  // ── Exportar PDF — Resumo de Débito ──────────────────────────
   async function exportarPDF() {
     if(!resultado) return;
     try {
-      // Carrega jsPDF via CDN
-      const { jsPDF } = window.jspdf || await import("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-      const doc = new jsPDF();
-      const idxLabel = { igpm:"IGP-M", ipca:"IPCA", selic:"SELIC/CDI", inpc:"INPC", nenhum:"Sem correção" };
-      const hoje = new Date().toLocaleDateString("pt-BR");
+      const { jsPDF } = window.jspdf || {};
+      if(!window.jspdf) throw new Error("jsPDF não carregado. Certifique-se de usar mr-3.vercel.app.");
+      const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
+      const W = doc.internal.pageSize.getWidth();
 
-      // Cabeçalho
-      doc.setFillColor(79,70,229);
-      doc.rect(0,0,220,28,"F");
-      doc.setTextColor(255,255,255);
-      doc.setFontSize(16); doc.setFont("helvetica","bold");
-      doc.text("MR Cobranças — CRM Jurídico", 14, 12);
-      doc.setFontSize(10); doc.setFont("helvetica","normal");
-      doc.text("Memória de Cálculo — Atualização Monetária", 14, 20);
-      doc.text("Gerado em: "+hoje, 150, 20);
-
-      // Dados
+      // Cabeçalho estilo Resumo de Débito
+      doc.setFillColor(255,255,255);
+      doc.rect(0,0,W,297,"F");
       doc.setTextColor(0,0,0);
-      doc.setFontSize(11); doc.setFont("helvetica","bold");
-      doc.text("DADOS DO CÁLCULO", 14, 38);
-      doc.setFont("helvetica","normal"); doc.setFontSize(10);
-      const dados = [
-        ["Devedor:", nomeDevedor||"Não informado"],
-        ["Valor Original:", fmt(resultado.valorOriginal)],
-        ["Data de Vencimento:", fmtDate(dataVencimento)],
-        ["Data de Cálculo (data-base):", fmtDate(dataCalculo)],
-        ["Período:", resultado.meses+" meses ("+resultado.dias+" dias)"],
-        ["Indexador:", idxLabel[indexador]||indexador],
-        ["Regime de Juros:", regimeJuros==="composto"?"Juros Compostos":"Juros Simples"],
-        ["Taxa de Juros:", jurosAM+"% ao mês"],
-        ["Multa:", multa+"% sobre "+( baseMulta==="corrigido"?"principal corrigido":"principal original")],
+      doc.setFontSize(16); doc.setFont("helvetica","bold");
+      doc.text("RESUMO DE DÉBITO", 14, 18);
+      doc.setFontSize(8); doc.setFont("helvetica","normal");
+      doc.text("IMPRESSO POR MR COBRANÇAS", W-14, 10, {align:"right"});
+
+      // Dados do cliente
+      const d1 = [
+        ["CLIENTE DO", nomeDevedor||"Não informado"],
+        ["ENDEREÇO :", "—"],
+        ["NOME", ""],
       ];
-      dados.forEach(([k,v],i)=>{
-        doc.setFont("helvetica","bold"); doc.text(k, 14, 48+i*7);
-        doc.setFont("helvetica","normal"); doc.text(v, 80, 48+i*7);
+      const d2 = [
+        ["CNPJ :", "—"],
+        ["BLOCO/APTO", ""],
+      ];
+      let y = 28;
+      d1.forEach(([k,v])=>{ doc.setFont("helvetica","bold"); doc.text(k,14,y); doc.setFont("helvetica","normal"); doc.text(v,45,y); y+=5; });
+      y = 28;
+      d2.forEach(([k,v])=>{ doc.setFont("helvetica","bold"); doc.text(k,160,y); doc.setFont("helvetica","normal"); doc.text(v,180,y); y+=5; });
+
+      // Linha separadora
+      y = 47;
+      doc.setDrawColor(0); doc.setLineWidth(0.3);
+      doc.line(14,y,W-14,y); y+=6;
+
+      // Cabeçalho tabela
+      const cols = ["MÊS REF.","VECTO","VALOR","MULTA","CORREÇÃO","JUROS","ENCARGOS","BONIFICAÇÃO","TOTAL"];
+      const colW = [20,22,22,18,22,22,22,24,22];
+      let x = 14;
+      doc.setFillColor(240,240,240);
+      doc.rect(14,y-4,W-28,6,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(7);
+      cols.forEach((c,ci)=>{ doc.text(c,x+1,y); x+=colW[ci]; });
+      y+=6;
+
+      // Linhas de dados
+      doc.setFont("helvetica","normal"); doc.setFontSize(7);
+      const linhas = resultado.linhasMes||[];
+      linhas.forEach((l,li)=>{
+        if(li%2===0){ doc.setFillColor(250,250,252); doc.rect(14,y-3.5,W-28,5.5,"F"); }
+        x=14;
+        const vals = [
+          l.mesRef, fmtDate(l.vecto),
+          fmt(l.valor), fmt(l.multa), fmt(l.correcao),
+          fmt(l.juros), fmt(l.encargos), fmt(l.bonificacao), fmt(l.total)
+        ];
+        vals.forEach((v,vi)=>{
+          if(vi>=2) doc.text(v,x+colW[vi]-2,y,{align:"right"});
+          else doc.text(v,x+1,y);
+          x+=colW[vi];
+        });
+        y+=5.5;
+        if(y>185){ doc.addPage(); y=15; }
       });
 
-      // Tabela memória
-      doc.setFontSize(11); doc.setFont("helvetica","bold");
-      doc.text("MEMÓRIA DE CÁLCULO", 14, 120);
+      // Total geral
+      y+=2;
+      doc.setDrawColor(0); doc.line(14,y,W-14,y); y+=4;
+      doc.setFillColor(220,220,255);
+      doc.rect(14,y-4,W-28,7,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8);
+      doc.text("TOTAL DO IMÓVEL:",14,y);
+      // Totais por coluna
+      x=14+20+22; // começa no VALOR
+      const tots=[resultado.valorOriginal,resultado.multa,resultado.correcao,resultado.juros,resultado.encargos,resultado.bonificacao,resultado.total];
+      const tw=[22,18,22,22,22,24,22];
+      tots.forEach((v,vi)=>{ doc.text(fmt(v),x+tw[vi]-2,y,{align:"right"}); x+=tw[vi]; });
+      y+=10;
 
-      const linhas = [
+      // Memória de cálculo resumida
+      doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text("MEMÓRIA DE CÁLCULO",14,y); y+=5;
+      doc.setFont("helvetica","normal"); doc.setFontSize(8);
+      const mem=[
         ["Valor Original", fmt(resultado.valorOriginal)],
-        ["Correção Monetária ("+idxLabel[indexador]+")", fmt(resultado.correcao)],
+        ["Correção Monetária ("+IDX_LABEL[indexador]+")", fmt(resultado.correcao)],
         ["Principal Corrigido", fmt(resultado.principalCorrigido)],
         ["Juros ("+(regimeJuros==="composto"?"compostos":"simples")+" "+jurosAM+"%am)", fmt(resultado.juros)],
-        ["Multa ("+multa+"% s/ "+( baseMulta==="corrigido"?"corrigido":"original")+")", fmt(resultado.multa)],
+        ["Multa ("+multa+"% s/ "+(baseMulta==="corrigido"?"corrigido":"original")+")", fmt(resultado.multa)],
+        ...(resultado.encargos>0?[["Encargos", fmt(resultado.encargos)]]:[] ),
+        ...(resultado.bonificacao>0?[["Bonificação (-)", fmt(resultado.bonificacao)]]:[] ),
+        ...(incluirHonorarios?[["Honorários Advocatícios ("+honorariosPct+"%)", fmt(resultado.honorarios)]]:[] ),
         ["TOTAL ATUALIZADO", fmt(resultado.total)],
       ];
-
-      // Tabela manual
-      let y = 128;
-      doc.setFillColor(240,240,255);
-      doc.rect(14, y-5, 182, 8, "F");
-      doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      doc.text("ITEM", 16, y); doc.text("VALOR", 160, y);
-      y += 6;
-      linhas.forEach(([item,val],i)=>{
-        if(i===linhas.length-1) {
-          doc.setFillColor(79,70,229);
-          doc.rect(14, y-5, 182, 9, "F");
-          doc.setTextColor(255,255,255);
-          doc.setFont("helvetica","bold");
-        } else {
-          doc.setFillColor(i%2===0?255:248,i%2===0?255:248,i%2===0?255:252);
-          doc.rect(14, y-5, 182, 8, "F");
-          doc.setTextColor(0,0,0);
-          doc.setFont("helvetica","normal");
-        }
-        doc.text(item, 16, y);
-        doc.text(val, 160, y);
-        y += 8;
+      mem.forEach(([k,v],mi)=>{
+        const isTotal=mi===mem.length-1;
+        if(isTotal){ doc.setFillColor(79,70,229); doc.rect(14,y-3.5,90,5.5,"F"); doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); }
+        else{ doc.setFillColor(mi%2===0?255:248,mi%2===0?255:248,mi%2===0?255:252); doc.rect(14,y-3.5,90,5.5,"F"); doc.setTextColor(0,0,0); doc.setFont("helvetica","normal"); }
+        doc.text(k,16,y); doc.text(v,102,y,{align:"right"}); y+=5.5;
       });
+      doc.setTextColor(0,0,0);
 
-      // Rodapé aviso
-      doc.setTextColor(150,100,0);
+      // Rodapé
+      y+=5;
       doc.setFillColor(254,243,199);
-      doc.rect(14, y+5, 182, 20, "F");
-      doc.setFont("helvetica","bold"); doc.setFontSize(8);
-      doc.text("⚠ ATENÇÃO:", 17, y+13);
+      doc.rect(14,y,W-28,10,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(7.5);
+      doc.text("⚠ ATENÇÃO: Documento baseado em estimativas. Para fins processuais, utilize a planilha oficial homologada pelo TJGO/STJ.",16,y+4);
       doc.setFont("helvetica","normal");
-      doc.text("Este documento é gerado com base em estimativas de índices históricos.", 17, y+19);
-      doc.text("Para fins processuais, utilize a planilha oficial homologada pelo TJGO/STJ.", 17, y+25);
+      doc.text("Gerado em: "+new Date().toLocaleDateString("pt-BR")+" | MR Cobranças — CRM Jurídico",16,y+9);
 
-      doc.save("memoria_calculo_"+( nomeDevedor||"devedor").replace(/ /g,"_")+".pdf");
+      doc.save("resumo_debito_"+(nomeDevedor||"devedor").replace(/ /g,"_")+".pdf");
     } catch(e) {
-      alert("Erro ao gerar PDF: "+e.message+"\n\nCertifique-se de usar o sistema online (mr-3.vercel.app).");
+      alert("Erro ao gerar PDF: "+e.message);
     }
   }
-
-  function calcularHonorarios() {
-    let base = 0;
-    if (baseCalculo === "divida_original") {
-      base = parseFloat(valorOriginal)||0;
-    } else if (baseCalculo === "total_atualizado") {
-      base = resultado ? resultado.total : (parseFloat(valorOriginal)||0);
-    } else {
-      base = parseFloat(valorBase)||0;
-    }
-
-    let valorHon = 0;
-    if (tipoHonorario === "percentual") {
-      valorHon = base * (parseFloat(percentual)||0) / 100;
-    } else {
-      valorHon = parseFloat(valorFixo)||0;
-    }
-
-    // Limites OAB (Tabela de Honorários OAB/GO — referência)
-    const limites = {
-      extrajudicial: { min: 10, max: 30, label: "Extrajudicial" },
-      conhecimento:  { min: 10, max: 30, label: "Fase de Conhecimento" },
-      execucao:      { min: 10, max: 30, label: "Fase de Execução / Cumprimento" },
-      recursal:      { min: 5,  max: 20, label: "Fase Recursal" },
-      stj_stf:       { min: 5,  max: 20, label: "STJ / STF" },
-    };
-    const limite = limites[faseProcessual];
-    const pctReal = base > 0 ? (valorHon/base*100) : 0;
-    const abaixoMin = tipoHonorario==="percentual" && parseFloat(percentual) < limite.min;
-    const acimaMax  = tipoHonorario==="percentual" && parseFloat(percentual) > limite.max;
-
-    setResultadoHon({ base, valorHon, pctReal, limite, abaixoMin, acimaMax, faseLabel: limite.label });
-  }
-
-  const idx = { igpm:"IGP-M", ipca:"IPCA", selic:"SELIC/CDI" };
-  const FASES = [
-    { v:"extrajudicial", l:"Extrajudicial (cobrança amigável)" },
-    { v:"conhecimento",  l:"Fase de Conhecimento" },
-    { v:"execucao",      l:"Fase de Execução / Cumprimento de Sentença" },
-    { v:"recursal",      l:"Fase Recursal (TJ)" },
-    { v:"stj_stf",       l:"STJ / STF" },
-  ];
 
   return (
     <div>
-      <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:4 }}>Calculadora</h2>
-      <p style={{ fontSize:13,color:"#64748b",marginBottom:18 }}>Atualização monetária e cálculo de honorários advocatícios.</p>
+      <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:4}}>Calculadora</h2>
+      <p style={{fontSize:13,color:"#64748b",marginBottom:18}}>Atualização monetária com honorários integrados — Resumo de Débito.</p>
 
-      {/* Abas */}
-      <div style={{ display:"flex",gap:6,marginBottom:20,borderBottom:"2px solid #f1f5f9",paddingBottom:0 }}>
-        {[["correcao","🧮 Atualização Monetária"],["honorarios","⚖️ Honorários Advocatícios"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setAba(id)}
-            style={{ padding:"9px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,
-              color:aba===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===id?"#4f46e5":"transparent"}`,marginBottom:-2 }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
 
-      {/* ── ABA CORREÇÃO ─────────────────────────────────────── */}
-      {aba==="correcao" && (
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
-          <div style={{ background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
-            <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a" }}>Parâmetros</p>
+        {/* ── PAINEL ESQUERDO — Parâmetros ── */}
+        <div style={{background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9",display:"flex",flexDirection:"column",gap:0}}>
+          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a"}}>Parâmetros</p>
 
-            {/* Devedor */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Carregar Devedor (opcional)</label>
-              <select value={devId} onChange={e=>loadDev(e.target.value)} style={{ width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none" }}>
-                <option value="">— Digitar manualmente —</option>
-                {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
-              </select>
-            </div>
-
-            {/* Dívidas com checkbox */}
-            {devId && (()=>{
-              const d = devedores.find(x=>x.id==devId);
-              const dividas = d?.dividas||[];
-              if(!dividas.length) return <p style={{fontSize:12,color:"#94a3b8",marginBottom:14}}>Sem dívidas cadastradas.</p>;
-              return(
-                <div style={{ marginBottom:14,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0" }}>
-                  <p style={{ fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Selecionar Dívidas</p>
-                  {dividas.map(div=>(
-                    <label key={div.id} style={{ display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer" }}>
-                      <input type="checkbox" checked={dividasSel.includes(div.id)} onChange={e=>atualizarTotalSelecionado(div.id,e.target.checked)} style={{ accentColor:"#4f46e5",width:14,height:14 }}/>
-                      <span style={{ color:"#0f172a",fontSize:12,flex:1 }}>{div.descricao||"Dívida"}</span>
-                      <span style={{ color:"#4f46e5",fontWeight:700,fontSize:12 }}>{fmt(div.valor_total)}</span>
-                    </label>
-                  ))}
-                  <div style={{ borderTop:"1px solid #e2e8f0",marginTop:8,paddingTop:8,display:"flex",justifyContent:"space-between",fontSize:12 }}>
-                    <span style={{ color:"#64748b",fontWeight:600 }}>Total:</span>
-                    <span style={{ color:"#4f46e5",fontWeight:800 }}>{fmt(parseFloat(valorOriginal)||0)}</span>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Campos principais */}
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12 }}>
-              <Inp label="Valor Original (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2}/>
-              <Inp label="Data de Vencimento" value={dataVencimento} onChange={setDataVencimento} type="date"/>
-              <Inp label="Data de Cálculo (data-base)" value={dataCalculo} onChange={setDataCalculo} type="date"/>
-              <Inp label="Indexador" value={indexador} onChange={setIndexador} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"},{v:"inpc",l:"INPC"},{v:"nenhum",l:"Sem correção"}]}/>
-              <Inp label="Juros (% ao mês)" value={jurosAM} onChange={setJurosAM} type="number"/>
-            </div>
-
-            {/* Regime de Juros */}
-            <div style={{ marginBottom:12 }}>
-              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em" }}>Regime de Juros</label>
-              <div style={{ display:"flex",gap:8 }}>
-                {[["composto","Juros Compostos"],["simples","Juros Simples"]].map(([v,l])=>(
-                  <button key={v} onClick={()=>setRegimeJuros(v)}
-                    style={{ flex:1,padding:"8px",border:`1.5px solid ${regimeJuros===v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:regimeJuros===v?"#4f46e5":"#fff",color:regimeJuros===v?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish" }}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Multa */}
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12 }}>
-              <Inp label="Multa (%)" value={multa} onChange={setMulta} type="number"/>
-              <div>
-                <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:".04em" }}>Multa incide sobre</label>
-                <select value={baseMulta} onChange={e=>setBaseMulta(e.target.value)} style={{ width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish" }}>
-                  <option value="original">Principal original</option>
-                  <option value="corrigido">Principal corrigido</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Alerta visível */}
-            <div style={{ background:"#FEF3C7",borderLeft:"4px solid #F59E0B",borderRadius:"0 8px 8px 0",padding:"12px 14px",marginBottom:14 }}>
-              <p style={{ fontSize:11,fontWeight:700,color:"#92400E",marginBottom:4 }}>⚠️ ATENÇÃO — VALIDADE DOS ÍNDICES</p>
-              <p style={{ fontSize:11,color:"#78350F",lineHeight:1.6 }}>
-                Os índices utilizados são baseados em dados históricos embutidos (2020–2024). Para memória de cálculo com validade processual em petições, utilize obrigatoriamente a Planilha Oficial do TJGO/STJ. Este cálculo serve apenas como referência prévia de negociação.
-              </p>
-            </div>
-
-            <div style={{ display:"flex",gap:8 }}>
-              <Btn onClick={calcular}>🧮 Calcular →</Btn>
-              {resultado && <Btn onClick={()=>setAba("honorarios")} outline color="#4f46e5">⚖️ Honorários</Btn>}
-            </div>
+          {/* Devedor */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Carregar Devedor (opcional)</label>
+            <select value={devId} onChange={e=>loadDev(e.target.value)} style={{width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none"}}>
+              <option value="">— Digitar manualmente —</option>
+              {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
+            </select>
           </div>
 
-          {/* Resultado */}
-          <div style={{ background:resultado?"linear-gradient(135deg,#0f172a,#1e1b4b)":"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
-            {!resultado ? (
-              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:320 }}>
-                <div style={{ fontSize:40,marginBottom:12 }}>🧮</div>
-                <p style={{ color:"#94a3b8",fontSize:13,textAlign:"center" }}>Preencha os parâmetros e clique em Calcular</p>
-              </div>
-            ) : (
-              <div>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
-                  <div>
-                    <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:13,color:"rgba(255,255,255,.6)" }}>Resultado — {({igpm:"IGP-M",ipca:"IPCA",selic:"SELIC/CDI",inpc:"INPC",nenhum:"Sem correção"})[indexador]}</p>
-                    <p style={{ color:"rgba(255,255,255,.4)",fontSize:11 }}>{resultado.meses} meses · {regimeJuros==="composto"?"J. Compostos":"J. Simples"}</p>
-                  </div>
-                  <button onClick={exportarPDF} style={{ background:"rgba(255,255,255,.1)",color:"#a5f3fc",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish" }}>
-                    📄 Exportar PDF
-                  </button>
-                </div>
-
-                <p style={{ color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:3 }}>Valor Total Atualizado</p>
-                <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:32,color:"#fff",marginBottom:14 }}>{fmt(resultado.total)}</p>
-
-                <div style={{ display:"flex",flexDirection:"column",gap:6 }}>
-                  {[
-                    ["Valor Original", resultado.valorOriginal, "#94a3b8"],
-                    ["Correção Monetária", resultado.correcao, "#818cf8"],
-                    ["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"],
-                    ["Juros ("+jurosAM+"%am "+( regimeJuros==="composto"?"comp.":"simples")+")", resultado.juros, "#fbbf24"],
-                    ["Multa ("+multa+"% s/ "+(baseMulta==="corrigido"?"corrigido":"original")+")", resultado.multa, "#f87171"],
-                  ].map(([l,v,c])=>(
-                    <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"7px 11px",background:"rgba(255,255,255,.06)",borderRadius:9 }}>
-                      <span style={{ fontSize:11,color:"rgba(255,255,255,.6)" }}>{l}</span>
-                      <span style={{ fontSize:12,fontWeight:700,color:c }}>{fmt(v)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display:"flex",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.15)",borderRadius:9,marginTop:2 }}>
-                    <span style={{ fontSize:13,fontWeight:700,color:"#fff" }}>TOTAL ATUALIZADO</span>
-                    <span style={{ fontSize:14,fontWeight:800,color:"#a5f3fc" }}>{fmt(resultado.total)}</span>
-                  </div>
-                </div>
-
-                <p style={{ fontSize:10,color:"rgba(255,255,255,.3)",marginTop:12,lineHeight:1.5 }}>
-                  Fator de correção aplicado: {resultado.fatorCorrecao?.toFixed(6)} · Índices reais 2020–2024.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── ABA HONORÁRIOS ───────────────────────────────────── */}
-      {aba==="honorarios" && (
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
-          <div style={{ background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
-            <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:16,color:"#0f172a" }}>Parâmetros dos Honorários</p>
-
-            {/* Fase processual */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Fase Processual</label>
-              <select value={faseProcessual} onChange={e=>setFaseProcessual(e.target.value)} style={{ width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish" }}>
-                {FASES.map(f=><option key={f.v} value={f.v}>{f.l}</option>)}
-              </select>
-            </div>
-
-            {/* Base de cálculo */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Base de Cálculo</label>
-              <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
-                {[
-                  ["divida_original",  `Dívida original ${valorOriginal?`— ${fmt(parseFloat(valorOriginal)||0)}`:""}` ],
-                  ["total_atualizado", `Total atualizado ${resultado?`— ${fmt(resultado.total)}`:"(calcule primeiro)"}`],
-                  ["personalizado",    "Valor personalizado"],
-                ].map(([v,l])=>(
-                  <label key={v} style={{ display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"8px 12px",borderRadius:10,background:baseCalculo===v?"#ede9fe":"#f8fafc",border:`1.5px solid ${baseCalculo===v?"#4f46e5":"#e2e8f0"}` }}>
-                    <input type="radio" name="base" value={v} checked={baseCalculo===v} onChange={()=>setBaseCalculo(v)} style={{ accentColor:"#4f46e5" }}/>
-                    <span style={{ fontSize:13,color:baseCalculo===v?"#4f46e5":"#475569",fontWeight:baseCalculo===v?700:400 }}>{l}</span>
+          {/* Checkboxes de dívidas */}
+          {devId && (()=>{
+            const d = devedores.find(x=>x.id==devId);
+            const dividas = d?.dividas||[];
+            if(!dividas.length) return null;
+            return(
+              <div style={{marginBottom:12,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
+                <p style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase"}}>Selecionar Dívidas</p>
+                {dividas.map(div=>(
+                  <label key={div.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,cursor:"pointer"}}>
+                    <input type="checkbox" checked={dividasSel.includes(div.id)} onChange={e=>atualizarTotalSelecionado(div.id,e.target.checked)} style={{accentColor:"#4f46e5",width:14,height:14}}/>
+                    <span style={{color:"#0f172a",fontSize:12,flex:1}}>{div.descricao||"Dívida"}</span>
+                    <span style={{color:"#4f46e5",fontWeight:700,fontSize:12}}>{fmt(div.valor_total)}</span>
                   </label>
                 ))}
               </div>
-              {baseCalculo==="personalizado" && (
-                <div style={{ marginTop:10 }}>
-                  <Inp label="Valor Base (R$)" value={valorBase} onChange={setValorBase} type="number"/>
-                </div>
-              )}
+            );
+          })()}
+
+          {/* Grid de campos */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            {/* Valor */}
+            <div style={{gridColumn:"1/-1"}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Valor Original (R$)</label>
+              <input type="number" value={valorOriginal} onChange={e=>setValorOriginal(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:14,fontWeight:700,color:"#4f46e5",outline:"none",boxSizing:"border-box"}}/>
             </div>
-
-            {/* Tipo de honorário */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Tipo de Honorário</label>
-              <div style={{ display:"flex",gap:8 }}>
-                {[["percentual","% Percentual"],["fixo","R$ Valor Fixo"]].map(([v,l])=>(
-                  <button key={v} onClick={()=>setTipoHonorario(v)}
-                    style={{ flex:1,padding:"9px",border:`1.5px solid ${tipoHonorario===v?"#4f46e5":"#e2e8f0"}`,borderRadius:10,background:tipoHonorario===v?"#4f46e5":"#fff",color:tipoHonorario===v?"#fff":"#64748b",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"Mulish" }}>
-                    {l}
-                  </button>
-                ))}
-              </div>
+            {/* Datas */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Data de Vencimento</label>
+              <input type="date" value={dataVencimento} onChange={e=>setDataVencimento(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
             </div>
-
-            {tipoHonorario==="percentual" ? (
-              <div>
-                <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Percentual (%)</label>
-                <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                  <input type="range" min="1" max="50" step="0.5" value={percentual} onChange={e=>setPercentual(e.target.value)} style={{ flex:1,accentColor:"#4f46e5" }}/>
-                  <div style={{ display:"flex",alignItems:"center",gap:4 }}>
-                    <input type="number" value={percentual} onChange={e=>setPercentual(e.target.value)} style={{ width:65,padding:"6px 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:14,fontWeight:700,color:"#4f46e5",outline:"none",textAlign:"center" }}/>
-                    <span style={{ fontWeight:700,color:"#4f46e5",fontSize:16 }}>%</span>
-                  </div>
-                </div>
-                <div style={{ display:"flex",justifyContent:"space-between",marginTop:6,fontSize:11,color:"#94a3b8" }}>
-                  <span>1%</span><span style={{ color:"#4f46e5",fontWeight:700 }}>{percentual}% selecionado</span><span>50%</span>
-                </div>
-              </div>
-            ) : (
-              <Inp label="Valor Fixo dos Honorários (R$)" value={valorFixo} onChange={setValorFixo} type="number"/>
-            )}
-
-            <div style={{ marginTop:18 }}>
-              <Btn onClick={calcularHonorarios}>⚖️ Calcular Honorários</Btn>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Data de Cálculo</label>
+              <input type="date" value={dataCalculo} onChange={e=>setDataCalculo(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            {/* Indexador */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Indexador</label>
+              <select value={indexador} onChange={e=>setIndexador(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                {[["igpm","IGP-M"],["ipca","IPCA"],["selic","SELIC/CDI"],["inpc","INPC"],["nenhum","Sem correção"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            {/* Juros */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Juros (% ao mês)</label>
+              <input type="number" value={jurosAM} onChange={e=>setJurosAM(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
             </div>
           </div>
 
-          {/* Resultado honorários */}
-          <div style={{ background:resultadoHon?"linear-gradient(135deg,#0f172a,#1e1b4b)":"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
-            {!resultadoHon ? (
-              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:320 }}>
-                <div style={{ fontSize:44,marginBottom:12 }}>⚖️</div>
-                <p style={{ color:"#94a3b8",fontSize:13,textAlign:"center" }}>Configure os parâmetros e clique em<br/>Calcular Honorários</p>
-              </div>
-            ) : (
-              <div>
-                <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:6 }}>Honorários — {resultadoHon.faseLabel}</p>
-
-                {/* Alerta OAB */}
-                {(resultadoHon.abaixoMin||resultadoHon.acimaMax) && (
-                  <div style={{ background:resultadoHon.abaixoMin?"rgba(251,191,36,.15)":"rgba(248,113,113,.15)",border:`1px solid ${resultadoHon.abaixoMin?"#fbbf24":"#f87171"}`,borderRadius:10,padding:"8px 12px",marginBottom:14 }}>
-                    <p style={{ fontSize:12,color:resultadoHon.abaixoMin?"#fbbf24":"#f87171",fontWeight:700 }}>
-                      {resultadoHon.abaixoMin ? `⚠️ Abaixo do mínimo OAB (${resultadoHon.limite.min}%)` : `⚠️ Acima do máximo OAB (${resultadoHon.limite.max}%)`}
-                    </p>
-                    <p style={{ fontSize:11,color:"rgba(255,255,255,.5)",marginTop:2 }}>Tabela OAB/GO: {resultadoHon.limite.min}% a {resultadoHon.limite.max}%</p>
-                  </div>
-                )}
-                {!resultadoHon.abaixoMin && !resultadoHon.acimaMax && tipoHonorario==="percentual" && (
-                  <div style={{ background:"rgba(34,197,94,.15)",border:"1px solid #22c55e",borderRadius:10,padding:"8px 12px",marginBottom:14 }}>
-                    <p style={{ fontSize:12,color:"#22c55e",fontWeight:700 }}>✓ Dentro dos limites OAB ({resultadoHon.limite.min}% a {resultadoHon.limite.max}%)</p>
-                  </div>
-                )}
-
-                {/* Valor principal */}
-                <div style={{ marginBottom:16 }}>
-                  <p style={{ color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:3 }}>Valor dos Honorários</p>
-                  <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:36,color:"#fbbf24" }}>{fmt(resultadoHon.valorHon)}</p>
-                  {tipoHonorario==="percentual" && <p style={{ color:"rgba(255,255,255,.4)",fontSize:12,marginTop:2 }}>{percentual}% sobre {fmt(resultadoHon.base)}</p>}
-                </div>
-
-                {/* Breakdown */}
-                <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
-                  {[
-                    ["Base de Cálculo",   resultadoHon.base,     "#94a3b8"],
-                    ["Honorários",        resultadoHon.valorHon, "#fbbf24"],
-                  ].map(([l,v,c])=>(
-                    <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"7px 11px",background:"rgba(255,255,255,.06)",borderRadius:9 }}>
-                      <span style={{ fontSize:12,color:"rgba(255,255,255,.6)" }}>{l}</span>
-                      <span style={{ fontSize:13,fontWeight:700,color:c }}>{fmt(v)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display:"flex",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.15)",borderRadius:9 }}>
-                    <span style={{ fontSize:13,fontWeight:700,color:"#fff" }}>TOTAL (dívida + honorários)</span>
-                    <span style={{ fontSize:14,fontWeight:800,color:"#a5f3fc" }}>{fmt(resultadoHon.base + resultadoHon.valorHon)}</span>
-                  </div>
-                </div>
-
-                {/* Tabela OAB referência */}
-                <div style={{ marginTop:16,padding:"10px 12px",background:"rgba(255,255,255,.05)",borderRadius:10 }}>
-                  <p style={{ fontSize:11,color:"rgba(255,255,255,.5)",fontWeight:700,marginBottom:6 }}>TABELA OAB — LIMITES POR FASE</p>
-                  {[
-                    ["Extrajudicial","10% a 30%"],
-                    ["Conhecimento / Execução","10% a 30%"],
-                    ["Fase Recursal","5% a 20%"],
-                    ["STJ / STF","5% a 20%"],
-                  ].map(([f,v])=>(
-                    <div key={f} style={{ display:"flex",justifyContent:"space-between",fontSize:11,color:"rgba(255,255,255,.4)",marginBottom:3 }}>
-                      <span>{f}</span><span style={{ fontWeight:700 }}>{v}</span>
-                    </div>
-                  ))}
-                  <p style={{ fontSize:10,color:"rgba(255,255,255,.25)",marginTop:6 }}>* Referência OAB/GO. Consulte a tabela vigente.</p>
-                </div>
-              </div>
-            )}
+          {/* Regime de juros */}
+          <div style={{marginBottom:10}}>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase"}}>Regime de Juros</label>
+            <div style={{display:"flex",gap:8}}>
+              {[["composto","Juros Compostos"],["simples","Juros Simples"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setRegimeJuros(v)} style={{flex:1,padding:"7px",border:`1.5px solid ${regimeJuros===v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:regimeJuros===v?"#4f46e5":"#fff",color:regimeJuros===v?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{l}</button>
+              ))}
+            </div>
           </div>
+
+          {/* Multa + base */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Multa (%)</label>
+              <input type="number" value={multa} onChange={e=>setMulta(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Multa incide sobre</label>
+              <select value={baseMulta} onChange={e=>setBaseMulta(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                <option value="original">Principal original</option>
+                <option value="corrigido">Principal corrigido</option>
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Encargos (R$)</label>
+              <input type="number" value={encargos} onChange={e=>setEncargos(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Bonificação (R$)</label>
+              <input type="number" value={bonificacao} onChange={e=>setBonificacao(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+          </div>
+
+          {/* Honorários — integrado */}
+          <div style={{background:"#ede9fe",borderRadius:12,padding:12,marginBottom:12,border:"1.5px solid #c4b5fd"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#4f46e5",textTransform:"uppercase",letterSpacing:".04em"}}>⚖️ Honorários Advocatícios</label>
+              <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,color:"#4f46e5",fontWeight:700}}>
+                <input type="checkbox" checked={incluirHonorarios} onChange={e=>setIncluirHonorarios(e.target.checked)} style={{accentColor:"#4f46e5",width:14,height:14}}/>
+                Incluir no total
+              </label>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <input type="range" min="0" max="50" step="0.5" value={honorariosPct} onChange={e=>setHonorariosPct(e.target.value)} style={{flex:1,accentColor:"#4f46e5"}} disabled={!incluirHonorarios}/>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <input type="number" value={honorariosPct} onChange={e=>setHonorariosPct(e.target.value)} disabled={!incluirHonorarios}
+                  style={{width:55,padding:"5px 6px",border:"1.5px solid #c4b5fd",borderRadius:8,fontSize:14,fontWeight:700,color:"#4f46e5",outline:"none",textAlign:"center"}}/>
+                <span style={{fontWeight:700,color:"#4f46e5",fontSize:15}}>%</span>
+              </div>
+            </div>
+            {incluirHonorarios&&valorOriginal&&<p style={{fontSize:11,color:"#7c3aed",marginTop:6}}>≈ {fmt(parseFloat(valorOriginal||0)*(parseFloat(honorariosPct)||0)/100)} estimado sobre o valor original</p>}
+          </div>
+
+          {/* Alerta */}
+          <div style={{background:"#FEF3C7",borderLeft:"4px solid #F59E0B",borderRadius:"0 8px 8px 0",padding:"10px 12px",marginBottom:12}}>
+            <p style={{fontSize:10,fontWeight:700,color:"#92400E",marginBottom:2}}>⚠️ ATENÇÃO — VALIDADE DOS ÍNDICES</p>
+            <p style={{fontSize:10,color:"#78350F",lineHeight:1.6}}>Índices históricos embutidos (2020–2024). Para uso processual utilize planilha oficial TJGO/STJ.</p>
+          </div>
+
+          <Btn onClick={calcular}>🧮 Calcular →</Btn>
         </div>
-      )}
+
+        {/* ── PAINEL DIREITO — Resultado ── */}
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+          {!resultado ? (
+            <div style={{background:"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:320}}>
+              <div style={{fontSize:44,marginBottom:12}}>🧮</div>
+              <p style={{color:"#94a3b8",fontSize:13,textAlign:"center"}}>Preencha os parâmetros e clique em Calcular</p>
+            </div>
+          ) : (
+            <>
+              {/* Totalizador escuro */}
+              <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",borderRadius:18,padding:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                  <div>
+                    <p style={{color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:2}}>Total Atualizado</p>
+                    <p style={{fontFamily:"Syne",fontWeight:800,fontSize:30,color:"#fff"}}>{fmt(resultado.total)}</p>
+                    <p style={{color:"rgba(255,255,255,.4)",fontSize:11}}>{resultado.meses} meses · {IDX_LABEL[indexador]} · {regimeJuros==="composto"?"J. Compostos":"J. Simples"}</p>
+                  </div>
+                  <button onClick={exportarPDF} style={{background:"rgba(255,255,255,.1)",color:"#a5f3fc",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish",whiteSpace:"nowrap"}}>
+                    📄 Exportar PDF
+                  </button>
+                </div>
+                {/* Discriminação */}
+                <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                  {[
+                    ["Valor Original", resultado.valorOriginal, "#94a3b8"],
+                    ["Correção ("+IDX_LABEL[indexador]+")", resultado.correcao, "#818cf8"],
+                    ["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"],
+                    ["Juros ("+jurosAM+"%am "+(regimeJuros==="composto"?"comp.":"simples")+")", resultado.juros, "#fbbf24"],
+                    ["Multa ("+multa+"% s/ "+(baseMulta==="corrigido"?"corrigido":"original")+")", resultado.multa, "#f87171"],
+                    ...(resultado.encargos>0?[["Encargos", resultado.encargos, "#f97316"]]:[] ),
+                    ...(resultado.bonificacao>0?[["Bonificação (-)", resultado.bonificacao, "#34d399"]]:[] ),
+                    ...(incluirHonorarios?[["Honorários ("+honorariosPct+"%)", resultado.honorarios, "#facc15"]]:[] ),
+                  ].map(([l,v,c])=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 10px",background:"rgba(255,255,255,.05)",borderRadius:8}}>
+                      <span style={{fontSize:11,color:"rgba(255,255,255,.55)"}}>{l}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:c}}>{fmt(v)}</span>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",background:"rgba(255,255,255,.15)",borderRadius:8,marginTop:2}}>
+                    <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>TOTAL ATUALIZADO</span>
+                    <span style={{fontSize:14,fontWeight:800,color:"#a5f3fc"}}>{fmt(resultado.total)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Planilha mês a mês — estilo Resumo de Débito */}
+              <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>📋 Resumo de Débito — Mês a Mês</p>
+                  <p style={{fontSize:11,color:"#94a3b8"}}>{resultado.linhasMes?.length||0} meses</p>
+                </div>
+                <div style={{overflowX:"auto",maxHeight:320,overflowY:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:700}}>
+                    <thead style={{position:"sticky",top:0,zIndex:1}}>
+                      <tr style={{background:"#f8fafc"}}>
+                        {["MÊS REF.","VECTO","VALOR","MULTA","CORREÇÃO","JUROS","ENCARGOS","BONIFICAÇÃO",
+                          ...(incluirHonorarios?["HONORÁRIOS"]:[]),
+                          "TOTAL"
+                        ].map(h=>(
+                          <th key={h} style={{padding:"7px 8px",textAlign:"right",fontSize:9,fontWeight:700,color:"#64748b",textTransform:"uppercase",whiteSpace:"nowrap",firstChild:{textAlign:"left"}}}
+                            ref={null}>
+                            <span style={{display:"block",textAlign:h==="MÊS REF."||h==="VECTO"?"left":"right"}}>{h}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(resultado.linhasMes||[]).map((l,i)=>(
+                        <tr key={i} style={{borderTop:"1px solid #f8fafc",background:i%2===0?"#fff":"#fafafe"}}>
+                          <td style={{padding:"5px 8px",fontWeight:700,color:"#4f46e5",fontSize:11}}>{l.mesRef}</td>
+                          <td style={{padding:"5px 8px",color:"#64748b",fontSize:10}}>{fmtDate(l.vecto)}</td>
+                          <td style={{padding:"5px 8px",textAlign:"right",color:"#0f172a",fontWeight:600}}>{fmt(l.valor)}</td>
+                          <td style={{padding:"5px 8px",textAlign:"right",color:"#dc2626"}}>{fmt(l.multa)}</td>
+                          <td style={{padding:"5px 8px",textAlign:"right",color:"#7c3aed"}}>{fmt(l.correcao)}</td>
+                          <td style={{padding:"5px 8px",textAlign:"right",color:"#d97706"}}>{fmt(l.juros)}</td>
+                          <td style={{padding:"5px 8px",textAlign:"right",color:"#64748b"}}>{fmt(l.encargos)}</td>
+                          <td style={{padding:"5px 8px",textAlign:"right",color:"#16a34a"}}>{fmt(l.bonificacao)}</td>
+                          {incluirHonorarios&&<td style={{padding:"5px 8px",textAlign:"right",color:"#b45309",fontWeight:700}}>{fmt(l.honorarios)}</td>}
+                          <td style={{padding:"5px 8px",textAlign:"right",fontWeight:800,color:"#0f172a"}}>{fmt(l.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{background:"#1e1b4b",borderTop:"2px solid #4f46e5"}}>
+                        <td colSpan={2} style={{padding:"7px 8px",fontWeight:800,color:"#fff",fontSize:11}}>TOTAL DO IMÓVEL:</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#a5f3fc"}}>{fmt(resultado.valorOriginal)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#fca5a5"}}>{fmt(resultado.multa)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#c4b5fd"}}>{fmt(resultado.correcao)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#fde68a"}}>{fmt(resultado.juros)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#e2e8f0"}}>{fmt(resultado.encargos)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#bbf7d0"}}>{fmt(resultado.bonificacao)}</td>
+                        {incluirHonorarios&&<td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#fcd34d"}}>{fmt(resultado.honorarios)}</td>}
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#4ade80",fontSize:13}}>{fmt(resultado.total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 // RELATÓRIOS & CARTEIRA
