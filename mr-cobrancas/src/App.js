@@ -854,16 +854,33 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   });
   const FL = (k,v) => setFormLem(f=>({...f,[k]:v}));
 
-  // Relatório livre — carregado do localStorage por devedor
-  const relKey = `mr_relatorio_${sel.id}`;
-  const [relTexto, setRelTexto] = useState(()=>{ try{return localStorage.getItem(relKey)||"";}catch{return "";} });
-  const [relSalvo, setRelSalvo] = useState(true);
-  const [salvando, setSalvando] = useState(false);
+  // Registros de contato individuais (localStorage por devedor)
+  const regKey = `mr_registros_${sel.id}`;
+  function getRegistros() { try{return JSON.parse(localStorage.getItem(regKey)||"[]");}catch{return [];} }
+  const [registros, setRegistros] = useState(getRegistros);
+  const [formReg, setFormReg] = useState({
+    data: new Date().toISOString().slice(0,10),
+    hora: new Date().toTimeString().slice(0,5),
+    tipo:"ligacao", resultado:"sem_resposta",
+    relatorio:"", mensagem:"",
+  });
+  const [showFormReg, setShowFormReg] = useState(false);
+  const FR = (k,v) => setFormReg(f=>({...f,[k]:v}));
 
-  function salvarRelatorio() {
-    setSalvando(true);
-    try { localStorage.setItem(relKey, relTexto); } catch(e){}
-    setTimeout(()=>{ setSalvando(false); setRelSalvo(true); }, 600);
+  function salvarRegistro() {
+    if(!formReg.relatorio.trim()) return alert("Informe o relatório do contato.");
+    const novo = { ...formReg, id:Date.now(), criado_por:user?.nome||"Sistema" };
+    const novos = [novo, ...registros];
+    try { localStorage.setItem(regKey, JSON.stringify(novos)); } catch(e){}
+    setRegistros(novos);
+    setShowFormReg(false);
+    setFormReg({data:new Date().toISOString().slice(0,10),hora:new Date().toTimeString().slice(0,5),tipo:"ligacao",resultado:"sem_resposta",relatorio:"",mensagem:""});
+  }
+  function excluirRegistro(id) {
+    if(!window.confirm("Excluir este registro?")) return;
+    const novos = registros.filter(r=>r.id!==id);
+    try { localStorage.setItem(regKey, JSON.stringify(novos)); } catch(e){}
+    setRegistros(novos);
   }
 
   // Carregar lembretes do devedor do localStorage
@@ -921,43 +938,117 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   return (
     <div>
 
-      {/* ── RELATÓRIO LIVRE ─────────────────────────────────── */}
-      <div style={{background:"#fff",borderRadius:14,padding:16,border:"1.5px solid #e2e8f0",marginBottom:18}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      {/* ── REGISTROS DE CONTATO ─────────────────────────────── */}
+      <div style={{background:"#fff",borderRadius:14,border:"1.5px solid #e2e8f0",overflow:"hidden",marginBottom:18}}>
+        {/* Cabeçalho */}
+        <div style={{padding:"14px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc"}}>
           <div>
-            <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>📝 Relatório do Devedor</p>
-            <p style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Anotações livres, histórico narrativo, observações estratégicas</p>
+            <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>📋 Registros de Contato</p>
+            <p style={{fontSize:11,color:"#94a3b8",marginTop:1}}>Histórico detalhado de cada tentativa de cobrança</p>
           </div>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            {!relSalvo&&<span style={{fontSize:10,color:"#d97706",fontWeight:600}}>● não salvo</span>}
-            {relSalvo&&relTexto&&<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ salvo</span>}
-            <button onClick={salvarRelatorio} disabled={relSalvo&&!salvando}
-              style={{background:relSalvo?"#f1f5f9":"#4f46e5",color:relSalvo?"#94a3b8":"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:relSalvo?"default":"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish",transition:"all .2s"}}>
-              {salvando?"Salvando...":"💾 Salvar"}
-            </button>
-          </div>
+          <button onClick={()=>setShowFormReg(v=>!v)}
+            style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish",display:"flex",alignItems:"center",gap:6}}>
+            {showFormReg?"✕ Fechar":"+ Registrar Contato"}
+          </button>
         </div>
-        <textarea
-          value={relTexto}
-          onChange={e=>{setRelTexto(e.target.value);setRelSalvo(false);}}
-          placeholder={`Escreva o relatório do processo de cobrança de ${sel.nome.split(" ")[0]}...
 
-Exemplo:
-• 10/04/2026 — Cliente informou dificuldade financeira, prometeu pagar até dia 15.
-• 12/04/2026 — Sem resposta ao WhatsApp. Aguardar retorno.
-• 15/04/2026 — Confirmou pagamento de R$ 500 para amanhã.`}
-          rows={8}
-          style={{width:"100%",padding:"12px 14px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical",lineHeight:1.7,color:"#0f172a",background:"#fafafe"}}
-        />
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
-          <span style={{fontSize:10,color:"#94a3b8"}}>{relTexto.length} caracteres</span>
-          {relTexto&&(
-            <button onClick={()=>{if(window.confirm("Limpar todo o relatório?"))setRelTexto("");}}
-              style={{fontSize:10,color:"#dc2626",background:"none",border:"none",cursor:"pointer"}}>
-              🗑 Limpar
-            </button>
-          )}
-        </div>
+        {/* Formulário de novo registro */}
+        {showFormReg&&(
+          <div style={{padding:16,borderBottom:"2px solid #ede9fe",background:"#fafafe"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Data do Contato</label>
+                <input type="date" value={formReg.data} onChange={e=>FR("data",e.target.value)}
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #4f46e5",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Hora</label>
+                <input type="time" value={formReg.hora} onChange={e=>FR("hora",e.target.value)}
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Tipo de Contato</label>
+                <select value={formReg.tipo} onChange={e=>FR("tipo",e.target.value)}
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                  {[["ligacao","📞 Ligação"],["whatsapp","📱 WhatsApp"],["email","📧 E-mail"],["carta","✉️ Carta"],["visita","🚗 Visita"],["outro","🔹 Outro"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Resultado</label>
+                <select value={formReg.resultado} onChange={e=>FR("resultado",e.target.value)}
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                  {[["sem_resposta","Sem resposta"],["numero_invalido","Nº inválido"],["contato_estabelecido","Contato feito"],["recusou_negociar","Recusou"],["demonstrou_interesse","Interessado"],["acordo_verbal","Acordo verbal"],["outro","Outro"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>📝 Relatório do Contato *</label>
+              <textarea value={formReg.relatorio} onChange={e=>FR("relatorio",e.target.value)}
+                placeholder="Descreva o que aconteceu neste contato: o que o cliente disse, compromissos assumidos, dificuldades relatadas..."
+                rows={4}
+                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical",lineHeight:1.6}}/>
+            </div>
+
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>💬 Mensagem Enviada (WhatsApp / E-mail)</label>
+              <textarea value={formReg.mensagem} onChange={e=>FR("mensagem",e.target.value)}
+                placeholder="Cole aqui a mensagem exata que foi enviada ao cliente (opcional)..."
+                rows={3}
+                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical",lineHeight:1.6,background:"#f8fafc",color:"#475569"}}/>
+            </div>
+
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={salvarRegistro} color="#4f46e5">💾 Salvar Registro</Btn>
+              <Btn onClick={()=>setShowFormReg(false)} outline color="#64748b">Cancelar</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Lista de registros */}
+        {registros.length===0&&!showFormReg&&(
+          <div style={{padding:32,textAlign:"center",color:"#94a3b8"}}>
+            <div style={{fontSize:36,marginBottom:8}}>📋</div>
+            <p style={{fontWeight:600,marginBottom:4}}>Nenhum registro ainda</p>
+            <p style={{fontSize:12}}>Clique em "+ Registrar Contato" para começar o histórico.</p>
+          </div>
+        )}
+
+        {registros.map((r,i)=>{
+          const tipoLabel = {ligacao:"📞 Ligação",whatsapp:"📱 WhatsApp",email:"📧 E-mail",carta:"✉️ Carta",visita:"🚗 Visita",outro:"🔹 Outro"}[r.tipo]||r.tipo;
+          const resLabel  = {sem_resposta:"Sem resposta",numero_invalido:"Nº inválido",contato_estabelecido:"Contato feito",recusou_negociar:"Recusou negociar",demonstrou_interesse:"Demonstrou interesse",acordo_verbal:"Acordo verbal",outro:"Outro"}[r.resultado]||r.resultado;
+          const resCor    = {contato_estabelecido:"#16a34a",acordo_verbal:"#059669",demonstrou_interesse:"#0891b2",sem_resposta:"#64748b",numero_invalido:"#dc2626",recusou_negociar:"#dc2626"}[r.resultado]||"#64748b";
+          const resBg     = {contato_estabelecido:"#dcfce7",acordo_verbal:"#d1fae5",demonstrou_interesse:"#e0f2fe",sem_resposta:"#f1f5f9",numero_invalido:"#fee2e2",recusou_negociar:"#fee2e2"}[r.resultado]||"#f1f5f9";
+          return(
+            <div key={r.id} style={{padding:"14px 16px",borderBottom:i<registros.length-1?"1px solid #f1f5f9":"none",background:i%2===0?"#fff":"#fafafe"}}>
+              {/* Cabeçalho do registro */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,flexWrap:"wrap",gap:8}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:800,color:"#0f172a"}}>{fmtDate(r.data)}</span>
+                  {r.hora&&<span style={{fontSize:12,color:"#64748b",fontWeight:600}}>{r.hora}</span>}
+                  <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:99,background:"#ede9fe",color:"#4f46e5"}}>{tipoLabel}</span>
+                  <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:99,background:resBg,color:resCor}}>{resLabel}</span>
+                  <span style={{fontSize:10,color:"#94a3b8"}}>por {r.criado_por}</span>
+                </div>
+                <button onClick={()=>excluirRegistro(r.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,flexShrink:0}}>🗑</button>
+              </div>
+
+              {/* Relatório */}
+              <div style={{background:"#f8fafc",borderRadius:9,padding:"10px 12px",marginBottom:r.mensagem?8:0,border:"1px solid #f1f5f9"}}>
+                <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:5}}>📝 Relatório</p>
+                <p style={{fontSize:13,color:"#0f172a",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{r.relatorio}</p>
+              </div>
+
+              {/* Mensagem enviada */}
+              {r.mensagem&&(
+                <div style={{background:"#f0fdf4",borderRadius:9,padding:"10px 12px",border:"1px solid #bbf7d0"}}>
+                  <p style={{fontSize:10,fontWeight:700,color:"#16a34a",textTransform:"uppercase",marginBottom:5}}>💬 Mensagem Enviada</p>
+                  <p style={{fontSize:12,color:"#166534",lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"Mulish"}}>{r.mensagem}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* KPIs */}
@@ -4404,7 +4495,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        <nav style={{ flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:2 }}>
+        <nav style={{ flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto",overflowX:"hidden",scrollbarWidth:"thin",scrollbarColor:"rgba(255,255,255,.1) transparent" }}>
           {NAV.map(n=>(
             <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); }}
               style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"Mulish",fontSize:13,fontWeight:600,background:tab===n.id?"linear-gradient(135deg,#4f46e5,#7c3aed)":"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.5)",transition:"all .15s" }}>
