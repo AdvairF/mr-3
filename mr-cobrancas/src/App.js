@@ -1537,34 +1537,95 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
     y = hrLine(y);
   }
 
-  // ── 3. DÍVIDAS ───────────────────────────────────────────────
+  // ── 3. DÍVIDAS COM ATUALIZAÇÃO MONETÁRIA ────────────────────
   const dividas = sel.dividas||[];
+  const hojeCalc = new Date().toISOString().slice(0,10);
   if(dividas.length>0) {
     y = checkPage(y, 25);
-    y = cabecalhoSecao("3. DÍVIDAS", y);
+    y = cabecalhoSecao("3. DÍVIDAS — VALORES ATUALIZADOS EM "+new Date().toLocaleDateString("pt-BR"), y);
     const idxMap = {igpm:"IGP-M",ipca:"IPCA",selic:"SELIC",inpc:"INPC",nenhum:"Sem correção"};
+    let totalGeralDiv=0, totalGeralCorr=0, totalGeralJuros=0, totalGeralMulta=0, totalGeralHon=0;
+
     dividas.forEach((div,di)=>{
-      y = checkPage(y, 22);
-      // Linha título da dívida
-      doc.setFillColor(248,250,252);
-      doc.rect(ML, y-3, MR-ML, 7, "F");
+      // ── Calcular atualização desta dívida ──
+      const dataIni = div.data_inicio_atualizacao||div.data_vencimento||div.data_origem||hojeCalc;
+      const PV = div.valor_total||0;
+      const fator = calcularFatorCorrecao(div.indexador||"igpm", dataIni, hojeCalc);
+      const correcao = Math.max(0, PV*(fator-1));
+      const PC = PV + correcao; // principal corrigido
+      const meses = Math.max(0, Math.ceil((new Date(hojeCalc+"T12:00:00")-new Date(dataIni+"T12:00:00"))/(1000*60*60*24*30.44)));
+      const i = (parseFloat(div.juros_am)||0)/100;
+      const juros = PC*(Math.pow(1+i,meses)-1);
+      const multaVal = PC*((parseFloat(div.multa_pct)||0)/100);
+      const honPct = parseFloat(div.honorarios_pct||20)/100;
+      const subtotal = PC+juros+multaVal;
+      const hon = subtotal*honPct;
+      const total = subtotal+hon;
+
+      totalGeralDiv  += PV;
+      totalGeralCorr += correcao;
+      totalGeralJuros+= juros;
+      totalGeralMulta+= multaVal;
+      totalGeralHon  += hon;
+
+      y = checkPage(y, 30);
+
+      // Cabeçalho da dívida com valor ORIGINAL e ATUALIZADO
+      doc.setFillColor(238,242,255);
+      doc.rect(ML, y-3, MR-ML, 8, "F");
       doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
       doc.text(`${di+1}. ${div.descricao||"Dívida"}`, ML+2, y+1.5);
-      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...azul);
-      doc.text(fmt(div.valor_total||0), MR-2, y+1.5, {align:"right"});
-      y += 9;
+      // Valor atualizado em destaque
+      doc.setTextColor(...azul);
+      doc.text(`Total Atualizado: ${fmt(total)}`, MR-2, y+1.5, {align:"right"});
+      y += 11;
 
-      // Detalhes
-      doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      // Linha de detalhes técnicos
+      doc.setFontSize(7); doc.setTextColor(...cinza);
       const det = [
-        `Vencimento: ${fmtDate(div.data_vencimento||div.data_origem)}`,
-        `Índice: ${idxMap[div.indexador]||div.indexador||"—"}`,
-        `Juros: ${div.juros_am||0}% a.m.`,
+        `Venc: ${fmtDate(div.data_vencimento||div.data_origem)}`,
+        `${meses}m`,
+        `${idxMap[div.indexador]||"IGP-M"}`,
+        `Juros: ${div.juros_am||0}%am`,
         `Multa: ${div.multa_pct||0}%`,
-        div.parcelas?.length>0?`Parcelas: ${div.parcelas.length}x de ${fmt((div.valor_total||0)/(div.parcelas.length||1))}`:"À vista",
-      ].join("   ·   ");
+        `Hon: ${div.honorarios_pct||20}%`,
+      ].join("  ·  ");
       doc.text(det, ML+2, y);
-      y += 5;
+      y += 7;
+
+      // ── Tabela de valores ──
+      const colunas = [
+        {l:"Valor Original",    v:fmt(PV),       x:ML,    w:35},
+        {l:"Correção Mon.",     v:fmt(correcao), x:ML+36, w:30, cor:azul},
+        {l:"Princ. Corrigido",  v:fmt(PC),       x:ML+67, w:35, cor:azul},
+        {l:"Juros",             v:fmt(juros),    x:ML+103, w:28, cor:[217,119,6]},
+        {l:"Multa",             v:fmt(multaVal), x:ML+132, w:25, cor:[220,38,38]},
+        {l:"Honorários",        v:fmt(hon),      x:ML+158, w:28, cor:[180,83,9]},
+      ];
+
+      // Fundo da tabela
+      doc.setFillColor(250,251,255);
+      doc.rect(ML, y-3, MR-ML, 14, "F");
+      doc.setDrawColor(226,232,240); doc.setLineWidth(0.2);
+      doc.rect(ML, y-3, MR-ML, 14, "S");
+
+      colunas.forEach(col=>{
+        doc.setFont("helvetica","bold"); doc.setFontSize(6.5);
+        doc.setTextColor(...cinza);
+        doc.text(col.l, col.x+1, y);
+        doc.setFontSize(8); doc.setFont("helvetica","bold");
+        doc.setTextColor(...(col.cor||escuro));
+        doc.text(col.v, col.x+1, y+6);
+      });
+
+      // Total em destaque
+      doc.setFillColor(...azul);
+      doc.rect(MR-30, y-3, 30, 14, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(6.5); doc.setTextColor(...branco);
+      doc.text("TOTAL", MR-27, y);
+      doc.setFontSize(8.5);
+      doc.text(fmt(total), MR-1, y+6, {align:"right"});
+      y += 16;
 
       // Parcelas (máx 5 por dívida no PDF para não explodir)
       const parcs = div.parcelas||[];
@@ -1601,15 +1662,36 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
         doc.setFillColor(255,247,237);
         doc.rect(ML, y-2, MR-ML, 6+custas.length*5, "F");
         doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(194,65,12);
-        doc.text("Custas Judiciais:", ML+2, y+1.5); y+=6;
+        doc.text("Custas Judiciais (só correção):", ML+2, y+1.5); y+=6;
         custas.forEach(c=>{
+          const fCust = calcularFatorCorrecao(div.indexador||"igpm", c.data||hojeCalc, hojeCalc);
+          const vCust = parseFloat(c.valor)||0;
+          const corrCust = vCust*(fCust-1);
           doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
-          doc.text(`${c.descricao||"—"} — ${fmtDate(c.data)} — ${fmt(parseFloat(c.valor)||0)}`, ML+4, y);
+          doc.text(`${c.descricao||"—"}  ·  ${fmtDate(c.data)}  ·  Original: ${fmt(vCust)}  ·  Atualizado: ${fmt(vCust+corrCust)}`, ML+4, y);
           y += 5;
         });
       }
       y += 4;
     });
+
+    // ── Totalizador geral das dívidas ──
+    if(dividas.length>1) {
+      y = checkPage(y, 20);
+      doc.setFillColor(15,23,42);
+      doc.rect(ML, y-3, MR-ML, 12, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...branco);
+      doc.text("TOTAL GERAL DAS DÍVIDAS", ML+3, y+2);
+      doc.setFontSize(6.5); doc.setTextColor(165,180,252);
+      doc.text(`Original: ${fmt(totalGeralDiv)}`, ML+3, y+7);
+      doc.text(`Correção: ${fmt(totalGeralCorr)}`, ML+40, y+7);
+      doc.text(`Juros: ${fmt(totalGeralJuros)}`, ML+80, y+7);
+      doc.text(`Multa: ${fmt(totalGeralMulta)}`, ML+110, y+7);
+      doc.text(`Hon: ${fmt(totalGeralHon)}`, ML+140, y+7);
+      doc.setFontSize(9); doc.setTextColor(74,222,128);
+      doc.text(`TOTAL: ${fmt(totalGeralDiv+totalGeralCorr+totalGeralJuros+totalGeralMulta+totalGeralHon)}`, MR-2, y+5.5, {align:"right"});
+      y += 16;
+    }
     y = hrLine(y);
   }
 
@@ -1722,7 +1804,29 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
     doc.text(`Página ${p} de ${totalPages}`, MR, 294.5, {align:"right"});
   }
 
-  doc.save(`ficha_${(sel.nome||"devedor").replace(/\s+/g,"_").toLowerCase()}.pdf`);
+  // Mobile: iOS não suporta doc.save direto — usar blob URL
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if(isMobile) {
+    try {
+      const blob = doc.output("blob");
+      const url  = URL.createObjectURL(blob);
+      // Abrir em nova aba — permite salvar no mobile
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ficha_${(sel.nome||"devedor").replace(/\s+/g,"_").toLowerCase()}.pdf`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+    } catch(e) {
+      // Fallback final: abrir data URI
+      const dataUri = doc.output("datauristring");
+      window.open(dataUri, "_blank");
+    }
+  } else {
+    doc.save(`ficha_${(sel.nome||"devedor").replace(/\s+/g,"_").toLowerCase()}.pdf`);
+  }
 }
 
 function CustasAvulsasForm({ onSalvar }) {
