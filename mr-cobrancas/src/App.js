@@ -807,7 +807,7 @@ const FORM_DEV_VAZIO = {
   credor_id:"", valor_nominal:"", data_origem_divida:"", data_recebimento_carteira:"", descricao_divida:"",
   status:"novo", responsavel:"", observacoes:"",
 };
-const DIVIDA_VAZIA={descricao:"",valor_total:"",data_origem:"",data_primeira_parcela:"",qtd_parcelas:"1",parcelas:[],indexador:"igpm",multa_pct:"2",juros_am:"1",honorarios_pct:"20",data_inicio_atualizacao:"",despesas:"0",observacoes:""};
+const DIVIDA_VAZIA={descricao:"",valor_total:"",data_origem:"",data_primeira_parcela:"",qtd_parcelas:"1",parcelas:[],indexador:"igpm",multa_pct:"2",juros_am:"1",honorarios_pct:"20",data_inicio_atualizacao:"",despesas:"0",observacoes:"",custas:[]};
 const SECOES=[["id","👤 Identificação"],["end","📍 Endereço"],["divida","💰 Dívida"],["ctrl","⚙️ Controle"]];
 
 function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos=[], setTab }) {
@@ -1005,7 +1005,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
     const total=parseFloat(nd.valor_total)||0;
     if(!total)return alert("Informe o valor.");
     if(!nd.parcelas.length)return alert("Gere as parcelas antes de salvar.");
-    const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,data_origem:nd.data_origem,data_vencimento:nd.data_primeira_parcela,parcelas:nd.parcelas,criada_em:new Date().toISOString().slice(0,10),indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela,despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||""};
+    const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,data_origem:nd.data_origem,data_vencimento:nd.data_primeira_parcela,parcelas:nd.parcelas,criada_em:new Date().toISOString().slice(0,10),indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela,despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||"",custas:nd.custas||[]};
     const dividas=[...(sel.dividas||[]),divida];
     const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
     try{
@@ -1334,6 +1334,33 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                 </div>
                 {nd.valor_total&&nd.qtd_parcelas&&<div style={{background:"#ede9fe",borderRadius:8,padding:"6px 12px",marginBottom:10,fontSize:12}}><b style={{color:"#4f46e5"}}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total)||0)/parseInt(nd.qtd_parcelas||1))}</b></div>}
                 <Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn>
+
+                {/* Custas Judiciais — só correção, sem juros */}
+                <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:12,marginTop:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <p style={{fontSize:10,fontWeight:700,color:"#c2410c",textTransform:"uppercase",letterSpacing:".05em"}}>🏛 Custas Judiciais <span style={{fontWeight:400,color:"#9a3412"}}>(só correção monetária, sem juros)</span></p>
+                    <button onClick={()=>ND("custas",[...(nd.custas||[]),{id:Date.now(),descricao:"",valor:"",data:""}])}
+                      style={{background:"#c2410c",color:"#fff",border:"none",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>+ Custa</button>
+                  </div>
+                  {(nd.custas||[]).map((c,ci)=>(
+                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
+                      <input placeholder="Descrição (ex: custa judicial - 01/12/2023)" value={c.descricao} onChange={e=>ND("custas",(nd.custas||[]).map((x,xi)=>xi===ci?{...x,descricao:e.target.value}:x))}
+                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Mulish"}}/>
+                      <input type="number" placeholder="Valor (R$)" value={c.valor} onChange={e=>ND("custas",(nd.custas||[]).map((x,xi)=>xi===ci?{...x,valor:e.target.value}:x))}
+                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Mulish"}}/>
+                      <input type="date" value={c.data} onChange={e=>ND("custas",(nd.custas||[]).map((x,xi)=>xi===ci?{...x,data:e.target.value}:x))}
+                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none"}}/>
+                      <button onClick={()=>ND("custas",(nd.custas||[]).filter((_,xi)=>xi!==ci))}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"4px 7px",cursor:"pointer",fontSize:11}}>✕</button>
+                    </div>
+                  ))}
+                  {(nd.custas||[]).length===0&&<p style={{fontSize:11,color:"#c2410c",opacity:.6}}>Nenhuma custa lançada. Clique em "+ Custa" para adicionar.</p>}
+                  {(nd.custas||[]).length>0&&(
+                    <div style={{borderTop:"1px solid #fed7aa",paddingTop:6,marginTop:4,fontSize:11,color:"#c2410c",fontWeight:700,textAlign:"right"}}>
+                      Total custas: {fmt((nd.custas||[]).reduce((s,c)=>s+(parseFloat(c.valor)||0),0))}
+                    </div>
+                  )}
+                </div>
                 {nd.parcelas.length>0&&(
                   <div style={{marginTop:12}}>
                     <div style={{maxHeight:180,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
@@ -2961,83 +2988,190 @@ function Calculadora({ devedores }) {
                 </div>
               </div>
 
-              {/* Tabela por dívida — nome, valor e cálculo completo */}
+              {/* ── PLANILHA estilo imagem: Prestação por linha ── */}
               {(()=>{
-                // Se veio de devedor com dívidas individuais, usa dividasDetalhe
-                // Senão, monta uma linha única com o resultado global
-                const linhas = resultado.dividasDetalhe?.length>0
-                  ? resultado.dividasDetalhe
-                  : [{
-                      descricao: nomeDevedor||"Dívida",
-                      valor: resultado.valorOriginal,
-                      correcao: resultado.correcao,
-                      principalCorrigido: resultado.principalCorrigido,
-                      juros: resultado.juros,
-                      multa: resultado.multa,
-                      honorarios: resultado.honorarios,
-                      total: resultado.total,
-                      meses: resultado.meses,
-                      indexador, jurosAM:parseFloat(jurosAM), multaPct:parseFloat(multa),
-                    }];
-                const colunas = [
-                  {k:"descricao",  l:"DÍVIDA",           al:"left",  c:"#0f172a"},
-                  {k:"valor",      l:"VALOR ORIGINAL",   al:"right", c:"#475569"},
-                  {k:"correcao",   l:"CORREÇÃO",         al:"right", c:"#7c3aed"},
-                  {k:"principalCorrigido",l:"PRINC. CORRIGIDO",al:"right",c:"#4f46e5"},
-                  {k:"juros",      l:"JUROS",            al:"right", c:"#d97706"},
-                  {k:"multa",      l:"MULTA",            al:"right", c:"#dc2626"},
-                  ...(resultado.encargos>0?[{k:"encargos",l:"ENCARGOS",al:"right",c:"#64748b"}]:[]),
-                  ...(resultado.bonificacao>0?[{k:"bonificacao",l:"BONIF.",al:"right",c:"#16a34a"}]:[]),
-                  ...(incluirHonorarios?[{k:"honorarios",l:"HONORÁRIOS",al:"right",c:"#b45309"}]:[]),
-                  {k:"total",      l:"TOTAL ATUALIZADO", al:"right", c:"#059669"},
-                ];
+                // Monta linhas de prestações — cada parcela é uma linha com nome da dívida
+                const dev = devedores.find(x=>x.id==devId);
+                const dividasCalc = resultado.dividasDetalhe?.length>0 ? resultado.dividasDetalhe : null;
+
+                // Gerar linhas de parcelas com cálculo individual por vencimento
+                const linhasParcelas = [];
+                if(dev && dividasCalc) {
+                  for(const div of dividasCalc) {
+                    const divOriginal = (dev.dividas||[]).find(d=>d.id===div.id_original||d.descricao===div.descricao);
+                    const parcelas = divOriginal?.parcelas||[];
+                    if(parcelas.length>0) {
+                      // Linha por parcela
+                      parcelas.forEach((p,pi)=>{
+                        const dataVenc = p.venc||p.vencimento||div.dataIni;
+                        const mesesP = Math.max(0,(new Date(dataCalculo+"T12:00:00")-new Date(dataVenc+"T12:00:00"))/(1000*60*60*24*30.44)|0);
+                        const fCorr = calcularFatorCorrecao(div.indexador, dataVenc, dataCalculo);
+                        const corrP = p.valor*(fCorr-1);
+                        const pcP   = p.valor+corrP;
+                        const jP    = regimeJuros==="simples"? pcP*(parseFloat(div.jurosAM)/100)*mesesP : pcP*(Math.pow(1+parseFloat(div.jurosAM)/100,mesesP)-1);
+                        const bMul  = baseMulta==="corrigido"?pcP:p.valor;
+                        const mP    = bMul*(parseFloat(div.multaPct)/100);
+                        const sub   = pcP+jP+mP;
+                        const hP    = incluirHonorarios?sub*(parseFloat(div.honorarios_pct??honorariosPct)/100):0;
+                        linhasParcelas.push({
+                          descricao: divOriginal?.descricao||(pi===0?div.descricao:`${div.descricao} #${pi+1}`),
+                          vencimento: dataVenc,
+                          valor: p.valor,
+                          valorAtualizado: pcP,
+                          juros: jP,
+                          multa: mP,
+                          honorarios: hP,
+                          total: sub+hP,
+                          meses: mesesP,
+                        });
+                      });
+                    } else {
+                      // Sem parcelas: uma linha por dívida
+                      linhasParcelas.push({
+                        descricao: div.descricao,
+                        vencimento: div.dataIni,
+                        valor: div.valor,
+                        valorAtualizado: div.principalCorrigido,
+                        juros: div.juros,
+                        multa: div.multa,
+                        honorarios: div.honorarios,
+                        total: div.total,
+                        meses: div.meses,
+                      });
+                    }
+                  }
+                } else {
+                  // Modo manual — uma linha única
+                  linhasParcelas.push({
+                    descricao: nomeDevedor||"Dívida",
+                    vencimento: dataVencimento,
+                    valor: resultado.valorOriginal,
+                    valorAtualizado: resultado.principalCorrigido,
+                    juros: resultado.juros,
+                    multa: resultado.multa,
+                    honorarios: resultado.honorarios,
+                    total: resultado.total,
+                    meses: resultado.meses,
+                  });
+                }
+
+                // Custas de todas as dívidas (só correção, sem juros)
+                const todasCustas = [];
+                if(dev) {
+                  for(const div of (dev.dividas||[])) {
+                    for(const c of (div.custas||[])) {
+                      if(!c.valor||!c.data) continue;
+                      const fCust = calcularFatorCorrecao(div.indexador||indexador, c.data, dataCalculo);
+                      const vCust = parseFloat(c.valor)||0;
+                      const corrCust = vCust*(fCust-1);
+                      todasCustas.push({
+                        descricao: c.descricao||"Custa judicial",
+                        data: c.data,
+                        valor: vCust,
+                        correcao: corrCust,
+                        total: vCust+corrCust,
+                      });
+                    }
+                  }
+                }
+
+                const subtotalPrincipal = linhasParcelas.reduce((s,l)=>s+l.total,0);
+                const subtotalCustas    = todasCustas.reduce((s,c)=>s+c.total,0);
+                const totalGeral        = subtotalPrincipal + subtotalCustas;
+                const honTotal          = linhasParcelas.reduce((s,l)=>s+l.honorarios,0);
+
+                const thSt = {padding:"7px 10px",fontSize:9,fontWeight:700,color:"#475569",textTransform:"uppercase",whiteSpace:"nowrap",background:"#f1f5f9",borderBottom:"2px solid #e2e8f0"};
+                const tdSt = (al="right") => ({padding:"7px 10px",textAlign:al,fontSize:11,borderBottom:"1px solid #f8fafc"});
+
                 return(
-                  <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden"}}>
-                    <div style={{padding:"12px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>📋 Resumo por Dívida</p>
-                      <p style={{fontSize:11,color:"#94a3b8"}}>{linhas.length} dívida{linhas.length>1?"s":""}</p>
+                  <div style={{background:"#fff",borderRadius:16,border:"1px solid #e2e8f0",overflow:"hidden"}}>
+                    {/* Cabeçalho */}
+                    <div style={{padding:"12px 18px",borderBottom:"2px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc"}}>
+                      <p style={{fontFamily:"Syne",fontWeight:800,fontSize:14,color:"#0f172a"}}>📋 Planilha de Atualização</p>
+                      <p style={{fontSize:11,color:"#94a3b8"}}>{linhasParcelas.length} prestação{linhasParcelas.length>1?"ões":""}{todasCustas.length>0?` + ${todasCustas.length} custa${todasCustas.length>1?"s":""}`:""}</p>
                     </div>
+
                     <div style={{overflowX:"auto"}}>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:700}}>
                         <thead>
-                          <tr style={{background:"#f8fafc"}}>
-                            {colunas.map(c=>(
-                              <th key={c.k} style={{padding:"8px 10px",textAlign:c.al,fontSize:9,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",whiteSpace:"nowrap",borderBottom:"1px solid #e2e8f0"}}>{c.l}</th>
-                            ))}
+                          <tr>
+                            <th style={{...thSt,textAlign:"left",minWidth:180}}>ITEM DESCRIÇÃO</th>
+                            <th style={{...thSt,textAlign:"right"}}>VENCIMENTO</th>
+                            <th style={{...thSt,textAlign:"right"}}>VALOR SINGELO</th>
+                            <th style={{...thSt,textAlign:"right"}}>VALOR ATUALIZADO</th>
+                            <th style={{...thSt,textAlign:"right"}}>JUROS MORATÓRIOS<br/><span style={{fontWeight:400,fontSize:8}}>{jurosAM}% a.m.</span></th>
+                            <th style={{...thSt,textAlign:"right"}}>MULTA<br/><span style={{fontWeight:400,fontSize:8}}>{multa}%</span></th>
+                            {incluirHonorarios&&<th style={{...thSt,textAlign:"right"}}>HONORÁRIOS<br/><span style={{fontWeight:400,fontSize:8}}>{honorariosPct}%</span></th>}
+                            <th style={{...thSt,textAlign:"right",color:"#1d4ed8"}}>TOTAL</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {linhas.map((l,i)=>(
-                            <tr key={i} style={{borderTop:"1px solid #f8fafc",background:i%2===0?"#fff":"#fafafe"}}>
-                              {colunas.map(c=>(
-                                <td key={c.k} style={{padding:"9px 10px",textAlign:c.al,color:c.k==="total"?"#059669":c.c,fontWeight:c.k==="total"||c.k==="descricao"?700:400,fontSize:c.k==="total"?13:11}}>
-                                  {c.k==="descricao"
-                                    ? <div>
-                                        <p style={{fontWeight:700,color:"#0f172a"}}>{l.descricao}</p>
-                                        <p style={{fontSize:9,color:"#94a3b8",marginTop:2}}>
-                                          {l.meses}m · {({igpm:"IGP-M",ipca:"IPCA",selic:"SELIC",inpc:"INPC",nenhum:"Sem índice"})[l.indexador]||l.indexador||"—"} · {l.jurosAM}%am · multa {l.multaPct}%
-                                        </p>
-                                      </div>
-                                    : fmt(l[c.k]||0)
-                                  }
-                                </td>
-                              ))}
+                          {linhasParcelas.map((l,i)=>(
+                            <tr key={i} style={{background:i%2===0?"#fff":"#fafafe"}}>
+                              <td style={{...tdSt("left"),fontWeight:600,color:"#0f172a"}}>{l.descricao}</td>
+                              <td style={{...tdSt(),color:"#64748b"}}>{fmtDate(l.vencimento)}</td>
+                              <td style={{...tdSt()}}>{fmt(l.valor)}</td>
+                              <td style={{...tdSt(),color:"#7c3aed"}}>{fmt(l.valorAtualizado)}</td>
+                              <td style={{...tdSt(),color:"#d97706"}}>{fmt(l.juros)}</td>
+                              <td style={{...tdSt(),color:"#dc2626"}}>{fmt(l.multa)}</td>
+                              {incluirHonorarios&&<td style={{...tdSt(),color:"#b45309"}}>{fmt(l.honorarios)}</td>}
+                              <td style={{...tdSt(),fontWeight:800,color:"#1d4ed8"}}>{fmt(l.total)}</td>
                             </tr>
                           ))}
+                          {/* Linha de totais das prestações */}
+                          <tr style={{background:"#f1f5f9",borderTop:"2px solid #e2e8f0"}}>
+                            <td colSpan={2} style={{...tdSt("left"),fontWeight:800,color:"#0f172a",fontSize:12}}>TOTAIS</td>
+                            <td style={{...tdSt(),fontWeight:800}}>{fmt(linhasParcelas.reduce((s,l)=>s+l.valor,0))}</td>
+                            <td style={{...tdSt(),fontWeight:800,color:"#7c3aed"}}>{fmt(linhasParcelas.reduce((s,l)=>s+l.valorAtualizado,0))}</td>
+                            <td style={{...tdSt(),fontWeight:800,color:"#d97706"}}>{fmt(linhasParcelas.reduce((s,l)=>s+l.juros,0))}</td>
+                            <td style={{...tdSt(),fontWeight:800,color:"#dc2626"}}>{fmt(linhasParcelas.reduce((s,l)=>s+l.multa,0))}</td>
+                            {incluirHonorarios&&<td style={{...tdSt(),fontWeight:800,color:"#b45309"}}>{fmt(honTotal)}</td>}
+                            <td style={{...tdSt(),fontWeight:800,color:"#1d4ed8",fontSize:13}}>{fmt(subtotalPrincipal)}</td>
+                          </tr>
                         </tbody>
-                        {linhas.length>1&&(
-                          <tfoot>
-                            <tr style={{background:"#1e1b4b",borderTop:"2px solid #4f46e5"}}>
-                              <td style={{padding:"9px 10px",fontWeight:800,color:"#fff",fontSize:11}}>TOTAL GERAL</td>
-                              {colunas.slice(1).map(c=>(
-                                <td key={c.k} style={{padding:"9px 10px",textAlign:"right",fontWeight:800,color:"#a5f3fc",fontSize:c.k==="total"?13:11}}>
-                                  {fmt(linhas.reduce((s,l)=>s+(l[c.k]||0),0))}
-                                </td>
-                              ))}
-                            </tr>
-                          </tfoot>
-                        )}
                       </table>
+                    </div>
+
+                    {/* Bloco de totalizadores — estilo imagem */}
+                    <div style={{padding:"16px 20px",borderTop:"2px solid #e2e8f0",background:"#fafafe"}}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
+                        <div style={{display:"flex",gap:32,justifyContent:"flex-end",width:"100%",borderBottom:"1px dashed #e2e8f0",paddingBottom:8,marginBottom:8}}>
+                          <span style={{fontSize:12,color:"#64748b"}}>Subtotal</span>
+                          <span style={{fontSize:13,fontWeight:800,color:"#0f172a",minWidth:120,textAlign:"right"}}>{fmt(subtotalPrincipal)}</span>
+                        </div>
+                        {incluirHonorarios&&(
+                          <div style={{display:"flex",gap:8,justifyContent:"flex-end",width:"100%",alignItems:"center",marginBottom:4}}>
+                            <span style={{fontSize:12,color:"#b45309"}}>Honorários advocatícios ({honorariosPct}%)</span>
+                            <span style={{fontSize:12,color:"#b45309",minWidth:30,textAlign:"center"}}>(+)</span>
+                            <span style={{fontSize:13,fontWeight:700,color:"#b45309",minWidth:120,textAlign:"right"}}>{fmt(honTotal)}</span>
+                          </div>
+                        )}
+                        {todasCustas.length>0&&(
+                          <>
+                            <div style={{display:"flex",gap:32,justifyContent:"flex-end",width:"100%",borderBottom:"1px dashed #e2e8f0",paddingBottom:8,marginBottom:4}}>
+                              <span style={{fontSize:12,fontStyle:"italic",color:"#64748b"}}>Subtotal (antes das custas)</span>
+                              <span style={{fontSize:13,fontWeight:800,color:"#0f172a",minWidth:120,textAlign:"right"}}>{fmt(subtotalPrincipal+honTotal)}</span>
+                            </div>
+                            {/* Custas individuais */}
+                            {todasCustas.map((c,i)=>(
+                              <div key={i} style={{display:"flex",gap:8,justifyContent:"flex-end",width:"100%",alignItems:"center"}}>
+                                <span style={{fontSize:11,color:"#475569",flex:1,textAlign:"right"}}>{c.descricao} — {fmtDate(c.data)}</span>
+                                <span style={{fontSize:11,color:"#475569",minWidth:30,textAlign:"center"}}>(+)</span>
+                                <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:120,textAlign:"right"}}>{fmt(c.total)}</span>
+                              </div>
+                            ))}
+                            <div style={{display:"flex",gap:32,justifyContent:"flex-end",width:"100%",borderTop:"1px dashed #e2e8f0",paddingTop:8,marginTop:4}}>
+                              <span style={{fontSize:12,color:"#475569",fontStyle:"italic"}}>Subtotal (custas judiciais)</span>
+                              <span style={{fontSize:13,fontWeight:800,color:"#475569",minWidth:120,textAlign:"right"}}>{fmt(subtotalCustas)}</span>
+                            </div>
+                          </>
+                        )}
+                        {/* Total Geral destacado */}
+                        <div style={{display:"flex",gap:32,justifyContent:"flex-end",width:"100%",borderTop:"3px double #1d4ed8",paddingTop:10,marginTop:4}}>
+                          <span style={{fontFamily:"Syne",fontSize:15,fontWeight:800,color:"#1d4ed8"}}>TOTAL GERAL</span>
+                          <span style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"#1d4ed8",minWidth:120,textAlign:"right"}}>{fmt(totalGeral+honTotal)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
