@@ -205,15 +205,22 @@ function Login({ onLogin }) {
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 function Dashboard({ devedores, processos, andamentos, user }) {
-  const totalCarteira = devedores.reduce((s,d) => s+d.valor_original,0);
+  const totalCarteira = devedores.reduce((s,d)=>{
+    const dividas = d.dividas||[];
+    return s + (dividas.length>0 ? dividas.reduce((ss,div)=>ss+(div.valor_total||0),0) : (d.valor_original||0));
+  },0);
+  const totalRecuperado = devedores.reduce((s,d)=>{
+    const parcs = (d.dividas||[]).flatMap(div=>div.parcelas||[]);
+    return s + parcs.filter(p=>p.status==="pago").reduce((ss,p)=>ss+p.valor,0);
+  },0);
   const ativos = processos.filter(p => p.status==="em_andamento").length;
   const prazos7 = andamentos.filter(a => { if(!a.prazo) return false; const d=(new Date(a.prazo)-new Date())/86400000; return d>=0&&d<=7; }).length;
 
   const kpis = [
     { l:"Carteira Total", v: fmt(totalCarteira), sub:`${devedores.length} devedores`, g:"linear-gradient(135deg,#4f46e5,#6d28d9)" },
-    { l:"Processos Ativos", v: ativos, sub:`${processos.length} total`, g:"linear-gradient(135deg,#d97706,#b45309)" },
+    { l:"Valor Recuperado", v: fmt(totalRecuperado), sub:`${totalCarteira?(totalRecuperado/totalCarteira*100).toFixed(1):0}% da carteira`, g:"linear-gradient(135deg,#059669,#065f46)" },
     { l:"Prazos Críticos", v: prazos7, sub:"próximos 7 dias", g:"linear-gradient(135deg,#dc2626,#9f1239)" },
-    { l:"Devedores Pagos", v: devedores.filter(d=>d.status==="pago").length, sub:"recuperados", g:"linear-gradient(135deg,#059669,#065f46)" },
+    { l:"Processos Ativos", v: ativos, sub:`${processos.length} total`, g:"linear-gradient(135deg,#d97706,#b45309)" },
   ];
 
   const fases = {}; processos.forEach(p => fases[p.fase]=(fases[p.fase]||0)+1);
@@ -285,7 +292,12 @@ function Dashboard({ devedores, processos, andamentos, user }) {
 // DEVEDORES
 // ═══════════════════════════════════════════════════════════════
 const FORM_DEV = { nome:"",cpf_cnpj:"",tipo:"PJ",telefone:"",email:"",cidade:"Goiânia",status:"ativo",credor_id:"" };
-const DIVIDA_VAZIA = { descricao:"", valor_total:"", data_primeira_parcela:"", qtd_parcelas:"1", parcelas:[] };
+const DIVIDA_VAZIA = {
+  descricao:"", valor_total:"", data_origem:"", data_primeira_parcela:"", qtd_parcelas:"1", parcelas:[],
+  // Diretrizes do contrato
+  indexador:"igpm", multa_pct:"2", juros_am:"1", honorarios_pct:"20",
+  data_inicio_atualizacao:"", despesas:"0", observacoes:""
+};
 
 function Devedores({ devedores, setDevedores, credores, onModalChange }) {
   const [search, setSearch] = useState("");
@@ -371,7 +383,23 @@ function Devedores({ devedores, setDevedores, credores, onModalChange }) {
     const total = parseFloat(nd.valor_total)||0;
     if(!total) return alert("Informe o valor da dívida.");
     if(nd.parcelas.length===0) return alert("Clique em 'Gerar Parcelas' antes de salvar.");
-    const divida = { id:Date.now(), descricao:nd.descricao||"Dívida", valor_total:total, data_vencimento:nd.data_primeira_parcela, parcelas:nd.parcelas, criada_em:new Date().toISOString().slice(0,10) };
+    const divida = {
+      id:Date.now(),
+      descricao:nd.descricao||"Dívida",
+      valor_total:total,
+      data_origem:nd.data_origem,
+      data_vencimento:nd.data_primeira_parcela,
+      parcelas:nd.parcelas,
+      criada_em:new Date().toISOString().slice(0,10),
+      // Diretrizes do contrato
+      indexador:nd.indexador||"igpm",
+      multa_pct:parseFloat(nd.multa_pct)||2,
+      juros_am:parseFloat(nd.juros_am)||1,
+      honorarios_pct:parseFloat(nd.honorarios_pct)||20,
+      data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela,
+      despesas:parseFloat(nd.despesas)||0,
+      observacoes:nd.observacoes||"",
+    };
     const dividas = [...(sel.dividas||[]), divida];
     const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
     try {
@@ -584,10 +612,41 @@ function Devedores({ devedores, setDevedores, credores, onModalChange }) {
 
               <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:4}}>
                 <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>➕ Nova Dívida</p>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+
+                {/* Identificação */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                   <Inp label="Descrição (ex: Contrato 001)" value={nd.descricao} onChange={v=>ND("descricao",v)} span={2}/>
-                  <Inp label="Valor Total (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
-                  <Inp label="Data da 1ª Parcela" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
+                  <Inp label="Valor Nominal (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
+                  <Inp label="Data de Origem da Dívida" value={nd.data_origem} onChange={v=>ND("data_origem",v)} type="date"/>
+                </div>
+
+                {/* Diretrizes do contrato */}
+                <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:12,marginBottom:12}}>
+                  <p style={{fontSize:11,fontWeight:700,color:"#4f46e5",textTransform:"uppercase",letterSpacing:".05em",marginBottom:10}}>📋 Diretrizes do Contrato</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <Inp label="Índice de Correção" value={nd.indexador} onChange={v=>ND("indexador",v)} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"},{v:"inpc",l:"INPC"},{v:"nenhum",l:"Sem correção"}]}/>
+                    <Inp label="Data Início Atualização" value={nd.data_inicio_atualizacao} onChange={v=>ND("data_inicio_atualizacao",v)} type="date"/>
+                    <Inp label="Multa Contratual (%)" value={nd.multa_pct} onChange={v=>ND("multa_pct",v)} type="number"/>
+                    <Inp label="Juros (% ao mês)" value={nd.juros_am} onChange={v=>ND("juros_am",v)} type="number"/>
+                    <Inp label="Honorários do Escritório (%)" value={nd.honorarios_pct} onChange={v=>ND("honorarios_pct",v)} type="number"/>
+                    <Inp label="Despesas Iniciais (R$)" value={nd.despesas} onChange={v=>ND("despesas",v)} type="number"/>
+                    <Inp label="Observações / Cláusulas" value={nd.observacoes} onChange={v=>ND("observacoes",v)} span={2}/>
+                  </div>
+                  {nd.valor_total&&(
+                    <div style={{marginTop:10,padding:"8px 12px",background:"#f0fdf4",borderRadius:8,fontSize:12}}>
+                      <b style={{color:"#059669"}}>Estimativa:</b>
+                      <span style={{color:"#475569",marginLeft:6}}>
+                        Honorários: <b style={{color:"#4f46e5"}}>{fmt((parseFloat(nd.valor_total)||0)*(parseFloat(nd.honorarios_pct)||0)/100)}</b>
+                        {" · "}Multa: <b style={{color:"#dc2626"}}>{fmt((parseFloat(nd.valor_total)||0)*(parseFloat(nd.multa_pct)||0)/100)}</b>
+                        {" · "}Despesas: <b style={{color:"#d97706"}}>{fmt(parseFloat(nd.despesas)||0)}</b>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Parcelamento */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <Inp label="Data da 1ª Parcela / Vencimento" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
                   <Inp label="Nº de Parcelas" value={nd.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
                 </div>
                 {nd.valor_total&&nd.qtd_parcelas&&(
@@ -1275,67 +1334,242 @@ function Calculadora({ devedores }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RELATÓRIOS
+// RELATÓRIOS & CARTEIRA
 // ═══════════════════════════════════════════════════════════════
-function Relatorios({ devedores, processos, andamentos }) {
-  const total = devedores.reduce((s,d)=>s+d.valor_original,0);
-  const recuperado = devedores.filter(d=>d.status==="pago").reduce((s,d)=>s+d.valor_original,0);
-  const taxa = total ? (recuperado/total*100).toFixed(1) : 0;
+function Relatorios({ devedores, processos, andamentos, credores }) {
+  const [abaRel, setAbaRel] = useState("geral"); // "geral" | "credor" | "contatos" | "despesas"
+  const [credorSel, setCredorSel] = useState("");
+  const [dtInicio, setDtInicio] = useState("");
+  const [dtFim, setDtFim] = useState("");
 
+  // ── Cálculos gerais ──────────────────────────────────────────
+  function calcDividas(devs) {
+    const todas = devs.flatMap(d=>d.dividas||[]);
+    const totalNominal = todas.reduce((s,div)=>s+(div.valor_total||0),0);
+    const todasParcs = todas.flatMap(div=>div.parcelas||[]);
+    const pago = todasParcs.filter(p=>p.status==="pago").reduce((s,p)=>s+p.valor,0);
+    const aberto = todasParcs.filter(p=>p.status!=="pago").reduce((s,p)=>s+p.valor,0);
+    const atrasadas = todasParcs.filter(p=>p.status!=="pago"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date()).length;
+    const despesas = todas.reduce((s,div)=>s+(div.despesas||0),0);
+    const honorarios = todas.reduce((s,div)=>s+(div.valor_total||0)*(div.honorarios_pct||0)/100,0);
+    return { totalNominal, pago, aberto, atrasadas, despesas, honorarios };
+  }
+
+  const devsFiltrados = devedores.filter(d => {
+    if(credorSel && String(d.credor_id)!==String(credorSel)) return false;
+    return true;
+  });
+
+  const stats = calcDividas(devsFiltrados);
+  const taxa = stats.totalNominal ? (stats.pago/stats.totalNominal*100).toFixed(1) : 0;
+
+  // ── Por credor ───────────────────────────────────────────────
+  const porCredor = credores.map(c=>{
+    const devs = devedores.filter(d=>d.credor_id===c.id);
+    const s = calcDividas(devs);
+    return { ...c, ...s, qtdDevedores:devs.length, taxa: s.totalNominal?(s.pago/s.totalNominal*100).toFixed(1):0 };
+  }).filter(c=>c.qtdDevedores>0);
+
+  // ── Exportar CSV ─────────────────────────────────────────────
   function exportCSV(dados, nome) {
-    const keys = Object.keys(dados[0]||{});
-    const csv = [keys.join(";"), ...dados.map(r=>keys.map(k=>JSON.stringify(r[k]??"")+";").join(""))].join("\n");
+    if(!dados.length) return alert("Sem dados para exportar.");
+    const keys = Object.keys(dados[0]);
+    const csv = [keys.join(";"), ...dados.map(r=>keys.map(k=>`"${String(r[k]??"").replace(/"/g,'""')}"`).join(";"))].join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}));
     a.download = nome; a.click();
   }
 
-  const porStatus = {};
-  devedores.forEach(d=>{ porStatus[d.status]=(porStatus[d.status]||0)+1; });
-  const porFase = {};
-  processos.forEach(p=>{ porFase[p.fase]=(porFase[p.fase]||0)+1; });
+  function exportRelatorioDevedor() {
+    const rows = devsFiltrados.map(d=>{
+      const dividas = d.dividas||[];
+      const s = calcDividas([d]);
+      const credor = credores.find(c=>c.id===d.credor_id);
+      return {
+        Nome: d.nome, CPF_CNPJ: d.cpf_cnpj, Status: d.status,
+        Credor: credor?.nome||"—",
+        Qtd_Dividas: dividas.length,
+        Valor_Nominal: s.totalNominal,
+        Valor_Pago: s.pago,
+        Valor_Em_Aberto: s.aberto,
+        Parcelas_Atrasadas: s.atrasadas,
+        Despesas: s.despesas,
+        Honorarios_Estimados: s.honorarios,
+      };
+    });
+    exportCSV(rows, "carteira_devedores.csv");
+  }
+
+  function exportRelatorioCredor() {
+    exportCSV(porCredor.map(c=>({
+      Credor: c.nome, Devedores: c.qtdDevedores,
+      Nominal: c.totalNominal, Pago: c.pago, Em_Aberto: c.aberto,
+      Atrasadas: c.atrasadas, Taxa_Recuperacao: c.taxa+"%",
+      Despesas: c.despesas, Honorarios: c.honorarios,
+    })), "carteira_por_credor.csv");
+  }
+
+  const KPI = ({l,v,c,sub}) => (
+    <div style={{background:"#fff",borderRadius:16,padding:"16px 20px",border:"1px solid #f1f5f9"}}>
+      <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:".05em",marginBottom:4}}>{l}</p>
+      <p style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:c||"#0f172a"}}>{v}</p>
+      {sub&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{sub}</p>}
+    </div>
+  );
 
   return (
     <div>
-      <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:18 }}>Relatórios</h2>
+      <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:6}}>Relatórios & Carteira</h2>
 
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14,marginBottom:24 }}>
-        {[["Carteira Total",fmt(total),"#4f46e5"],["Recuperado",fmt(recuperado),"#059669"],["Taxa Recuperação",taxa+"%","#d97706"],["Processos Ativos",processos.filter(p=>p.status==="em_andamento").length,"#dc2626"]].map(([l,v,c])=>(
-          <div key={l} style={{ background:"#fff",borderRadius:16,padding:20,border:"1px solid #f1f5f9" }}>
-            <p style={{ fontSize:11,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:".05em",marginBottom:6 }}>{l}</p>
-            <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:24,color:c }}>{v}</p>
-          </div>
+      {/* Abas */}
+      <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
+        {[["geral","📊 Geral"],["credor","🏛 Por Credor"],["despesas","💸 Despesas"]].map(([a,l])=>(
+          <button key={a} onClick={()=>setAbaRel(a)} style={{padding:"8px 18px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:abaRel===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaRel===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
         ))}
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20 }}>
-        <div style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9" }}>
-          <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14 }}>Devedores por Status</p>
-          {Object.entries(porStatus).map(([s,q])=>(
-            <div key={s} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
-              <Badge s={s}/><b style={{ fontSize:14,color:"#0f172a" }}>{q}</b>
-            </div>
-          ))}
+      {/* Filtros */}
+      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"flex-end"}}>
+        <div style={{flex:1,minWidth:200}}>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Filtrar por Credor</label>
+          <select value={credorSel} onChange={e=>setCredorSel(e.target.value)} style={{width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todos os credores</option>
+            {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
         </div>
-        <div style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9" }}>
-          <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14 }}>Processos por Fase</p>
-          {Object.entries(porFase).map(([f,q])=>(
-            <div key={f} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,fontSize:13 }}>
-              <span style={{ color:"#475569" }}>{f}</span><b style={{ color:"#0f172a" }}>{q}</b>
-            </div>
-          ))}
-        </div>
+        <Btn onClick={exportRelatorioDevedor} color="#059669">{I.dl} Exportar Devedores</Btn>
+        <Btn onClick={exportRelatorioCredor} color="#4f46e5">{I.dl} Exportar por Credor</Btn>
       </div>
 
-      <div style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9" }}>
-        <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14 }}>Exportar para Excel / Planilhas</p>
-        <div style={{ display:"flex",flexWrap:"wrap",gap:10 }}>
-          <Btn onClick={()=>exportCSV(devedores,"devedores.csv")} color="#059669">{I.dl} Carteira de Devedores</Btn>
-          <Btn onClick={()=>exportCSV(processos,"processos.csv")}>{I.dl} Processos</Btn>
-          <Btn onClick={()=>exportCSV(andamentos,"andamentos.csv")} color="#d97706">{I.dl} Andamentos</Btn>
+      {/* ── ABA GERAL ── */}
+      {abaRel==="geral"&&(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:14,marginBottom:22}}>
+            <KPI l="Carteira Nominal" v={fmt(stats.totalNominal)} c="#4f46e5"/>
+            <KPI l="Valor Pago/Recuperado" v={fmt(stats.pago)} c="#059669"/>
+            <KPI l="Valor em Aberto" v={fmt(stats.aberto)} c="#dc2626"/>
+            <KPI l="Taxa Recuperação" v={taxa+"%"} c="#d97706"/>
+            <KPI l="Parcelas Atrasadas" v={stats.atrasadas} c="#dc2626" sub="requerem atenção"/>
+            <KPI l="Honorários Estimados" v={fmt(stats.honorarios)} c="#6d28d9"/>
+          </div>
+
+          {/* Tabela devedores */}
+          <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+            <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>Devedores — {devsFiltrados.length} registros</p>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead><tr style={{background:"#f8fafc"}}>
+                  {["Devedor","Credor","Status","Nominal","Pago","Em Aberto","Atraso"].map(h=>(
+                    <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {devsFiltrados.map(d=>{
+                    const s = calcDividas([d]);
+                    const credor = credores.find(c=>c.id===d.credor_id);
+                    return(
+                      <tr key={d.id} style={{borderTop:"1px solid #f8fafc"}}>
+                        <td style={{padding:"10px 12px",fontWeight:700,color:"#0f172a"}}>{d.nome}</td>
+                        <td style={{padding:"10px 12px",fontSize:11,color:"#64748b"}}>{(credor?.nome||"—").split(" ").slice(0,2).join(" ")}</td>
+                        <td style={{padding:"10px 12px"}}><Badge s={d.status||"ativo"}/></td>
+                        <td style={{padding:"10px 12px",color:"#0f172a",fontWeight:600}}>{fmt(s.totalNominal)}</td>
+                        <td style={{padding:"10px 12px",color:"#059669",fontWeight:700}}>{fmt(s.pago)}</td>
+                        <td style={{padding:"10px 12px",color:"#dc2626",fontWeight:700}}>{fmt(s.aberto)}</td>
+                        <td style={{padding:"10px 12px"}}>
+                          {s.atrasadas>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:"#fee2e2",color:"#dc2626"}}>{s.atrasadas} parc.</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <p style={{ fontSize:11,color:"#94a3b8",marginTop:10 }}>Arquivos CSV compatíveis com Excel e Google Planilhas.</p>
-      </div>
+      )}
+
+      {/* ── ABA POR CREDOR ── */}
+      {abaRel==="credor"&&(
+        <div>
+          {porCredor.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:32}}>Nenhum credor com devedores cadastrados.</p>}
+          {porCredor.map(c=>(
+            <div key={c.id} style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",marginBottom:16,overflow:"hidden"}}>
+              <div style={{background:"linear-gradient(135deg,#4f46e5,#7c3aed)",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <p style={{fontFamily:"Syne",fontWeight:700,fontSize:15,color:"#fff"}}>{c.nome}</p>
+                  <p style={{fontSize:11,color:"rgba(255,255,255,.7)"}}>{c.qtdDevedores} devedor{c.qtdDevedores>1?"es":""} · Taxa de recuperação: <b style={{color:"#a5f3fc"}}>{c.taxa}%</b></p>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <p style={{fontSize:11,color:"rgba(255,255,255,.6)"}}>Em aberto</p>
+                  <p style={{fontFamily:"Syne",fontWeight:800,fontSize:20,color:"#fff"}}>{fmt(c.aberto)}</p>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:0}}>
+                {[["Nominal",fmt(c.totalNominal),"#0f172a"],["Recuperado",fmt(c.pago),"#059669"],["Honorários",fmt(c.honorarios),"#6d28d9"],["Despesas",fmt(c.despesas),"#d97706"]].map(([l,v,col])=>(
+                  <div key={l} style={{padding:"12px 16px",borderTop:"1px solid #f1f5f9",borderRight:"1px solid #f1f5f9"}}>
+                    <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{l}</p>
+                    <p style={{fontWeight:800,fontSize:15,color:col}}>{v}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Barra de progresso */}
+              <div style={{padding:"10px 20px",borderTop:"1px solid #f1f5f9"}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748b",marginBottom:4}}>
+                  <span>Progresso de recuperação</span><b style={{color:"#059669"}}>{c.taxa}%</b>
+                </div>
+                <div style={{height:6,background:"#f1f5f9",borderRadius:99}}>
+                  <div style={{height:6,width:`${Math.min(100,parseFloat(c.taxa)||0)}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── ABA DESPESAS ── */}
+      {abaRel==="despesas"&&(
+        <div>
+          <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+            <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f5f9"}}>
+              <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>Despesas por Devedor</p>
+              <p style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Valores lançados nas dívidas como despesas operacionais</p>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead><tr style={{background:"#f8fafc"}}>
+                  {["Devedor","Credor","Dívida","Despesas","Honorários Estimados","Status"].map(h=>(
+                    <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {devsFiltrados.flatMap(d=>{
+                    const credor = credores.find(c=>c.id===d.credor_id);
+                    return (d.dividas||[]).filter(div=>(div.despesas||0)>0).map(div=>(
+                      <tr key={div.id} style={{borderTop:"1px solid #f8fafc"}}>
+                        <td style={{padding:"9px 12px",fontWeight:700,color:"#0f172a"}}>{d.nome}</td>
+                        <td style={{padding:"9px 12px",fontSize:11,color:"#64748b"}}>{(credor?.nome||"—").split(" ").slice(0,2).join(" ")}</td>
+                        <td style={{padding:"9px 12px",color:"#475569"}}>{div.descricao}</td>
+                        <td style={{padding:"9px 12px",color:"#d97706",fontWeight:700}}>{fmt(div.despesas||0)}</td>
+                        <td style={{padding:"9px 12px",color:"#6d28d9",fontWeight:700}}>{fmt((div.valor_total||0)*(div.honorarios_pct||0)/100)}</td>
+                        <td style={{padding:"9px 12px"}}><Badge s={d.status||"ativo"}/></td>
+                      </tr>
+                    ));
+                  })}
+                  {devsFiltrados.flatMap(d=>(d.dividas||[]).filter(div=>(div.despesas||0)>0)).length===0&&(
+                    <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#94a3b8"}}>Nenhuma despesa lançada. Adicione despesas ao cadastrar uma dívida.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div style={{padding:"10px 18px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",fontSize:12}}>
+              <span style={{color:"#64748b"}}>Total de Despesas:</span>
+              <b style={{color:"#d97706"}}>{fmt(devsFiltrados.reduce((s,d)=>(d.dividas||[]).reduce((ss,div)=>ss+(div.despesas||0),s),0))}</b>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1404,7 +1638,7 @@ export default function App() {
     processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos}/>,
     regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
     calculadora: <Calculadora devedores={devedores}/>,
-    relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos}/>,
+    relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>,
   };
 
   return (
