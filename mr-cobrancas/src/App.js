@@ -2657,8 +2657,28 @@ function Calculadora({ devedores }) {
   async function exportarPDF() {
     if(!resultado) return;
     try {
-      const { jsPDF } = window.jspdf || {};
-      if(!window.jspdf) throw new Error("jsPDF não carregado. Certifique-se de usar mr-3.vercel.app.");
+      // Tenta window.jspdf (carregado pelo index.html), senão carrega dinamicamente
+      let jsPDF;
+      if(window.jspdf?.jsPDF) {
+        jsPDF = window.jspdf.jsPDF;
+      } else {
+        // Carregar script dinamicamente
+        await new Promise((resolve, reject) => {
+          if(document.querySelector('script[data-jspdf]')) {
+            // já tentou carregar, aguardar um pouco
+            setTimeout(resolve, 500);
+            return;
+          }
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          s.setAttribute('data-jspdf','1');
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        jsPDF = window.jspdf?.jsPDF;
+      }
+      if(!jsPDF) throw new Error("Não foi possível carregar o jsPDF. Verifique sua conexão e tente novamente.");
       const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
       const W = doc.internal.pageSize.getWidth();
 
