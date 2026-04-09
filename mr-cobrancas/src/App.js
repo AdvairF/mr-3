@@ -147,7 +147,7 @@ function Login({ onLogin }) {
   function handleLogin() {
     setLoading(true); setErr("");
     setTimeout(() => {
-      const user = MOCK.users.find(u => u.email === email && u.senha === senha);
+      const user = USERS.find(u => u.email === email && u.senha === senha);
       if (user) onLogin(user);
       else { setErr("E-mail ou senha incorretos."); setLoading(false); }
     }, 700);
