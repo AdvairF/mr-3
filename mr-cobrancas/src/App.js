@@ -1564,139 +1564,569 @@ function Credores({ credores, setCredores }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PROCESSOS
-// ═══════════════════════════════════════════════════════════════
-function Processos({ processos, setProcessos, devedores, credores, andamentos, setAndamentos }) {
-  const [search,setSearch] = useState("");
-  const [modal,setModal] = useState(false);
-  const [sel,setSel] = useState(null);
-  const [andForm,setAndForm] = useState({ tipo:"Petição",descricao:"",data:new Date().toISOString().slice(0,10),prazo:"" });
-  const [form,setForm] = useState({ numero:"",devedor_id:"",credor_id:"",tipo:"Cumprimento de Sentença",fase:"Citação",valor:"",status:"em_andamento",tribunal:"TJGO",vara:"",proximo_prazo:"" });
-  const F = (k,v)=>setForm(f=>({...f,[k]:v}));
 
-  const filtered = processos.filter(p => p.numero.includes(search)||(devedores.find(d=>d.id===p.devedor_id)?.nome||"").toLowerCase().includes(search.toLowerCase()));
+// ═══════════════════════════════════════════════════════════════
+// PROCESSOS — Módulo completo expandido
+// ═══════════════════════════════════════════════════════════════
+const PROC_TIPOS   = ["Cumprimento de Sentença","Execução de Título","Execução Fiscal","Agravo de Instrumento","Agravo Interno","Recurso Especial","Recurso Extraordinário","Ação de Cobrança","Ação de Despejo","Embargos de Declaração","Mandado de Segurança","Outro"];
+const PROC_FASES   = ["Citação","Contestação","Instrução","Sentença","Recurso","Penhora","Avaliação","Leilão","Pagamento","Encerrado"];
+const PROC_STATUS  = ["em_andamento","aguardando","encerrado","suspenso"];
+const PROC_INST    = ["1ª Instância","2ª Instância / Câmara","STJ","STF"];
+const PROC_TRIB    = ["TJGO","JFGO (TRF1)","TJDF","TJSP","TJRJ","TJMG","TJMT","TJMS","TJPR","TJBA","STJ","STF","Outro"];
+const AND_TIPOS    = ["Citação","Contestação","Audiência","Decisão Interlocutória","Sentença","Recurso","Penhora","Leilão","Extinção","Petição","Despacho","Pagamento","Outros"];
 
-  function save() {
-    const dev=devedores.find(d=>d.id==form.devedor_id), cred=credores.find(c=>c.id==form.credor_id);
-    setProcessos(p=>[...p,{...form,id:Date.now(),valor:parseFloat(form.valor)||0}]);
-    setModal(false);
+const FORM_PROC_VAZIO = {
+  numero:"", numero_origem:"", devedor_id:"", credor_id:"",
+  tipo:"Cumprimento de Sentença", fase:"Citação", instancia:"1ª Instância",
+  tribunal:"TJGO", vara:"", valor:"", status:"em_andamento",
+  data_ajuizamento:"", data_distribuicao:"", proximo_prazo:"", observacoes:"",
+};
+
+// Badge de status para processos
+function BadgeProc({ status }) {
+  const map = {
+    em_andamento:{ bg:"#dbeafe", cor:"#1d4ed8", l:"Em Andamento" },
+    aguardando:  { bg:"#fef3c7", cor:"#d97706", l:"Aguardando"   },
+    encerrado:   { bg:"#dcfce7", cor:"#065f46", l:"Encerrado"    },
+    suspenso:    { bg:"#f1f5f9", cor:"#64748b", l:"Suspenso"     },
+  };
+  const s = map[status]||map.em_andamento;
+  return <span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:s.bg,color:s.cor}}>{s.l}</span>;
+}
+
+function Processos({ processos, setProcessos, devedores, credores, andamentos, setAndamentos, user }) {
+  const hoje = new Date().toISOString().slice(0,10);
+  const [search, setSearch]   = useState("");
+  const [filtroCredor, setFiltroCredor]   = useState("");
+  const [filtroFase, setFiltroFase]       = useState("");
+  const [filtroTrib, setFiltroTrib]       = useState("");
+  const [modal, setModal]     = useState(false);  // novo processo
+  const [fichaId, setFichaId] = useState(null);   // id do processo em detalhe
+  const [abaFicha, setAbaFicha] = useState("dados");
+  const [editando, setEditando] = useState(false);
+  const [form, setForm]       = useState({...FORM_PROC_VAZIO});
+  const [formEdit, setFormEdit] = useState({});
+  const [andForm, setAndForm] = useState({ tipo:"Citação", descricao:"", data:hoje, prazo:"", responsavel:user?.nome||"" });
+  const [loading, setLoading] = useState(false);
+  const F  = (k,v) => setForm(f=>({...f,[k]:v}));
+  const FE = (k,v) => setFormEdit(f=>({...f,[k]:v}));
+
+  const sel = fichaId ? processos.find(p=>p.id===fichaId) : null;
+
+  // ── Filtros ───────────────────────────────────────────────────
+  const filtered = processos.filter(p=>{
+    const dev = devedores.find(d=>d.id===p.devedor_id);
+    const ok1 = (p.numero||"").includes(search)||(dev?.nome||"").toLowerCase().includes(search.toLowerCase());
+    const ok2 = !filtroCredor || String(p.credor_id)===String(filtroCredor);
+    const ok3 = !filtroFase   || p.fase===filtroFase;
+    const ok4 = !filtroTrib   || p.tribunal===filtroTrib;
+    return ok1&&ok2&&ok3&&ok4;
+  });
+
+  // ── Cor de prazo na tabela ────────────────────────────────────
+  function corPrazo(prazo) {
+    if(!prazo) return null;
+    const dias = Math.ceil((new Date(prazo+"T12:00:00")-new Date())/86400000);
+    if(dias<=7)  return "#fee2e2"; // vermelho
+    if(dias<=15) return "#fef3c7"; // amarelo
+    return null;
   }
 
-  function addAnd() {
-    setAndamentos(p=>[...p,{...andForm,id:Date.now(),processo_id:sel.id,usuario:"Advair"}]);
-    setAndForm({ tipo:"Petição",descricao:"",data:new Date().toISOString().slice(0,10),prazo:"" });
+  // ── Salvar novo processo ──────────────────────────────────────
+  async function salvarProcesso() {
+    if(!form.numero.trim()) return alert("Informe o número do processo.");
+    setLoading(true);
+    try {
+      const payload = {
+        numero:form.numero, numero_origem:form.numero_origem||null,
+        devedor_id:form.devedor_id?parseInt(form.devedor_id):null,
+        credor_id:form.credor_id?parseInt(form.credor_id):null,
+        tipo:form.tipo, fase:form.fase, instancia:form.instancia,
+        tribunal:form.tribunal, vara:form.vara,
+        valor:parseFloat(form.valor)||0, status:form.status,
+        data_ajuizamento:form.data_ajuizamento||null,
+        data_distribuicao:form.data_distribuicao||null,
+        proximo_prazo:form.proximo_prazo||null,
+        observacoes:form.observacoes||null,
+      };
+      const res = await dbInsert("processos", payload);
+      const novo = Array.isArray(res)?res[0]:res;
+      if(novo?.id) {
+        setProcessos(p=>[...p, novo]);
+        setModal(false);
+        setForm({...FORM_PROC_VAZIO});
+        alert("✅ Processo cadastrado!");
+      } else {
+        // fallback local
+        setProcessos(p=>[...p,{...payload,id:Date.now()}]);
+        setModal(false);
+        setForm({...FORM_PROC_VAZIO});
+      }
+    } catch(e) {
+      setProcessos(p=>[...p,{...form,id:Date.now(),valor:parseFloat(form.valor)||0}]);
+      setModal(false);
+      setForm({...FORM_PROC_VAZIO});
+    }
+    setLoading(false);
   }
 
-  const TIPOS=["Cumprimento de Sentença","Execução de Título","Agravo de Instrumento","Agravo Interno","Recurso Especial","Ação de Cobrança","Ação de Despejo"];
-  const FASES=["Citação","Contestação","Instrução","Sentença","Recurso","Penhora","Avaliação","Leilão","Pagamento","Encerrado"];
-  const TIPOS_AND=["Petição","Decisão","Despacho","Citação","Penhora","Audiência","Recurso","Pagamento","Outro"];
+  // ── Salvar edição ─────────────────────────────────────────────
+  async function salvarEdicao() {
+    if(!sel) return;
+    try {
+      const payload = {
+        numero:formEdit.numero, numero_origem:formEdit.numero_origem||null,
+        devedor_id:formEdit.devedor_id?parseInt(formEdit.devedor_id):null,
+        credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,
+        tipo:formEdit.tipo, fase:formEdit.fase, instancia:formEdit.instancia,
+        tribunal:formEdit.tribunal, vara:formEdit.vara,
+        valor:parseFloat(formEdit.valor)||0, status:formEdit.status,
+        data_ajuizamento:formEdit.data_ajuizamento||null,
+        data_distribuicao:formEdit.data_distribuicao||null,
+        proximo_prazo:formEdit.proximo_prazo||null,
+        observacoes:formEdit.observacoes||null,
+      };
+      const res = await dbUpdate("processos", sel.id, payload);
+      const atu = Array.isArray(res)?res[0]:res;
+      const atualizado = atu?.id ? atu : {...sel,...payload};
+      setProcessos(prev=>prev.map(p=>p.id===sel.id?atualizado:p));
+      setFichaId(atualizado.id);
+      setEditando(false);
+      alert("Processo atualizado!");
+    } catch(e) {
+      setProcessos(prev=>prev.map(p=>p.id===sel.id?{...sel,...formEdit}:p));
+      setEditando(false);
+    }
+  }
 
-  const procAnds = sel ? andamentos.filter(a=>a.processo_id===sel.id).sort((a,b)=>new Date(b.data)-new Date(a.data)) : [];
+  // ── Registrar andamento ───────────────────────────────────────
+  async function addAnd() {
+    if(!sel||!andForm.descricao.trim()) return alert("Informe a descrição do andamento.");
+    const novoAnd = {
+      ...andForm, id:Date.now(), processo_id:sel.id,
+      responsavel:user?.nome||"Sistema",
+      data:andForm.data||hoje,
+    };
+    // Atualizar proximo_prazo do processo se houver prazo no andamento
+    if(andForm.prazo) {
+      try { await dbUpdate("processos",sel.id,{proximo_prazo:andForm.prazo}); } catch(e){}
+      setProcessos(prev=>prev.map(p=>p.id===sel.id?{...p,proximo_prazo:andForm.prazo}:p));
+    }
+    try {
+      const res = await dbInsert("andamentos", novoAnd);
+      const salvo = Array.isArray(res)?res[0]:res;
+      setAndamentos(p=>[...p, salvo?.id?salvo:novoAnd]);
+    } catch(e) {
+      setAndamentos(p=>[...p, novoAnd]);
+    }
+    setAndForm({ tipo:"Citação", descricao:"", data:hoje, prazo:"", responsavel:user?.nome||"" });
+  }
 
+  async function excluirProcesso(id) {
+    if(!window.confirm("Excluir este processo?")) return;
+    try { await dbDelete("processos",id); } catch(e){}
+    setProcessos(prev=>prev.filter(p=>p.id!==id));
+    setFichaId(null);
+  }
+
+  // ── Andamentos do processo selecionado ────────────────────────
+  const procAnds = sel
+    ? andamentos.filter(a=>a.processo_id===sel.id).sort((a,b)=>new Date(b.data)-new Date(a.data))
+    : [];
+
+  const proximoPrazoGlobal = sel?.proximo_prazo ||
+    procAnds.find(a=>a.prazo&&a.prazo>=hoje)?.prazo || null;
+
+  // ─────────────────────────────────────────────────────────────
+  // RENDER FICHA DO PROCESSO
+  // ─────────────────────────────────────────────────────────────
+  if(fichaId && sel) {
+    const dev  = devedores.find(d=>d.id===sel.devedor_id||String(d.id)===String(sel.devedor_id));
+    const cred = credores.find(c=>c.id===sel.credor_id||String(c.id)===String(sel.credor_id));
+    const diasPrazo = sel.proximo_prazo ? Math.ceil((new Date(sel.proximo_prazo+"T12:00:00")-new Date())/86400000) : null;
+    const urgente = diasPrazo!==null && diasPrazo<=7;
+
+    return (
+      <div>
+        {/* Cabeçalho */}
+        <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",borderRadius:16,padding:"20px 24px",marginBottom:20}}>
+          <button onClick={()=>{setFichaId(null);setEditando(false);}} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"none",borderRadius:7,padding:"4px 12px",cursor:"pointer",fontSize:12,marginBottom:10}}>← Voltar</button>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+            <div>
+              <p style={{fontFamily:"monospace",fontSize:13,color:"#a5f3fc",fontWeight:700,marginBottom:4}}>{sel.numero}</p>
+              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:20,color:"#fff",marginBottom:6}}>{dev?.nome||"Devedor não vinculado"}</p>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                <BadgeProc status={sel.status}/>
+                <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Tipo: <b style={{color:"#e0e7ff"}}>{sel.tipo}</b></span>
+                <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Fase: <b style={{color:"#fbbf24"}}>{sel.fase}</b></span>
+                <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Valor: <b style={{color:"#4ade80"}}>{fmt(sel.valor)}</b></span>
+                {diasPrazo!==null&&(
+                  <span style={{fontSize:12,fontWeight:700,color:urgente?"#fca5a5":"#fde68a"}}>
+                    ⚑ Prazo: {fmtDate(sel.proximo_prazo)} ({diasPrazo}d)
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button onClick={()=>excluirProcesso(sel.id)} style={{background:"rgba(220,38,38,.3)",color:"#fca5a5",border:"1px solid rgba(220,38,38,.4)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>🗑 Excluir</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Abas */}
+        <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid #f1f5f9"}}>
+          {[["dados","📋 Dados do Processo"],["andamentos","📌 Andamentos"]].map(([id,label])=>(
+            <button key={id} onClick={()=>{setAbaFicha(id);setEditando(false);}}
+              style={{padding:"9px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2}}>
+              {label}
+              {id==="andamentos"&&procAnds.length>0&&<span style={{marginLeft:5,background:"#4f46e5",color:"#fff",borderRadius:99,fontSize:9,padding:"1px 5px"}}>{procAnds.length}</span>}
+            </button>
+          ))}
+        </div>
+
+        <div style={{background:"#fff",borderRadius:16,padding:20,border:"1px solid #f1f5f9"}}>
+
+          {/* ABA DADOS */}
+          {abaFicha==="dados"&&!editando&&(
+            <div>
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+                <button onClick={()=>{setEditando(true);setFormEdit({...sel});}}
+                  style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:9,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>✏️ Editar</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:10}}>
+                {[
+                  ["Número do Processo", sel.numero],
+                  ["Número de Origem", sel.numero_origem],
+                  ["Devedor", dev?.nome],
+                  ["Credor", cred?.nome],
+                  ["Tipo", sel.tipo],
+                  ["Fase", sel.fase],
+                  ["Instância", sel.instancia],
+                  ["Tribunal", sel.tribunal],
+                  ["Vara / Câmara", sel.vara],
+                  ["Valor", fmt(sel.valor)],
+                  ["Status", sel.status],
+                  ["Data de Ajuizamento", fmtDate(sel.data_ajuizamento)],
+                  ["Data de Distribuição", fmtDate(sel.data_distribuicao)],
+                  ["Próximo Prazo", sel.proximo_prazo?fmtDate(sel.proximo_prazo)+(diasPrazo!==null?` (${diasPrazo}d)`:""):null],
+                ].filter(([,v])=>v&&v!=="—"&&v!=="R$ 0,00").map(([k,v])=>(
+                  <div key={k} style={{padding:"10px 14px",background:"#f8fafc",borderRadius:10}}>
+                    <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>{k}</p>
+                    <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{v||"—"}</p>
+                  </div>
+                ))}
+              </div>
+              {sel.observacoes&&(
+                <div style={{marginTop:10,padding:"10px 14px",background:"#fef9c3",borderRadius:10}}>
+                  <p style={{fontSize:10,color:"#92400e",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>Observações</p>
+                  <p style={{fontSize:13,color:"#0f172a"}}>{sel.observacoes}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ABA DADOS — EDIÇÃO */}
+          {abaFicha==="dados"&&editando&&(
+            <div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                {/* Número */}
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Número do Processo *</label>
+                  <input value={formEdit.numero||""} onChange={e=>FE("numero",e.target.value)} placeholder="0000000-00.0000.8.09.0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #4f46e5",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+                </div>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Número do Processo de Origem (opcional)</label>
+                  <input value={formEdit.numero_origem||""} onChange={e=>FE("numero_origem",e.target.value)} placeholder="0000000-00.0000.8.09.0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+                </div>
+                {/* Partes */}
+                {[["Devedor",devedores.map(d=>({v:d.id,l:d.nome})),"devedor_id"],["Credor",credores.map(c=>({v:c.id,l:c.nome})),"credor_id"]].map(([label,opts,key])=>(
+                  <div key={key}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+                    <select value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                      <option value="">— Selecione —</option>
+                      {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                    </select>
+                  </div>
+                ))}
+                {/* Tipo, Fase, Instância, Tribunal */}
+                {[["Tipo",PROC_TIPOS,"tipo"],["Fase",PROC_FASES,"fase"],["Instância",PROC_INST,"instancia"],["Tribunal",PROC_TRIB,"tribunal"]].map(([label,opts,key])=>(
+                  <div key={key}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+                    <select value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                      {opts.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                ))}
+                {/* Vara, Valor, Datas */}
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vara / Câmara</label>
+                  <input value={formEdit.vara||""} onChange={e=>FE("vara",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                </div>
+                {[["Valor (R$)","valor","number"],["Data de Ajuizamento","data_ajuizamento","date"],["Data de Distribuição","data_distribuicao","date"],["Próximo Prazo","proximo_prazo","date"]].map(([label,key,type])=>(
+                  <div key={key}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+                    <input type={type} value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                  </div>
+                ))}
+                <div>
+                  <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Status</label>
+                  <select value={formEdit.status||"em_andamento"} onChange={e=>FE("status",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                    {PROC_STATUS.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
+                  <textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:16}}>
+                <Btn onClick={salvarEdicao}>💾 Salvar</Btn>
+                <Btn onClick={()=>setEditando(false)} outline color="#64748b">Cancelar</Btn>
+              </div>
+            </div>
+          )}
+
+          {/* ABA ANDAMENTOS */}
+          {abaFicha==="andamentos"&&(
+            <div>
+              {/* Formulário novo andamento */}
+              <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,border:"1.5px dashed #e2e8f0"}}>
+                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>+ Registrar Andamento</p>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo</label>
+                    <select value={andForm.tipo} onChange={e=>setAndForm(f=>({...f,tipo:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                      {AND_TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Data do Andamento</label>
+                    <input type="date" value={andForm.data} onChange={e=>setAndForm(f=>({...f,data:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição *</label>
+                    <textarea value={andForm.descricao} onChange={e=>setAndForm(f=>({...f,descricao:e.target.value}))} rows={3} placeholder="Descreva o andamento processual..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Próximo Prazo (opcional)</label>
+                    <input type="date" value={andForm.prazo} onChange={e=>setAndForm(f=>({...f,prazo:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Responsável</label>
+                    <input value={andForm.responsavel||user?.nome||""} onChange={e=>setAndForm(f=>({...f,responsavel:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                  </div>
+                </div>
+                <div style={{marginTop:12}}>
+                  <Btn onClick={addAnd} color="#4f46e5">📌 Registrar Andamento</Btn>
+                </div>
+              </div>
+
+              {/* Lista de andamentos */}
+              {procAnds.length===0&&(
+                <p style={{fontSize:13,color:"#94a3b8",textAlign:"center",padding:24,background:"#f8fafc",borderRadius:12}}>Nenhum andamento registrado.</p>
+              )}
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {procAnds.map((a,i)=>{
+                  const temPrazo = a.prazo && a.prazo >= hoje;
+                  const diasP = a.prazo ? Math.ceil((new Date(a.prazo+"T12:00:00")-new Date())/86400000) : null;
+                  const corTipo = {
+                    "Citação":"#dbeafe","Contestação":"#ede9fe","Audiência":"#fef3c7",
+                    "Sentença":"#dcfce7","Recurso":"#ffedd5","Penhora":"#fee2e2",
+                    "Decisão Interlocutória":"#f0fdf4","Leilão":"#fdf4ff","Extinção":"#f1f5f9",
+                  };
+                  return(
+                    <div key={a.id} style={{display:"flex",gap:14,padding:14,background:"#fff",borderRadius:12,border:"1px solid #f1f5f9",position:"relative"}}>
+                      {/* linha timeline */}
+                      {i<procAnds.length-1&&<div style={{position:"absolute",left:22,top:40,bottom:-10,width:2,background:"#f1f5f9"}}/>}
+                      {/* ponto */}
+                      <div style={{width:16,height:16,borderRadius:99,background:corTipo[a.tipo]||"#ede9fe",border:"2px solid #4f46e5",flexShrink:0,marginTop:3,zIndex:1}}/>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,flexWrap:"wrap",gap:6}}>
+                          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                            <span style={{fontSize:12,fontWeight:700,padding:"2px 9px",borderRadius:99,background:corTipo[a.tipo]||"#ede9fe",color:"#4f46e5"}}>{a.tipo}</span>
+                            {temPrazo&&<span style={{fontSize:11,fontWeight:700,color:diasP<=7?"#dc2626":"#d97706"}}>⚑ Prazo: {fmtDate(a.prazo)} ({diasP}d)</span>}
+                          </div>
+                          <div style={{display:"flex",gap:8,fontSize:11,color:"#94a3b8"}}>
+                            <span>{fmtDate(a.data)}</span>
+                            {a.responsavel&&<span>· {a.responsavel}</span>}
+                          </div>
+                        </div>
+                        <p style={{fontSize:13,color:"#0f172a",lineHeight:1.6}}>{a.descricao}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // RENDER LISTAGEM
+  // ─────────────────────────────────────────────────────────────
   return (
     <div>
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18 }}>
-        <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a" }}>Processos</h2>
-        <Btn onClick={()=>setModal(true)}>{I.plus} Novo Processo</Btn>
-      </div>
-      <div style={{ position:"relative",marginBottom:14 }}>
-        <span style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8" }}>{I.search}</span>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar número ou devedor..." style={{ width:"100%",padding:"10px 12px 10px 36px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish" }} />
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,flexWrap:"wrap",gap:10}}>
+        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Processos</h2>
+        <Btn onClick={()=>{setForm({...FORM_PROC_VAZIO});setModal(true)}}>{I.plus} Novo Processo</Btn>
       </div>
 
-      <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
-        {filtered.map(p => {
-          const dev = devedores.find(d=>d.id===p.devedor_id);
-          const cred = credores.find(c=>c.id===p.credor_id);
-          const diff = p.proximo_prazo ? Math.ceil((new Date(p.proximo_prazo)-new Date())/86400000) : null;
-          return (
-            <div key={p.id} style={{ background:"#fff",borderRadius:16,padding:18,border:"1px solid #f1f5f9",borderLeft:`4px solid ${p.status==="em_andamento"?"#4f46e5":p.status==="aguardando"?"#d97706":"#64748b"}` }}>
-              <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8 }}>
-                <div>
-                  <p style={{ fontFamily:"monospace",fontSize:12,color:"#4f46e5",fontWeight:700 }}>{p.numero}</p>
-                  <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:15,color:"#0f172a",marginTop:2 }}>{dev?.nome||"—"}</p>
-                </div>
-                <div style={{ display:"flex",gap:8,alignItems:"center" }}>
-                  <Badge s={p.status}/>
-                  <button onClick={()=>setSel(p)} style={{ color:"#94a3b8",background:"none",border:"none",cursor:"pointer",display:"flex" }}>{I.eye}</button>
-                </div>
-              </div>
-              <div style={{ display:"flex",flexWrap:"wrap",gap:"6px 20px",fontSize:12,color:"#64748b" }}>
-                <span><b style={{ color:"#94a3b8" }}>Tipo:</b> {p.tipo}</span>
-                <span><b style={{ color:"#94a3b8" }}>Fase:</b> <b style={{ color:"#0f172a" }}>{p.fase}</b></span>
-                <span><b style={{ color:"#94a3b8" }}>Valor:</b> <b style={{ color:"#4f46e5" }}>{fmt(p.valor)}</b></span>
-                <span><b style={{ color:"#94a3b8" }}>Credor:</b> {cred?.nome?.split(" ")[0]||"—"}</span>
-                {diff!==null && <span style={{ color: diff<=3?"#dc2626":"#d97706",fontWeight:700 }}>⚑ Prazo: {fmtDate(p.proximo_prazo)} ({diff}d)</span>}
-              </div>
-            </div>
-          );
-        })}
+      {/* Filtros */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:10,marginBottom:14,alignItems:"end"}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Credor</label>
+          <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todos os credores</option>
+            {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Fase</label>
+          <select value={filtroFase} onChange={e=>setFiltroFase(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todas as fases</option>
+            {PROC_FASES.map(f=><option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tribunal</label>
+          <select value={filtroTrib} onChange={e=>setFiltroTrib(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todos os tribunais</option>
+            {PROC_TRIB.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Buscar</label>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Número ou devedor..." style={{padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish",minWidth:180}}/>
+        </div>
       </div>
 
-      {/* Modal novo */}
-      {modal && (
-        <Modal title="Novo Processo" onClose={()=>setModal(false)}>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-            <Inp label="Número do Processo" value={form.numero} onChange={v=>F("numero",v)} placeholder="0000000-00.0000.8.09.0000" span={2} />
-            <Inp label="Devedor" value={form.devedor_id} onChange={v=>F("devedor_id",v)} options={[{v:"",l:"Selecione..."},...devedores.map(d=>({v:d.id,l:d.nome}))]} />
-            <Inp label="Credor" value={form.credor_id} onChange={v=>F("credor_id",v)} options={[{v:"",l:"Selecione..."},...credores.map(c=>({v:c.id,l:c.nome}))]} />
-            <Inp label="Tipo" value={form.tipo} onChange={v=>F("tipo",v)} options={TIPOS} />
-            <Inp label="Fase" value={form.fase} onChange={v=>F("fase",v)} options={FASES} />
-            <Inp label="Valor (R$)" value={form.valor} onChange={v=>F("valor",v)} type="number" />
-            <Inp label="Próximo Prazo" value={form.proximo_prazo} onChange={v=>F("proximo_prazo",v)} type="date" />
-            <Inp label="Tribunal" value={form.tribunal} onChange={v=>F("tribunal",v)} />
-            <Inp label="Vara / Câmara" value={form.vara} onChange={v=>F("vara",v)} span={2} />
+      {/* Tabela */}
+      <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:"#f8fafc"}}>
+              {["Nº do Processo","Devedor","Credor","Tipo","Fase","Próximo Prazo","Tribunal","Ações"].map(h=>(
+                <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:".05em",whiteSpace:"nowrap"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length===0&&(
+              <tr><td colSpan={8} style={{padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>Nenhum processo encontrado.</td></tr>
+            )}
+            {filtered.map(p=>{
+              const dev  = devedores.find(d=>d.id===p.devedor_id||String(d.id)===String(p.devedor_id));
+              const cred = credores.find(c=>c.id===p.credor_id||String(c.id)===String(p.credor_id));
+              const bg   = corPrazo(p.proximo_prazo);
+              const dias = p.proximo_prazo ? Math.ceil((new Date(p.proximo_prazo+"T12:00:00")-new Date())/86400000) : null;
+              return (
+                <tr key={p.id} style={{borderTop:"1px solid #f8fafc",background:bg||"",cursor:"pointer"}}
+                  onClick={()=>{setFichaId(p.id);setAbaFicha("dados");}}
+                  onMouseEnter={e=>{if(!bg) e.currentTarget.style.background="#fafafe";}}
+                  onMouseLeave={e=>{if(!bg) e.currentTarget.style.background="";}}>
+                  <td style={{padding:"10px 12px"}}>
+                    <p style={{fontFamily:"monospace",fontSize:11,color:"#4f46e5",fontWeight:700}}>{p.numero}</p>
+                    {p.numero_origem&&<p style={{fontSize:10,color:"#94a3b8",marginTop:1}}>origem: {p.numero_origem.slice(0,15)}…</p>}
+                  </td>
+                  <td style={{padding:"10px 12px",fontSize:12,fontWeight:600,color:"#0f172a"}}>{dev?.nome?.split(" ").slice(0,2).join(" ")||"—"}</td>
+                  <td style={{padding:"10px 12px",fontSize:12,color:"#64748b"}}>{cred?.nome?.split(" ")[0]||"—"}</td>
+                  <td style={{padding:"10px 12px",fontSize:11,color:"#475569"}}>{(p.tipo||"").split(" ").slice(0,2).join(" ")}</td>
+                  <td style={{padding:"10px 12px"}}>
+                    <span style={{fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:99,background:"#fef3c7",color:"#d97706"}}>{p.fase}</span>
+                  </td>
+                  <td style={{padding:"10px 12px"}}>
+                    {dias!==null?(
+                      <span style={{fontSize:11,fontWeight:700,color:dias<=7?"#dc2626":dias<=15?"#d97706":"#64748b"}}>
+                        {dias<=7?"🔴":dias<=15?"🟡":"📅"} {fmtDate(p.proximo_prazo)}
+                        <br/><span style={{fontSize:10,color:"#94a3b8"}}>({dias}d)</span>
+                      </span>
+                    ):"—"}
+                  </td>
+                  <td style={{padding:"10px 12px",fontSize:11,color:"#64748b"}}>{p.tribunal||"—"}</td>
+                  <td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>{setFichaId(p.id);setAbaFicha("andamentos");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>📌 And.</button>
+                      <button onClick={()=>{setFichaId(p.id);setAbaFicha("dados");}} style={{background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:11}}>Ver →</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{padding:"10px 16px",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <p style={{fontSize:11,color:"#94a3b8"}}>{filtered.length} de {processos.length} processos</p>
+          <div style={{display:"flex",gap:12,fontSize:11}}>
+            <span style={{color:"#dc2626"}}>🔴 = prazo ≤ 7 dias</span>
+            <span style={{color:"#d97706"}}>🟡 = prazo 8–15 dias</span>
           </div>
-          <div style={{ display:"flex",gap:10,marginTop:20 }}>
-            <Btn onClick={save}>Salvar</Btn>
+          {(filtroCredor||filtroFase||filtroTrib||search)&&<button onClick={()=>{setFiltroCredor("");setFiltroFase("");setFiltroTrib("");setSearch("");}} style={{fontSize:11,color:"#4f46e5",background:"none",border:"none",cursor:"pointer",fontWeight:700}}>✕ Limpar</button>}
+        </div>
+      </div>
+
+      {/* Modal Novo Processo */}
+      {modal&&(
+        <Modal title="Novo Processo" onClose={()=>setModal(false)} width={640}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+            {/* Número */}
+            <div style={{gridColumn:"1/-1"}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Número do Processo *</label>
+              <input value={form.numero} onChange={e=>F("numero",e.target.value)} placeholder="0000000-00.0000.8.09.0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #4f46e5",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+            </div>
+            <div style={{gridColumn:"1/-1"}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Número do Processo de Origem (opcional)</label>
+              <input value={form.numero_origem} onChange={e=>F("numero_origem",e.target.value)} placeholder="0000000-00.0000.8.09.0000 (opcional)" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+            </div>
+            {/* Partes */}
+            {[["Devedor",devedores.map(d=>({v:d.id,l:d.nome})),"devedor_id"],["Credor",credores.map(c=>({v:c.id,l:c.nome})),"credor_id"]].map(([label,opts,key])=>(
+              <div key={key}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+                <select value={form[key]||""} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                  <option value="">— Selecione —</option>
+                  {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                </select>
+              </div>
+            ))}
+            {/* Tipo, Fase, Instância, Tribunal */}
+            {[["Tipo",PROC_TIPOS,"tipo"],["Fase",PROC_FASES,"fase"],["Instância",PROC_INST,"instancia"],["Tribunal",PROC_TRIB,"tribunal"]].map(([label,opts,key])=>(
+              <div key={key}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+                <select value={form[key]||opts[0]} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                  {opts.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            ))}
+            {/* Vara */}
+            <div style={{gridColumn:"1/-1"}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vara / Câmara</label>
+              <input value={form.vara} onChange={e=>F("vara",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+            </div>
+            {/* Datas e valor */}
+            {[["Valor (R$)","valor","number"],["Data de Ajuizamento","data_ajuizamento","date"],["Data de Distribuição","data_distribuicao","date"],["Próximo Prazo","proximo_prazo","date"]].map(([label,key,type])=>(
+              <div key={key}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+                <input type={type} value={form[key]||""} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              </div>
+            ))}
+            {/* Observações */}
+            <div style={{gridColumn:"1/-1"}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
+              <textarea value={form.observacoes||""} onChange={e=>F("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:10,marginTop:20}}>
+            <Btn onClick={salvarProcesso} disabled={loading}>{loading?"Salvando...":"💾 Salvar Processo"}</Btn>
             <Btn onClick={()=>setModal(false)} outline>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* Modal detalhes */}
-      {sel && (
-        <Modal title={`Processo ${sel.numero}`} onClose={()=>setSel(null)} wide>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:14,background:"#f8fafc",borderRadius:12,marginBottom:20,fontSize:13 }}>
-            {[["Devedor",devedores.find(d=>d.id===sel.devedor_id)?.nome],["Credor",credores.find(c=>c.id===sel.credor_id)?.nome],["Tipo",sel.tipo],["Fase",sel.fase],["Valor",fmt(sel.valor)],["Vara",sel.vara]].map(([k,v])=>(
-              <div key={k}><span style={{ color:"#94a3b8",fontSize:11 }}>{k}:</span> <b style={{ color:"#0f172a" }}>{v}</b></div>
-            ))}
-          </div>
-
-          <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:12 }}>Andamentos</p>
-          <div style={{ maxHeight:220,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:8 }}>
-            {procAnds.length===0 && <p style={{ fontSize:13,color:"#94a3b8" }}>Nenhum andamento registrado.</p>}
-            {procAnds.map(a=>(
-              <div key={a.id} style={{ display:"flex",gap:10,padding:12,background:"#f8fafc",borderRadius:12 }}>
-                <div style={{ width:8,height:8,borderRadius:99,background:"#4f46e5",marginTop:5,flexShrink:0 }} />
-                <div style={{ flex:1 }}>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:2 }}>
-                    <span style={{ fontSize:12,fontWeight:700,color:"#4f46e5" }}>{a.tipo}</span>
-                    <span style={{ fontSize:11,color:"#94a3b8" }}>{fmtDate(a.data)}</span>
-                  </div>
-                  <p style={{ fontSize:13,color:"#0f172a" }}>{a.descricao}</p>
-                  {a.prazo && <p style={{ fontSize:11,color:"#dc2626",marginTop:3 }}>⚑ Prazo: {fmtDate(a.prazo)}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ borderTop:"1px solid #f1f5f9",paddingTop:16 }}>
-            <p style={{ fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:10 }}>Registrar Andamento</p>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-              <Inp label="Tipo" value={andForm.tipo} onChange={v=>setAndForm(f=>({...f,tipo:v}))} options={TIPOS_AND} />
-              <Inp label="Data" value={andForm.data} onChange={v=>setAndForm(f=>({...f,data:v}))} type="date" />
-              <Inp label="Descrição" value={andForm.descricao} onChange={v=>setAndForm(f=>({...f,descricao:v}))} span={2} placeholder="Descreva o andamento..." />
-              <Inp label="Prazo (opcional)" value={andForm.prazo} onChange={v=>setAndForm(f=>({...f,prazo:v}))} type="date" />
-            </div>
-            <div style={{ marginTop:12 }}><Btn onClick={addAnd}>{I.plus} Registrar</Btn></div>
           </div>
         </Modal>
       )}
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 // RÉGUA
@@ -2686,7 +3116,7 @@ export default function App() {
     dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user}/>,
     devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab}/>,
     credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
-    processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos}/>,
+    processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos} user={user}/>,
     regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
     calculadora: <Calculadora devedores={devedores}/>,
     relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>,
