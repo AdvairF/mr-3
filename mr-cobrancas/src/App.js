@@ -296,50 +296,6 @@ function Dashboard({ devedores, processos, andamentos, user }) {
 
 
 // ═══════════════════════════════════════════════════════════════
-// DEVEDORES — v3 completo
-// ═══════════════════════════════════════════════════════════════
-
-const STATUS_DEV = [
-  { v:"novo",           l:"🆕 Novo",              bg:"#f1f5f9",color:"#64748b" },
-  { v:"em_localizacao", l:"🔍 Em Localização",     bg:"#dbeafe",color:"#1d4ed8" },
-  { v:"notificado",     l:"📬 Notificado",          bg:"#ede9fe",color:"#6d28d9" },
-  { v:"em_negociacao",  l:"🤝 Em Negociação",       bg:"#fef9c3",color:"#a16207" },
-  { v:"acordo_firmado", l:"✅ Acordo Firmado",      bg:"#d1fae5",color:"#065f46" },
-  { v:"pago_integral",  l:"💰 Pago Integralmente",  bg:"#dcfce7",color:"#15803d" },
-  { v:"pago_parcial",   l:"💵 Pago Parcialmente",   bg:"#ccfbf1",color:"#0f766e" },
-  { v:"irrecuperavel",  l:"❌ Irrecuperável",       bg:"#fee2e2",color:"#dc2626" },
-  { v:"ajuizado",       l:"⚖️ Ajuizado",            bg:"#ffedd5",color:"#c2410c" },
-];
-
-function BadgeDev({ status }) {
-  const s = STATUS_DEV.find(x=>x.v===status)||STATUS_DEV[0];
-  return <span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:s.bg,color:s.color,whiteSpace:"nowrap"}}>{s.l}</span>;
-}
-
-function maskCPF(v)  { return v.replace(/\D/g,"").slice(0,11).replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d{1,2})$/,"$1-$2"); }
-function maskCNPJ(v) { return v.replace(/\D/g,"").slice(0,14).replace(/^(\d{2})(\d)/,"$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/,"$1.$2.$3").replace(/\.(\d{3})(\d)/,".$1/$2").replace(/(\d{4})(\d)/,"$1-$2"); }
-function maskTel(v)  { const n=v.replace(/\D/g,"").slice(0,11); if(n.length<=10) return n.replace(/(\d{2})(\d{4})(\d{0,4})/,"($1) $2-$3"); return n.replace(/(\d{2})(\d{5})(\d{0,4})/,"($1) $2-$3"); }
-function maskCEP(v)  { return v.replace(/\D/g,"").slice(0,8).replace(/(\d{5})(\d)/,"$1-$2"); }
-
-const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
-
-const FORM_DEV_VAZIO = {
-  nome:"", cpf_cnpj:"", tipo:"PJ",
-  rg:"", data_nascimento:"", profissao:"",
-  socio_nome:"", socio_cpf:"",
-  email:"", telefone:"", telefone2:"",
-  cep:"", logradouro:"", numero:"", complemento:"", bairro:"", cidade:"Goiânia", uf:"GO",
-  credor_id:"", valor_nominal:"", data_origem_divida:"", data_recebimento_carteira:"", descricao_divida:"",
-  status:"novo", responsavel:"", observacoes:"",
-};
-
-const DIVIDA_VAZIA = {
-  descricao:"", valor_total:"", data_origem:"", data_primeira_parcela:"", qtd_parcelas:"1", parcelas:[],
-  indexador:"igpm", multa_pct:"2", juros_am:"1", honorarios_pct:"20",
-  data_inicio_atualizacao:"", despesas:"0", observacoes:""
-};
-
-// ═══════════════════════════════════════════════════════════════
 // STATUS + CONSTANTES
 // ═══════════════════════════════════════════════════════════════
 const STATUS_DEV = [
