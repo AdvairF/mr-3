@@ -810,6 +810,54 @@ const FORM_DEV_VAZIO = {
 const DIVIDA_VAZIA={descricao:"",valor_total:"",data_origem:"",data_primeira_parcela:"",qtd_parcelas:"1",parcelas:[],indexador:"igpm",multa_pct:"2",juros_am:"1",honorarios_pct:"20",data_inicio_atualizacao:"",despesas:"0",observacoes:"",custas:[]};
 const SECOES=[["id","👤 Identificação"],["end","📍 Endereço"],["divida","💰 Dívida"],["ctrl","⚙️ Controle"]];
 
+function CustasAvulsasForm({ onSalvar }) {
+  const [custas, setCustas] = useState([]);
+  function addCusta(){ setCustas(r=>[...r,{id:Date.now(),descricao:"",valor:"",data:""}]); }
+  function upd(ci,k,v){ setCustas(r=>r.map((x,xi)=>xi===ci?{...x,[k]:v}:x)); }
+  function rem(ci){ setCustas(r=>r.filter((_,xi)=>xi!==ci)); }
+  async function salvar(){
+    const ok=custas.filter(c=>c.descricao&&c.valor&&c.data);
+    if(!ok.length) return alert("Preencha descrição, valor e data de ao menos uma custa.");
+    await onSalvar(ok);
+    setCustas([]);
+  }
+  return(
+    <div style={{background:"#fff7ed",borderRadius:14,padding:16,border:"1.5px solid #fed7aa",marginTop:8}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div>
+          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#c2410c"}}>🏛 Lançar Custas Avulsas</p>
+          <p style={{fontSize:11,color:"#9a3412",marginTop:2}}>Só correção monetária, sem juros — lançamento independente de dívida</p>
+        </div>
+        <button onClick={addCusta} style={{background:"#c2410c",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Custa</button>
+      </div>
+      {custas.length===0&&(
+        <p style={{fontSize:12,color:"#c2410c",opacity:.6,textAlign:"center",padding:"8px 0"}}>
+          Clique em "+ Custa" para lançar custas sem precisar cadastrar uma dívida
+        </p>
+      )}
+      {custas.map((c,ci)=>(
+        <div key={c.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
+          <input placeholder="Ex: custa judicial - 01/12/2023" value={c.descricao} onChange={e=>upd(ci,"descricao",e.target.value)}
+            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none",fontFamily:"Mulish"}}/>
+          <input type="number" placeholder="Valor (R$)" value={c.valor} onChange={e=>upd(ci,"valor",e.target.value)}
+            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none",fontFamily:"Mulish"}}/>
+          <input type="date" value={c.data} onChange={e=>upd(ci,"data",e.target.value)}
+            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none"}}/>
+          <button onClick={()=>rem(ci)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:6,padding:"5px 9px",cursor:"pointer",fontSize:12}}>✕</button>
+        </div>
+      ))}
+      {custas.length>0&&(
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,paddingTop:8,borderTop:"1px dashed #fed7aa"}}>
+          <span style={{fontSize:12,color:"#c2410c",fontWeight:700}}>
+            Total: {fmt(custas.reduce((s,c)=>s+(parseFloat(c.valor)||0),0))}
+          </span>
+          <Btn onClick={salvar} color="#c2410c">🏛 Salvar Custas</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos=[], setTab }) {
   const [search,setSearch]=useState("");
   const [filtroStatus,setFiltroStatus]=useState("");
@@ -1003,9 +1051,19 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   async function adicionarDivida(){
     if(!sel)return;
     const total=parseFloat(nd.valor_total)||0;
-    if(!total)return alert("Informe o valor.");
-    if(!nd.parcelas.length)return alert("Gere as parcelas antes de salvar.");
-    const dataVenc=nd.parcelas.length>0?(nd.data_primeira_parcela||nd.data_origem):nd.data_origem;const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,data_origem:nd.data_origem,data_vencimento:dataVenc,parcelas:nd.parcelas,criada_em:new Date().toISOString().slice(0,10),indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,data_inicio_atualizacao:nd.data_inicio_atualizacao||dataVenc,despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||"",custas:nd.custas||[]};
+    if(!total)return alert("Informe o valor da dívida.");
+    if(!nd.data_origem)return alert("Informe a Data de Vencimento.");
+    // parcelas são OPCIONAIS — dívida pode não ser parcelada
+    const dataVenc=nd.parcelas.length>0?(nd.data_primeira_parcela||nd.data_origem):nd.data_origem;
+    const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,
+      data_origem:nd.data_origem,data_vencimento:dataVenc,
+      parcelas:nd.parcelas,  // pode ser [] se não for parcelada
+      criada_em:new Date().toISOString().slice(0,10),
+      indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,
+      juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,
+      data_inicio_atualizacao:nd.data_inicio_atualizacao||dataVenc,
+      despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||"",
+      custas:nd.custas||[]};
     const dividas=[...(sel.dividas||[]),divida];
     const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
     try{
@@ -1021,6 +1079,40 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
       setSel(parsed);setNd(DIVIDA_VAZIA);
       alert("Dívida salva localmente. Erro de sincronização: "+e.message);
+    }
+  }
+
+  // Salvar custas avulsas em uma dívida existente ou criar entrada só de custas
+  async function adicionarCustasAvulsas(custasNovas) {
+    if(!sel||!custasNovas.length) return alert("Adicione ao menos uma custa.");
+    const validas = custasNovas.filter(c=>c.descricao&&c.valor&&c.data);
+    if(!validas.length) return alert("Preencha descrição, valor e data de todas as custas.");
+    // Cria uma "dívida" especial só de custas (sem valor principal, só custas)
+    const dividaCustas = {
+      id:Date.now(),
+      descricao:"Custas Judiciais",
+      valor_total:0, // sem valor principal
+      data_origem:validas[0].data,
+      data_vencimento:validas[0].data,
+      parcelas:[], criada_em:new Date().toISOString().slice(0,10),
+      indexador:"igpm",multa_pct:0,juros_am:0,honorarios_pct:0,
+      data_inicio_atualizacao:validas[0].data,
+      despesas:0,observacoes:"Lançamento avulso de custas",
+      custas:validas, _so_custas:true,
+    };
+    const dividas=[...(sel.dividas||[]),dividaCustas];
+    try{
+      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original:dividas.reduce((s,d)=>s+(d.valor_total||0),0)});
+      const atu=Array.isArray(res)?res[0]:res;
+      const parsed=montarDevAtualizado(atu,dividas);
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
+      setSel(parsed);
+      alert("✅ Custas lançadas com sucesso!");
+    }catch(e){
+      const parsed=montarDevAtualizado(null,dividas);
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
+      setSel(parsed);
+      alert("Custas salvas localmente.");
     }
   }
 
@@ -1368,6 +1460,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                     </div>
                   )}
                 </div>
+                {/* Tabela de parcelas geradas */}
                 {nd.parcelas.length>0&&(
                   <div style={{marginTop:12}}>
                     <div style={{maxHeight:180,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
@@ -1386,14 +1479,29 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                     <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
                       <button onClick={addParc} style={{background:"#f1f5f9",color:"#475569",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>+ Parcela</button>
                       <span style={{fontSize:11,color:"#94a3b8"}}>Total: <b style={{color:"#4f46e5"}}>{fmt(nd.parcelas.reduce((s,p)=>s+p.valor,0))}</b></span>
-                      <div style={{flex:1}}/>
-                      <Btn onClick={adicionarDivida} color="#059669">💾 Salvar Dívida</Btn>
                     </div>
                   </div>
                 )}
+
+                {/* Botões de ação — sempre visíveis */}
+                <div style={{display:"flex",gap:8,marginTop:16,flexWrap:"wrap"}}>
+                  <Btn onClick={adicionarDivida} color="#059669">
+                    💾 Salvar Dívida{nd.parcelas.length>0?` (${nd.parcelas.length} parcela${nd.parcelas.length>1?"s":""})`:nd.valor_total?" (à vista)":""}
+                  </Btn>
+                  {(nd.custas||[]).filter(c=>c.descricao&&c.valor&&c.data).length>0&&(
+                    <Btn onClick={()=>adicionarCustasAvulsas((nd.custas||[]).filter(c=>c.descricao&&c.valor&&c.data))} color="#c2410c" outline>
+                      🏛 Salvar Só as Custas
+                    </Btn>
+                  )}
+                </div>
               </div>
+
+              {/* ── Lançamento rápido de custas avulsas ── */}
+              <CustasAvulsasForm onSalvar={adicionarCustasAvulsas}/>
             </div>
           )}
+
+          {/* ABA ACORDOS */}
 
           {/* ABA ACORDOS */}
           {abaFicha==="acordos"&&(
