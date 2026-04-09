@@ -394,7 +394,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         data_origem_divida:formEdit.data_origem_divida||null,
         data_recebimento_carteira:formEdit.data_recebimento_carteira||null,
         descricao_divida:formEdit.descricao_divida,
-        status:formEdit.status, responsavel:formEdit.responsavel, observacoes:formEdit.observacoes,
+        status:formEdit.status, observacoes:formEdit.observacoes,
       };
       const res = await dbUpdate("devedores", sel.id, payload);
       const atu = Array.isArray(res)?res[0]:res;
@@ -448,44 +448,32 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
     try {
-      // Tenta primeiro com todas as colunas novas
-      const payloadFull = {
+      const base = {
         nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
-        rg:form.rg||null, data_nascimento:form.data_nascimento||null,
-        profissao:form.profissao||null, socio_nome:form.socio_nome||null,
-        socio_cpf:form.socio_cpf||null, email:form.email||null,
-        telefone:form.telefone||null, telefone2:form.telefone2||null,
-        cep:form.cep||null, logradouro:form.logradouro||null,
-        numero:form.numero||null, complemento:form.complemento||null,
-        bairro:form.bairro||null, cidade:form.cidade||"Goiânia", uf:form.uf||"GO",
+        email:form.email||null, telefone:form.telefone||null,
+        cidade:form.cidade||"Goiânia",
         credor_id:form.credor_id?parseInt(form.credor_id):null,
         valor_original:parseFloat(form.valor_nominal)||0,
+        status:form.status||"novo",
+        dividas:JSON.stringify([]),
+      };
+      const extras = {
+        rg:form.rg||null, data_nascimento:form.data_nascimento||null,
+        profissao:form.profissao||null, socio_nome:form.socio_nome||null,
+        socio_cpf:form.socio_cpf||null, telefone2:form.telefone2||null,
+        cep:form.cep||null, logradouro:form.logradouro||null,
+        numero:form.numero||null, complemento:form.complemento||null,
+        bairro:form.bairro||null, uf:form.uf||"GO",
         data_origem_divida:form.data_origem_divida||null,
         data_recebimento_carteira:form.data_recebimento_carteira||null,
         descricao_divida:form.descricao_divida||null,
-        status:form.status||"novo",
-        responsavel:form.responsavel||user?.nome||"",
         observacoes:form.observacoes||null,
-        dividas:JSON.stringify([]),
         contatos:JSON.stringify([]),
       };
-
-      let res = await dbInsert("devedores", payloadFull);
+      let res = await dbInsert("devedores", {...base, ...extras});
       let novo = Array.isArray(res)?res[0]:res;
-
-      // Se falhou (colunas não existem no banco), tenta versão mínima
       if(!novo?.id) {
-        const payloadMin = {
-          nome:payloadFull.nome, cpf_cnpj:payloadFull.cpf_cnpj,
-          tipo:payloadFull.tipo, email:payloadFull.email,
-          telefone:payloadFull.telefone, cidade:payloadFull.cidade,
-          credor_id:payloadFull.credor_id,
-          valor_original:payloadFull.valor_original,
-          status:payloadFull.status,
-          responsavel:payloadFull.responsavel,
-          dividas:JSON.stringify([]),
-        };
-        res = await dbInsert("devedores", payloadMin);
+        res = await dbInsert("devedores", base);
         novo = Array.isArray(res)?res[0]:res;
       }
 
