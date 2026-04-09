@@ -205,7 +205,7 @@ function Login({ onLogin }) {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-function Dashboard({ devedores, processos, andamentos, user }) {
+function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
   const totalCarteira = devedores.reduce((s,d)=>{
     const dividas = d.dividas||[];
     const valorDividas = dividas.reduce((ss,div)=>ss+(div.valor_total||0),0);
@@ -242,35 +242,33 @@ function Dashboard({ devedores, processos, andamentos, user }) {
         Bom dia, {user.nome.split(" ")[0]}! 👋
       </h2>
 
-      {/* Alerta de lembretes vencidos/hoje */}
+      {/* Alerta de lembretes vencidos/hoje — dados do Supabase via prop */}
       {(()=>{
-        try {
-          const lems = JSON.parse(localStorage.getItem("mr_lembretes")||"[]");
-          const hoje2 = new Date().toISOString().slice(0,10);
-          const urgentes = lems.filter(l=>l.status==="pendente"&&l.data_prometida<=hoje2);
-          if(!urgentes.length) return null;
-          return(
-            <div style={{background:"#fee2e2",border:"1.5px solid #fca5a5",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
-              <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                <span style={{fontSize:24}}>🔔</span>
-                <div>
-                  <p style={{fontWeight:800,color:"#dc2626",fontSize:14}}>{urgentes.length} lembrete{urgentes.length>1?"s":""} vencido{urgentes.length>1?"s":""} ou para hoje!</p>
-                  <p style={{fontSize:12,color:"#b91c1c",marginTop:2}}>
-                    {urgentes.slice(0,2).map(l=>{
-                      const dev = devedores.find(d=>String(d.id)===String(l.devedor_id));
-                      return `${dev?.nome?.split(" ")[0]||"?"} (${l.data_prometida===hoje2?"hoje":l.data_prometida})`;
-                    }).join(" · ")}
-                    {urgentes.length>2&&` · +${urgentes.length-2} mais`}
-                  </p>
-                </div>
+        const hoje2 = new Date().toISOString().slice(0,10);
+        if(!lembretes||!lembretes.length) return null;
+        const urgentes = lembretes.filter(l=>l.status==="pendente"&&l.data_prometida<=hoje2);
+        if(!urgentes.length) return null;
+        return(
+          <div style={{background:"#fee2e2",border:"1.5px solid #fca5a5",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+            <div style={{display:"flex",gap:10,alignItems:"center"}}>
+              <span style={{fontSize:24}}>🔔</span>
+              <div>
+                <p style={{fontWeight:800,color:"#dc2626",fontSize:14}}>{urgentes.length} lembrete{urgentes.length>1?"s":""} vencido{urgentes.length>1?"s":""} ou para hoje!</p>
+                <p style={{fontSize:12,color:"#b91c1c",marginTop:2}}>
+                  {urgentes.slice(0,2).map(l=>{
+                    const dev = devedores.find(d=>String(d.id)===String(l.devedor_id));
+                    return `${dev?.nome?.split(" ")[0]||"?"} (${l.data_prometida===hoje2?"hoje":l.data_prometida})`;
+                  }).join(" · ")}
+                  {urgentes.length>2&&` · +${urgentes.length-2} mais`}
+                </p>
               </div>
-              <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
-                style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>
-                Ver Lembretes →
-              </button>
             </div>
-          );
-        } catch(e){ return null; }
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
+              style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>
+              Ver Lembretes →
+            </button>
+          </div>
+        );
       })()}
 
       {/* KPIs */}
@@ -854,10 +852,9 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   });
   const FL = (k,v) => setFormLem(f=>({...f,[k]:v}));
 
-  // Registros de contato individuais (localStorage por devedor)
-  const regKey = `mr_registros_${sel.id}`;
-  function getRegistros() { try{return JSON.parse(localStorage.getItem(regKey)||"[]");}catch{return [];} }
-  const [registros, setRegistros] = useState(getRegistros);
+  // Registros de contato — Supabase (compartilhado entre usuários)
+  const [registros, setRegistros] = useState([]);
+  const [carregandoReg, setCarregandoReg] = useState(false);
   const [formReg, setFormReg] = useState({
     data: new Date().toISOString().slice(0,10),
     hora: new Date().toTimeString().slice(0,5),
@@ -867,57 +864,82 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   const [showFormReg, setShowFormReg] = useState(false);
   const FR = (k,v) => setFormReg(f=>({...f,[k]:v}));
 
-  function salvarRegistro() {
+  useEffect(()=>{
+    async function carregar(){
+      setCarregandoReg(true);
+      try{
+        const res = await dbGet("registros_contato",`devedor_id=eq.${sel.id}&order=data.desc,criado_em.desc`);
+        setRegistros(Array.isArray(res)?res:[]);
+      }catch(e){ setRegistros([]); }
+      setCarregandoReg(false);
+    }
+    carregar();
+  },[sel.id]);
+
+  async function salvarRegistro() {
     if(!formReg.relatorio.trim()) return alert("Informe o relatório do contato.");
-    const novo = { ...formReg, id:Date.now(), criado_por:user?.nome||"Sistema" };
-    const novos = [novo, ...registros];
-    try { localStorage.setItem(regKey, JSON.stringify(novos)); } catch(e){}
-    setRegistros(novos);
+    const payload = {
+      devedor_id:sel.id, data:formReg.data, hora:formReg.hora,
+      tipo:formReg.tipo, resultado:formReg.resultado,
+      relatorio:formReg.relatorio, mensagem:formReg.mensagem||null,
+      criado_por:user?.nome||"Sistema",
+    };
+    try{
+      const res = await dbInsert("registros_contato", payload);
+      const novo = Array.isArray(res)?res[0]:res;
+      if(novo?.id){ setRegistros(r=>[novo,...r]); }
+      else { setRegistros(r=>[{...payload,id:Date.now()},...r]); }
+    }catch(e){
+      setRegistros(r=>[{...payload,id:Date.now()},...r]);
+    }
     setShowFormReg(false);
     setFormReg({data:new Date().toISOString().slice(0,10),hora:new Date().toTimeString().slice(0,5),tipo:"ligacao",resultado:"sem_resposta",relatorio:"",mensagem:""});
   }
-  function excluirRegistro(id) {
+  async function excluirRegistro(id) {
     if(!window.confirm("Excluir este registro?")) return;
-    const novos = registros.filter(r=>r.id!==id);
-    try { localStorage.setItem(regKey, JSON.stringify(novos)); } catch(e){}
-    setRegistros(novos);
+    try{ await dbDelete("registros_contato", id); }catch(e){}
+    setRegistros(r=>r.filter(x=>x.id!==id));
   }
 
-  // Carregar lembretes do devedor do localStorage
-  function getLems() {
-    try { return JSON.parse(localStorage.getItem("mr_lembretes")||"[]"); } catch{ return []; }
-  }
-  function getLemsDev() {
-    return getLems().filter(l=>String(l.devedor_id)===String(sel.id));
-  }
-  const [lemsDevedor, setLemsDevedor] = useState(getLemsDev);
+  // Lembretes — Supabase
+  const [lemsDevedor, setLemsDevedor] = useState([]);
+  useEffect(()=>{
+    async function carregarLems(){
+      try{
+        const res=await dbGet("lembretes",`devedor_id=eq.${sel.id}&order=data_prometida.asc`);
+        setLemsDevedor(Array.isArray(res)?res:[]);
+      }catch(e){ setLemsDevedor([]); }
+    }
+    carregarLems();
+  },[sel.id]);
 
-  function salvarLem() {
+  async function salvarLem() {
     if(!formLem.data_prometida) return alert("Informe a data prometida.");
     if(!formLem.descricao.trim()) return alert("Informe a descrição.");
-    const novo = {
-      ...formLem, id:Date.now(), devedor_id:sel.id,
-      status:"pendente", criado_em:new Date().toISOString(),
-      criado_por:user?.nome||"Sistema",
+    const payload = {
+      devedor_id:sel.id, tipo:formLem.tipo, descricao:formLem.descricao,
+      data_prometida:formLem.data_prometida, hora:formLem.hora,
+      prioridade:formLem.prioridade, observacoes:formLem.observacoes||null,
+      status:"pendente", criado_por:user?.nome||"Sistema",
     };
-    const todos = [novo, ...getLems()];
-    try { localStorage.setItem("mr_lembretes", JSON.stringify(todos)); } catch(e){}
-    setLemsDevedor([novo, ...lemsDevedor]);
+    try{
+      const res=await dbInsert("lembretes",payload);
+      const novo=Array.isArray(res)?res[0]:res;
+      setLemsDevedor(l=>[...(novo?.id?[novo]:[{...payload,id:Date.now()}]),...l]);
+    }catch(e){ setLemsDevedor(l=>[{...payload,id:Date.now()},...l]); }
     setShowForm(false);
     setFormLem({tipo:"promessa_pagamento",descricao:"",data_prometida:"",hora:"08:00",prioridade:"normal",observacoes:""});
-    alert("✅ Lembrete criado! Acesse o módulo Lembretes para ver todos.");
+    alert("✅ Lembrete criado e visível para todos!");
   }
 
-  function concluirLem(id) {
-    const todos = getLems().map(l=>l.id!==id?l:{...l,status:"concluido",concluido_em:new Date().toISOString()});
-    try { localStorage.setItem("mr_lembretes", JSON.stringify(todos)); } catch(e){}
-    setLemsDevedor(getLemsDev());
+  async function concluirLem(id) {
+    try{ await dbUpdate("lembretes",id,{status:"concluido",concluido_em:new Date().toISOString()}); }catch(e){}
+    setLemsDevedor(l=>l.map(x=>x.id!==id?x:{...x,status:"concluido"}));
   }
-  function excluirLem(id) {
+  async function excluirLem(id) {
     if(!window.confirm("Excluir lembrete?")) return;
-    const todos = getLems().filter(l=>l.id!==id);
-    try { localStorage.setItem("mr_lembretes", JSON.stringify(todos)); } catch(e){}
-    setLemsDevedor(todos.filter(l=>String(l.devedor_id)===String(sel.id)));
+    try{ await dbDelete("lembretes",id); }catch(e){}
+    setLemsDevedor(l=>l.filter(x=>x.id!==id));
   }
 
   // Dados
@@ -3845,9 +3867,8 @@ const PRIOR = [
 
 function Lembretes({ devedores, credores, user }) {
   const hoje = new Date().toISOString().slice(0,10);
-  const [lembretes, setLembretes]   = useState(() => {
-    try { return JSON.parse(localStorage.getItem("mr_lembretes")||"[]"); } catch{ return []; }
-  });
+  const [lembretes, setLembretes]   = useState([]);
+  const [carregando, setCarregando] = useState(true);
   const [modal, setModal]           = useState(false);
   const [form, setForm]             = useState({...LEMBRETE_VAZIO, data_prometida:hoje});
   const [filtroStatus, setFiltroStatus] = useState("pendente");
@@ -3855,39 +3876,53 @@ function Lembretes({ devedores, credores, user }) {
   const [search, setSearch]         = useState("");
   const F = (k,v) => setForm(f=>({...f,[k]:v}));
 
-  // Persistir lembretes no localStorage
-  function salvarLembretes(novos) {
-    setLembretes(novos);
-    try { localStorage.setItem("mr_lembretes", JSON.stringify(novos)); } catch(e){}
+  // Carregar do Supabase — compartilhado entre todos os usuários
+  async function carregarLembretes() {
+    setCarregando(true);
+    try {
+      const res = await dbGet("lembretes","order=data_prometida.asc,criado_em.desc");
+      setLembretes(Array.isArray(res)?res:[]);
+    } catch(e) { setLembretes([]); }
+    setCarregando(false);
   }
+  useEffect(()=>{ carregarLembretes(); },[]);
 
-  function salvar() {
+  async function salvar() {
     if(!form.devedor_id) return alert("Selecione o devedor.");
     if(!form.data_prometida) return alert("Informe a data.");
     if(!form.descricao.trim()) return alert("Informe a descrição.");
-    const novo = {
-      ...form, id:Date.now(),
-      criado_em: new Date().toISOString(),
-      criado_por: user?.nome||"Sistema",
-      status:"pendente",
+    const payload = {
+      devedor_id:parseInt(form.devedor_id), tipo:form.tipo,
+      descricao:form.descricao, data_prometida:form.data_prometida,
+      hora:form.hora, prioridade:form.prioridade,
+      observacoes:form.observacoes||null,
+      status:"pendente", criado_por:user?.nome||"Sistema",
     };
-    salvarLembretes([novo, ...lembretes]);
+    try {
+      const res = await dbInsert("lembretes", payload);
+      const novo = Array.isArray(res)?res[0]:res;
+      setLembretes(l=>[...(novo?.id?[novo]:[{...payload,id:Date.now(),criado_em:new Date().toISOString()}]),...l]);
+    } catch(e) { setLembretes(l=>[{...payload,id:Date.now(),criado_em:new Date().toISOString()},...l]); }
     setForm({...LEMBRETE_VAZIO, data_prometida:hoje});
     setModal(false);
   }
 
-  function concluir(id) {
-    salvarLembretes(lembretes.map(l=>l.id!==id?l:{...l,status:"concluido",concluido_em:new Date().toISOString()}));
+  async function concluir(id) {
+    try{ await dbUpdate("lembretes",id,{status:"concluido",concluido_em:new Date().toISOString()}); }catch(e){}
+    setLembretes(l=>l.map(x=>x.id!==id?x:{...x,status:"concluido",concluido_em:new Date().toISOString()}));
   }
-  function cancelar(id) {
-    salvarLembretes(lembretes.map(l=>l.id!==id?l:{...l,status:"cancelado"}));
+  async function cancelar(id) {
+    try{ await dbUpdate("lembretes",id,{status:"cancelado"}); }catch(e){}
+    setLembretes(l=>l.map(x=>x.id!==id?x:{...x,status:"cancelado"}));
   }
-  function reativar(id) {
-    salvarLembretes(lembretes.map(l=>l.id!==id?l:{...l,status:"pendente",concluido_em:null}));
+  async function reativar(id) {
+    try{ await dbUpdate("lembretes",id,{status:"pendente",concluido_em:null}); }catch(e){}
+    setLembretes(l=>l.map(x=>x.id!==id?x:{...x,status:"pendente",concluido_em:null}));
   }
-  function excluir(id) {
+  async function excluir(id) {
     if(!window.confirm("Excluir este lembrete?")) return;
-    salvarLembretes(lembretes.filter(l=>l.id!==id));
+    try{ await dbDelete("lembretes",id); }catch(e){}
+    setLembretes(l=>l.filter(x=>x.id!==id));
   }
 
   // Classificar urgência por data
@@ -4405,13 +4440,16 @@ export default function App() {
   const [processos,  setProcessos]  = useState([]);
   const [andamentos, setAndamentos] = useState([]);
   const [regua,      setRegua]      = useState([]);
+  const [lembretesList, setLembretesList] = useState([]); // global para o alerta do Dashboard
 
   const carregarTudo = useCallback(async (silencioso=false) => {
     if(!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems] = await Promise.all([
         dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"), dbGet("regua"),
+        dbGet("lembretes","order=data_prometida.asc"),
       ]);
+      setLembretesList(Array.isArray(lems)?lems:[]);
       const parse = (v,fb="[]") => { try{ return typeof v==="string"?JSON.parse(v||fb):(v||JSON.parse(fb)); }catch(e){return JSON.parse(fb);} };
       setDevedores((devs||[]).map(d=>{
         const dividas  = parse(d.dividas);
@@ -4467,7 +4505,7 @@ export default function App() {
   ];
 
   const PAGE = {
-    dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user}/>,
+    dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList}/>,
     devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab}/>,
     credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
     processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos} user={user}/>,
