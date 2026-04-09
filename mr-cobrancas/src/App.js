@@ -1341,105 +1341,297 @@ function Regua({ processos, devedores, regua, setRegua }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CALCULADORA DE ATUALIZAÇÃO MONETÁRIA
+// CALCULADORA — Atualização Monetária + Honorários
 // ═══════════════════════════════════════════════════════════════
 function Calculadora({ devedores }) {
-  const [mode, setMode] = useState("manual");
-  const [devId, setDevId] = useState("");
+  const [aba, setAba]                   = useState("correcao"); // "correcao" | "honorarios"
+  const [devId, setDevId]               = useState("");
   const [valorOriginal, setValorOriginal] = useState("");
   const [dataVencimento, setDataVencimento] = useState("");
-  const [indexador, setIndexador] = useState("igpm");
-  const [jurosAM, setJurosAM] = useState("1");
-  const [multa, setMulta] = useState("2");
-  const [resultado, setResultado] = useState(null);
+  const [indexador, setIndexador]       = useState("igpm");
+  const [jurosAM, setJurosAM]           = useState("1");
+  const [multa, setMulta]               = useState("2");
+  const [resultado, setResultado]       = useState(null);
+
+  // Honorários
+  const [baseCalculo, setBaseCalculo]   = useState("total_atualizado"); // "divida_original" | "total_atualizado" | "personalizado"
+  const [valorBase, setValorBase]       = useState("");
+  const [tipoHonorario, setTipoHonorario] = useState("percentual"); // "percentual" | "fixo"
+  const [percentual, setPercentual]     = useState("20");
+  const [valorFixo, setValorFixo]       = useState("");
+  const [faseProcessual, setFaseProcessual] = useState("extrajudicial");
+  const [resultadoHon, setResultadoHon] = useState(null);
 
   function loadDev(id) {
     setDevId(id);
     const d = devedores.find(x=>x.id==id);
-    if(d) { setValorOriginal(String(d.valor_original)); setDataVencimento(d.data_vencimento||""); }
+    if(d) {
+      setValorOriginal(String(d.valor_original));
+      setDataVencimento(d.data_vencimento||"");
+    }
   }
 
   function calcular() {
-    const r = calcCorrecao({ valorOriginal: parseFloat(valorOriginal), dataVencimento, indexador, jurosAM: parseFloat(jurosAM), multa: parseFloat(multa) });
+    const r = calcCorrecao({ valorOriginal:parseFloat(valorOriginal), dataVencimento, indexador, jurosAM:parseFloat(jurosAM), multa:parseFloat(multa) });
     setResultado(r);
   }
 
+  function calcularHonorarios() {
+    let base = 0;
+    if (baseCalculo === "divida_original") {
+      base = parseFloat(valorOriginal)||0;
+    } else if (baseCalculo === "total_atualizado") {
+      base = resultado ? resultado.total : (parseFloat(valorOriginal)||0);
+    } else {
+      base = parseFloat(valorBase)||0;
+    }
+
+    let valorHon = 0;
+    if (tipoHonorario === "percentual") {
+      valorHon = base * (parseFloat(percentual)||0) / 100;
+    } else {
+      valorHon = parseFloat(valorFixo)||0;
+    }
+
+    // Limites OAB (Tabela de Honorários OAB/GO — referência)
+    const limites = {
+      extrajudicial: { min: 10, max: 30, label: "Extrajudicial" },
+      conhecimento:  { min: 10, max: 30, label: "Fase de Conhecimento" },
+      execucao:      { min: 10, max: 30, label: "Fase de Execução / Cumprimento" },
+      recursal:      { min: 5,  max: 20, label: "Fase Recursal" },
+      stj_stf:       { min: 5,  max: 20, label: "STJ / STF" },
+    };
+    const limite = limites[faseProcessual];
+    const pctReal = base > 0 ? (valorHon/base*100) : 0;
+    const abaixoMin = tipoHonorario==="percentual" && parseFloat(percentual) < limite.min;
+    const acimaMax  = tipoHonorario==="percentual" && parseFloat(percentual) > limite.max;
+
+    setResultadoHon({ base, valorHon, pctReal, limite, abaixoMin, acimaMax, faseLabel: limite.label });
+  }
+
   const idx = { igpm:"IGP-M", ipca:"IPCA", selic:"SELIC/CDI" };
+  const FASES = [
+    { v:"extrajudicial", l:"Extrajudicial (cobrança amigável)" },
+    { v:"conhecimento",  l:"Fase de Conhecimento" },
+    { v:"execucao",      l:"Fase de Execução / Cumprimento de Sentença" },
+    { v:"recursal",      l:"Fase Recursal (TJ)" },
+    { v:"stj_stf",       l:"STJ / STF" },
+  ];
 
   return (
     <div>
-      <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:6 }}>Calculadora de Atualização</h2>
-      <p style={{ fontSize:13,color:"#64748b",marginBottom:20 }}>Calcule o valor atualizado da dívida com correção monetária, juros e multa.</p>
+      <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:4 }}>Calculadora</h2>
+      <p style={{ fontSize:13,color:"#64748b",marginBottom:18 }}>Atualização monetária e cálculo de honorários advocatícios.</p>
 
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
-        {/* Inputs */}
-        <div style={{ background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
-          <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:16,color:"#0f172a" }}>Parâmetros</p>
+      {/* Abas */}
+      <div style={{ display:"flex",gap:6,marginBottom:20,borderBottom:"2px solid #f1f5f9",paddingBottom:0 }}>
+        {[["correcao","🧮 Atualização Monetária"],["honorarios","⚖️ Honorários Advocatícios"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setAba(id)}
+            style={{ padding:"9px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,
+              color:aba===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===id?"#4f46e5":"transparent"}`,marginBottom:-2 }}>
+            {label}
+          </button>
+        ))}
+      </div>
 
-          {/* Selecionar devedor (atalho) */}
-          <div style={{ marginBottom:14 }}>
-            <label style={{ fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:5 }}>Carregar Devedor (opcional)</label>
-            <select value={devId} onChange={e=>loadDev(e.target.value)}
-              style={{ width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none" }}>
-              <option value="">— Digitar manualmente —</option>
-              {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
-            </select>
+      {/* ── ABA CORREÇÃO ─────────────────────────────────────── */}
+      {aba==="correcao" && (
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
+          <div style={{ background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
+            <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a" }}>Parâmetros</p>
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Carregar Devedor (opcional)</label>
+              <select value={devId} onChange={e=>loadDev(e.target.value)} style={{ width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none" }}>
+                <option value="">— Digitar manualmente —</option>
+                {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
+              </select>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+              <Inp label="Valor Original (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2}/>
+              <Inp label="Data de Vencimento"  value={dataVencimento} onChange={setDataVencimento} type="date" span={2}/>
+              <Inp label="Indexador" value={indexador} onChange={setIndexador} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"}]}/>
+              <Inp label="Juros (% ao mês)" value={jurosAM} onChange={setJurosAM} type="number"/>
+              <Inp label="Multa (%)" value={multa} onChange={setMulta} type="number"/>
+            </div>
+            <div style={{ marginTop:16,display:"flex",gap:8 }}>
+              <Btn onClick={calcular}>Calcular →</Btn>
+              {resultado && <Btn onClick={()=>setAba("honorarios")} outline color="#4f46e5">⚖️ Calcular Honorários</Btn>}
+            </div>
           </div>
 
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-            <Inp label="Valor Original (R$)" value={valorOriginal} onChange={setValorOriginal} type="number" span={2} />
-            <Inp label="Data de Vencimento" value={dataVencimento} onChange={setDataVencimento} type="date" span={2} />
-            <Inp label="Indexador" value={indexador} onChange={setIndexador} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"}]} />
-            <Inp label="Juros (% ao mês)" value={jurosAM} onChange={setJurosAM} type="number" />
-            <Inp label="Multa (%)" value={multa} onChange={setMulta} type="number" />
-          </div>
-
-          <div style={{ marginTop:16 }}>
-            <Btn onClick={calcular}>Calcular Atualização</Btn>
+          <div style={{ background:resultado?"linear-gradient(135deg,#0f172a,#1e1b4b)":"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
+            {!resultado ? (
+              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:280 }}>
+                <div style={{ fontSize:40,marginBottom:12 }}>🧮</div>
+                <p style={{ color:"#94a3b8",fontSize:13,textAlign:"center" }}>Preencha os parâmetros e clique em Calcular</p>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:16 }}>Resultado — {idx[indexador]}</p>
+                <p style={{ color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:3 }}>Valor Total Atualizado</p>
+                <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:32,color:"#fff",marginBottom:4 }}>{fmt(resultado.total)}</p>
+                <p style={{ color:"rgba(255,255,255,.4)",fontSize:11,marginBottom:16 }}>Período: {resultado.meses} meses ({resultado.dias} dias)</p>
+                <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
+                  {[["Valor Original",resultado.valorOriginal,"#94a3b8"],["Correção "+idx[indexador],resultado.correcao,"#818cf8"],["Juros ("+jurosAM+"%am)",resultado.juros,"#fbbf24"],["Multa ("+multa+"%)",resultado.multa,"#f87171"]].map(([l,v,c])=>(
+                    <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"7px 11px",background:"rgba(255,255,255,.06)",borderRadius:9 }}>
+                      <span style={{ fontSize:12,color:"rgba(255,255,255,.6)" }}>{l}</span>
+                      <span style={{ fontSize:13,fontWeight:700,color:c }}>{fmt(v)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display:"flex",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.15)",borderRadius:9 }}>
+                    <span style={{ fontSize:13,fontWeight:700,color:"#fff" }}>TOTAL ATUALIZADO</span>
+                    <span style={{ fontSize:14,fontWeight:800,color:"#a5f3fc" }}>{fmt(resultado.total)}</span>
+                  </div>
+                </div>
+                <p style={{ fontSize:10,color:"rgba(255,255,255,.25)",marginTop:12,lineHeight:1.5 }}>* Taxas médias históricas. Para petições use planilha oficial TJGO/STJ.</p>
+              </div>
+            )}
           </div>
         </div>
+      )}
 
-        {/* Resultado */}
-        <div style={{ background: resultado ? "linear-gradient(135deg,#0f172a,#1e1b4b)" : "#f8fafc", borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
-          {!resultado ? (
-            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:280 }}>
-              <div style={{ fontSize:40,marginBottom:12 }}>🧮</div>
-              <p style={{ color:"#94a3b8",fontSize:13,textAlign:"center" }}>Preencha os parâmetros e clique em<br/>Calcular Atualização</p>
+      {/* ── ABA HONORÁRIOS ───────────────────────────────────── */}
+      {aba==="honorarios" && (
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
+          <div style={{ background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
+            <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:16,color:"#0f172a" }}>Parâmetros dos Honorários</p>
+
+            {/* Fase processual */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Fase Processual</label>
+              <select value={faseProcessual} onChange={e=>setFaseProcessual(e.target.value)} style={{ width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish" }}>
+                {FASES.map(f=><option key={f.v} value={f.v}>{f.l}</option>)}
+              </select>
             </div>
-          ) : (
-            <div>
-              <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:20 }}>Resultado — {idx[indexador]}</p>
-              <div style={{ marginBottom:16 }}>
-                <p style={{ color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:4 }}>Valor Total Atualizado</p>
-                <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:34,color:"#fff" }}>{fmt(resultado.total)}</p>
-                <p style={{ color:"rgba(255,255,255,.4)",fontSize:12,marginTop:4 }}>Período: {resultado.meses} meses ({resultado.dias} dias)</p>
-              </div>
 
+            {/* Base de cálculo */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Base de Cálculo</label>
               <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
                 {[
-                  ["Valor Original",resultado.valorOriginal,"#94a3b8"],
-                  ["Correção "+idx[indexador],resultado.correcao,"#818cf8"],
-                  ["Juros ("+jurosAM+"%am)",resultado.juros,"#fbbf24"],
-                  ["Multa ("+multa+"%)",resultado.multa,"#f87171"],
-                ].map(([l,v,c])=>(
-                  <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(255,255,255,.06)",borderRadius:10 }}>
-                    <span style={{ fontSize:12,color:"rgba(255,255,255,.6)" }}>{l}</span>
-                    <span style={{ fontSize:13,fontWeight:700,color:c }}>{fmt(v)}</span>
-                  </div>
+                  ["divida_original",  `Dívida original ${valorOriginal?`— ${fmt(parseFloat(valorOriginal)||0)}`:""}` ],
+                  ["total_atualizado", `Total atualizado ${resultado?`— ${fmt(resultado.total)}`:"(calcule primeiro)"}`],
+                  ["personalizado",    "Valor personalizado"],
+                ].map(([v,l])=>(
+                  <label key={v} style={{ display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"8px 12px",borderRadius:10,background:baseCalculo===v?"#ede9fe":"#f8fafc",border:`1.5px solid ${baseCalculo===v?"#4f46e5":"#e2e8f0"}` }}>
+                    <input type="radio" name="base" value={v} checked={baseCalculo===v} onChange={()=>setBaseCalculo(v)} style={{ accentColor:"#4f46e5" }}/>
+                    <span style={{ fontSize:13,color:baseCalculo===v?"#4f46e5":"#475569",fontWeight:baseCalculo===v?700:400 }}>{l}</span>
+                  </label>
                 ))}
-                <div style={{ display:"flex",justifyContent:"space-between",padding:"10px 12px",background:"rgba(255,255,255,.15)",borderRadius:10,marginTop:4 }}>
-                  <span style={{ fontSize:13,fontWeight:700,color:"#fff" }}>TOTAL</span>
-                  <span style={{ fontSize:14,fontWeight:800,color:"#a5f3fc" }}>{fmt(resultado.total)}</span>
+              </div>
+              {baseCalculo==="personalizado" && (
+                <div style={{ marginTop:10 }}>
+                  <Inp label="Valor Base (R$)" value={valorBase} onChange={setValorBase} type="number"/>
+                </div>
+              )}
+            </div>
+
+            {/* Tipo de honorário */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:".04em" }}>Tipo de Honorário</label>
+              <div style={{ display:"flex",gap:8 }}>
+                {[["percentual","% Percentual"],["fixo","R$ Valor Fixo"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setTipoHonorario(v)}
+                    style={{ flex:1,padding:"9px",border:`1.5px solid ${tipoHonorario===v?"#4f46e5":"#e2e8f0"}`,borderRadius:10,background:tipoHonorario===v?"#4f46e5":"#fff",color:tipoHonorario===v?"#fff":"#64748b",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"Mulish" }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {tipoHonorario==="percentual" ? (
+              <div>
+                <label style={{ fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".04em" }}>Percentual (%)</label>
+                <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                  <input type="range" min="1" max="50" step="0.5" value={percentual} onChange={e=>setPercentual(e.target.value)} style={{ flex:1,accentColor:"#4f46e5" }}/>
+                  <div style={{ display:"flex",alignItems:"center",gap:4 }}>
+                    <input type="number" value={percentual} onChange={e=>setPercentual(e.target.value)} style={{ width:65,padding:"6px 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:14,fontWeight:700,color:"#4f46e5",outline:"none",textAlign:"center" }}/>
+                    <span style={{ fontWeight:700,color:"#4f46e5",fontSize:16 }}>%</span>
+                  </div>
+                </div>
+                <div style={{ display:"flex",justifyContent:"space-between",marginTop:6,fontSize:11,color:"#94a3b8" }}>
+                  <span>1%</span><span style={{ color:"#4f46e5",fontWeight:700 }}>{percentual}% selecionado</span><span>50%</span>
                 </div>
               </div>
+            ) : (
+              <Inp label="Valor Fixo dos Honorários (R$)" value={valorFixo} onChange={setValorFixo} type="number"/>
+            )}
 
-              <p style={{ fontSize:10,color:"rgba(255,255,255,.3)",marginTop:14,lineHeight:1.5 }}>
-                * Cálculo estimado com taxas médias históricas. Para valores jurídicos, consulte planilha oficial do TJGO/STJ.
-              </p>
+            <div style={{ marginTop:18 }}>
+              <Btn onClick={calcularHonorarios}>⚖️ Calcular Honorários</Btn>
             </div>
-          )}
+          </div>
+
+          {/* Resultado honorários */}
+          <div style={{ background:resultadoHon?"linear-gradient(135deg,#0f172a,#1e1b4b)":"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9" }}>
+            {!resultadoHon ? (
+              <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:320 }}>
+                <div style={{ fontSize:44,marginBottom:12 }}>⚖️</div>
+                <p style={{ color:"#94a3b8",fontSize:13,textAlign:"center" }}>Configure os parâmetros e clique em<br/>Calcular Honorários</p>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"rgba(255,255,255,.7)",marginBottom:6 }}>Honorários — {resultadoHon.faseLabel}</p>
+
+                {/* Alerta OAB */}
+                {(resultadoHon.abaixoMin||resultadoHon.acimaMax) && (
+                  <div style={{ background:resultadoHon.abaixoMin?"rgba(251,191,36,.15)":"rgba(248,113,113,.15)",border:`1px solid ${resultadoHon.abaixoMin?"#fbbf24":"#f87171"}`,borderRadius:10,padding:"8px 12px",marginBottom:14 }}>
+                    <p style={{ fontSize:12,color:resultadoHon.abaixoMin?"#fbbf24":"#f87171",fontWeight:700 }}>
+                      {resultadoHon.abaixoMin ? `⚠️ Abaixo do mínimo OAB (${resultadoHon.limite.min}%)` : `⚠️ Acima do máximo OAB (${resultadoHon.limite.max}%)`}
+                    </p>
+                    <p style={{ fontSize:11,color:"rgba(255,255,255,.5)",marginTop:2 }}>Tabela OAB/GO: {resultadoHon.limite.min}% a {resultadoHon.limite.max}%</p>
+                  </div>
+                )}
+                {!resultadoHon.abaixoMin && !resultadoHon.acimaMax && tipoHonorario==="percentual" && (
+                  <div style={{ background:"rgba(34,197,94,.15)",border:"1px solid #22c55e",borderRadius:10,padding:"8px 12px",marginBottom:14 }}>
+                    <p style={{ fontSize:12,color:"#22c55e",fontWeight:700 }}>✓ Dentro dos limites OAB ({resultadoHon.limite.min}% a {resultadoHon.limite.max}%)</p>
+                  </div>
+                )}
+
+                {/* Valor principal */}
+                <div style={{ marginBottom:16 }}>
+                  <p style={{ color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:3 }}>Valor dos Honorários</p>
+                  <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:36,color:"#fbbf24" }}>{fmt(resultadoHon.valorHon)}</p>
+                  {tipoHonorario==="percentual" && <p style={{ color:"rgba(255,255,255,.4)",fontSize:12,marginTop:2 }}>{percentual}% sobre {fmt(resultadoHon.base)}</p>}
+                </div>
+
+                {/* Breakdown */}
+                <div style={{ display:"flex",flexDirection:"column",gap:7 }}>
+                  {[
+                    ["Base de Cálculo",   resultadoHon.base,     "#94a3b8"],
+                    ["Honorários",        resultadoHon.valorHon, "#fbbf24"],
+                  ].map(([l,v,c])=>(
+                    <div key={l} style={{ display:"flex",justifyContent:"space-between",padding:"7px 11px",background:"rgba(255,255,255,.06)",borderRadius:9 }}>
+                      <span style={{ fontSize:12,color:"rgba(255,255,255,.6)" }}>{l}</span>
+                      <span style={{ fontSize:13,fontWeight:700,color:c }}>{fmt(v)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display:"flex",justifyContent:"space-between",padding:"9px 11px",background:"rgba(255,255,255,.15)",borderRadius:9 }}>
+                    <span style={{ fontSize:13,fontWeight:700,color:"#fff" }}>TOTAL (dívida + honorários)</span>
+                    <span style={{ fontSize:14,fontWeight:800,color:"#a5f3fc" }}>{fmt(resultadoHon.base + resultadoHon.valorHon)}</span>
+                  </div>
+                </div>
+
+                {/* Tabela OAB referência */}
+                <div style={{ marginTop:16,padding:"10px 12px",background:"rgba(255,255,255,.05)",borderRadius:10 }}>
+                  <p style={{ fontSize:11,color:"rgba(255,255,255,.5)",fontWeight:700,marginBottom:6 }}>TABELA OAB — LIMITES POR FASE</p>
+                  {[
+                    ["Extrajudicial","10% a 30%"],
+                    ["Conhecimento / Execução","10% a 30%"],
+                    ["Fase Recursal","5% a 20%"],
+                    ["STJ / STF","5% a 20%"],
+                  ].map(([f,v])=>(
+                    <div key={f} style={{ display:"flex",justifyContent:"space-between",fontSize:11,color:"rgba(255,255,255,.4)",marginBottom:3 }}>
+                      <span>{f}</span><span style={{ fontWeight:700 }}>{v}</span>
+                    </div>
+                  ))}
+                  <p style={{ fontSize:10,color:"rgba(255,255,255,.25)",marginTop:6 }}>* Referência OAB/GO. Consulte a tabela vigente.</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
