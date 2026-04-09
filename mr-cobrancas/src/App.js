@@ -447,57 +447,68 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   async function salvarDevedor() {
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
-    try {
-      const base = {
-        nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
-        email:form.email||null, telefone:form.telefone||null,
-        cidade:form.cidade||"Goiânia",
+
+    // Tentativas progressivas — remove campos inexistentes até funcionar
+    const tentativas = [
+      // #1 — tudo (após SQL executado)
+      { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
+        email:form.email||null, telefone:form.telefone||null, cidade:form.cidade||"Goiânia",
         credor_id:form.credor_id?parseInt(form.credor_id):null,
         valor_original:parseFloat(form.valor_nominal)||0,
-        status:form.status||"novo",
-        dividas:JSON.stringify([]),
-      };
-      const extras = {
-        rg:form.rg||null, data_nascimento:form.data_nascimento||null,
-        profissao:form.profissao||null, socio_nome:form.socio_nome||null,
-        socio_cpf:form.socio_cpf||null, telefone2:form.telefone2||null,
-        cep:form.cep||null, logradouro:form.logradouro||null,
-        numero:form.numero||null, complemento:form.complemento||null,
-        bairro:form.bairro||null, uf:form.uf||"GO",
+        status:form.status||"novo", dividas:JSON.stringify([]),
+        rg:form.rg||null, profissao:form.profissao||null,
+        socio_nome:form.socio_nome||null, socio_cpf:form.socio_cpf||null,
+        telefone2:form.telefone2||null, cep:form.cep||null,
+        logradouro:form.logradouro||null, numero:form.numero||null,
+        complemento:form.complemento||null, bairro:form.bairro||null, uf:form.uf||"GO",
         data_origem_divida:form.data_origem_divida||null,
         data_recebimento_carteira:form.data_recebimento_carteira||null,
         descricao_divida:form.descricao_divida||null,
-        observacoes:form.observacoes||null,
-        contatos:JSON.stringify([]),
-      };
-      let res = await dbInsert("devedores", {...base, ...extras});
-      let novo = Array.isArray(res)?res[0]:res;
-      if(!novo?.id) {
-        res = await dbInsert("devedores", base);
-        novo = Array.isArray(res)?res[0]:res;
-      }
+        observacoes:form.observacoes||null, contatos:JSON.stringify([]) },
+      // #2 — sem colunas extras
+      { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
+        email:form.email||null, telefone:form.telefone||null, cidade:form.cidade||"Goiânia",
+        credor_id:form.credor_id?parseInt(form.credor_id):null,
+        valor_original:parseFloat(form.valor_nominal)||0,
+        status:form.status||"novo", dividas:JSON.stringify([]) },
+      // #3 — sem valor_original (coluna pode ter nome diferente)
+      { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
+        email:form.email||null, telefone:form.telefone||null, cidade:form.cidade||"Goiânia",
+        credor_id:form.credor_id?parseInt(form.credor_id):null,
+        status:form.status||"novo", dividas:JSON.stringify([]) },
+      // #4 — mínimo absoluto
+      { nome:form.nome, tipo:form.tipo||"PJ", dividas:JSON.stringify([]) },
+    ];
 
-      if(novo&&novo.id) {
-        // Mantém campos extras na memória local até SQL ser executado
-        const local = {
-          ...novo, dividas:[], contatos:[],
-          rg:form.rg, profissao:form.profissao, socio_nome:form.socio_nome,
-          socio_cpf:form.socio_cpf, telefone2:form.telefone2,
-          cep:form.cep, logradouro:form.logradouro, numero:form.numero,
-          complemento:form.complemento, bairro:form.bairro, uf:form.uf,
-          descricao_divida:form.descricao_divida, observacoes:form.observacoes,
-        };
-        setDevedores(p=>[...p, local]);
-        fecharModal();
-        setForm({...FORM_DEV_VAZIO, responsavel:user?.nome||""});
-        alert(`✅ Devedor "${novo.nome}" cadastrado com sucesso!`);
-      } else {
-        // Exibe erro detalhado para debug
-        alert("Erro ao salvar:\n"+JSON.stringify(res, null, 2).slice(0,300));
-      }
-    } catch(e){ alert("Erro: "+e.message); }
+    let novo = null;
+    let ultimoErro = "";
+    for(const payload of tentativas) {
+      const res = await dbInsert("devedores", payload);
+      const r = Array.isArray(res)?res[0]:res;
+      if(r?.id) { novo = r; break; }
+      ultimoErro = r?.message||JSON.stringify(r).slice(0,100);
+    }
+
+    if(novo?.id) {
+      const local = {
+        ...novo, dividas:[], contatos:[],
+        rg:form.rg, profissao:form.profissao, socio_nome:form.socio_nome,
+        socio_cpf:form.socio_cpf, telefone2:form.telefone2, cep:form.cep,
+        logradouro:form.logradouro, numero:form.numero, complemento:form.complemento,
+        bairro:form.bairro, uf:form.uf, descricao_divida:form.descricao_divida,
+        observacoes:form.observacoes, valor_nominal:parseFloat(form.valor_nominal)||0,
+        cidade:form.cidade,
+      };
+      setDevedores(p=>[...p, local]);
+      fecharModal();
+      setForm({...FORM_DEV_VAZIO, responsavel:user?.nome||""});
+      alert(`✅ Devedor "${novo.nome}" cadastrado!`);
+    } else {
+      alert("Falha em todas as tentativas.\nÚltimo erro: "+ultimoErro+"\n\nExecute o SQL no Supabase e envie print do Table Editor > devedores.");
+    }
     setLoading(false);
   }
+
 
 
   async function registrarContato() {
