@@ -924,6 +924,21 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   function addParc(){setNd(d=>{const ul=d.parcelas[d.parcelas.length-1];const pD=ul?(()=>{const dd=new Date(ul.venc+"T12:00:00");dd.setMonth(dd.getMonth()+1);return dd.toISOString().slice(0,10);})():new Date().toISOString().slice(0,10);return{...d,parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ul?.valor||0,venc:pD,status:"pendente",pago_em:null}]};});}
   function remParc(id){setNd(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)}));}
 
+  // Helper: monta objeto devedor preservando dados locais mesmo se banco retornar null
+  function montarDevAtualizado(atu, dividas, extras={}) {
+    const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0) || atu?.valor_original || sel?.valor_original || 0;
+    return {
+      ...sel,           // base: tudo que já tínhamos localmente
+      ...(atu||{}),     // sobrescreve com o que veio do banco
+      dividas,          // sempre usa dividas locais (já parseadas)
+      contatos: sel?.contatos||[],
+      acordos:  sel?.acordos||[],
+      valor_original,   // recalculado — nunca perde o valor
+      valor_nominal: sel?.valor_nominal || valor_original,
+      ...extras,
+    };
+  }
+
   async function adicionarDivida(){
     if(!sel)return;
     const total=parseFloat(nd.valor_total)||0;
@@ -935,8 +950,17 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     try{
       const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
       const atu=Array.isArray(res)?res[0]:res;
-      if(atu){const parsed={...atu,dividas,contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);setNd(DIVIDA_VAZIA);alert("Dívida adicionada!");}
-    }catch(e){alert("Erro: "+e.message);}
+      const parsed=montarDevAtualizado(atu,dividas);
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
+      setSel(parsed);setNd(DIVIDA_VAZIA);
+      alert("✅ Dívida adicionada com sucesso!");
+    }catch(e){
+      // Salvar localmente mesmo sem banco
+      const parsed=montarDevAtualizado(null,dividas);
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
+      setSel(parsed);setNd(DIVIDA_VAZIA);
+      alert("Dívida salva localmente. Erro de sincronização: "+e.message);
+    }
   }
 
   async function toggleParcela(dividaId,parcId,novoStatus){
@@ -945,23 +969,43 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     const todasPagas=dividas.every(div=>div.parcelas.every(p=>p.status==="pago"));
     const algumaPaga=dividas.some(div=>div.parcelas.some(p=>p.status==="pago"));
     const nSt=todasPagas?"pago_integral":algumaPaga?"pago_parcial":sel.status;
-    try{const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:nSt});const atu=Array.isArray(res)?res[0]:res;if(atu){const parsed={...atu,dividas,contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);}}catch(e){console.error(e);}
+    try{
+      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:nSt});
+      const atu=Array.isArray(res)?res[0]:res;
+      const parsed=montarDevAtualizado(atu,dividas,{status:nSt});
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);
+    }catch(e){
+      const parsed=montarDevAtualizado(null,dividas,{status:nSt});
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);
+    }
   }
 
   async function excluirDivida(dId){
     if(!sel||!window.confirm("Excluir esta dívida?"))return;
     const dividas=(sel.dividas||[]).filter(d=>d.id!==dId);
     const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
-    const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
-    const atu=Array.isArray(res)?res[0]:res;
-    if(atu){const parsed={...atu,dividas,contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);}
+    try{
+      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
+      const atu=Array.isArray(res)?res[0]:res;
+      const parsed=montarDevAtualizado(atu,dividas);
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);
+    }catch(e){
+      const parsed=montarDevAtualizado(null,dividas);
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);
+    }
   }
 
   async function atualizarStatus(novoStatus){
     if(!sel)return;
-    const res=await dbUpdate("devedores",sel.id,{status:novoStatus});
-    const atu=Array.isArray(res)?res[0]:res;
-    if(atu){const parsed={...atu,dividas:sel.dividas||[],contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);}
+    try{
+      const res=await dbUpdate("devedores",sel.id,{status:novoStatus});
+      const atu=Array.isArray(res)?res[0]:res;
+      const parsed=montarDevAtualizado(atu,sel.dividas||[],{status:novoStatus});
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);
+    }catch(e){
+      const parsed={...sel,status:novoStatus};
+      setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);
+    }
   }
 
   async function excluirDevedor(d){
@@ -3075,12 +3119,20 @@ export default function App() {
         dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"), dbGet("regua"),
       ]);
       const parse = (v,fb="[]") => { try{ return typeof v==="string"?JSON.parse(v||fb):(v||JSON.parse(fb)); }catch(e){return JSON.parse(fb);} };
-      setDevedores((devs||[]).map(d=>({ ...d,
-        dividas:  parse(d.dividas),
-        parcelas: parse(d.parcelas),
-        contatos: parse(d.contatos),
-        acordos:  parse(d.acordos).map(ac=>({...ac, parcelas: verificarAtrasados(ac.parcelas||[])})),
-      })));
+      setDevedores((devs||[]).map(d=>{
+        const dividas  = parse(d.dividas);
+        const contatos = parse(d.contatos);
+        const acordos  = parse(d.acordos).map(ac=>({...ac, parcelas: verificarAtrasados(ac.parcelas||[])}));
+        // valor_original pode ser calculado das dividas se o banco não tiver a coluna
+        const valorCalc = dividas.reduce((s,div)=>s+(div.valor_total||0),0);
+        const valorFinal = d.valor_original || valorCalc || d.valor_nominal || 0;
+        return { ...d,
+          dividas, contatos, acordos,
+          parcelas: parse(d.parcelas),
+          valor_original: valorFinal,
+          valor_nominal: d.valor_nominal || valorFinal,
+        };
+      }));
       setCredores(creds||[]);
       setProcessos(procs||[]);
       setAndamentos(ands||[]);
