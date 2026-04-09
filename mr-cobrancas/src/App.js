@@ -32,7 +32,7 @@ const USERS = [
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Mulish:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
 );
 
 // ─── HELPERS ────────────────────────────────────────────────
@@ -96,9 +96,9 @@ function Badge({ s }) {
 function Modal({ title, onClose, children, wide }) {
   return (
     <div style={{ position:"fixed",inset:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"rgba(0,0,0,.55)" }}>
-      <div style={{ background:"#fff",borderRadius:20,width:"100%",maxWidth: wide ? 800 : 640,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(0,0,0,.25)" }}>
+      <div style={{ background:"#fff",borderRadius:20,width:"100%",maxWidth: wide ? 860 : 660,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 32px 80px rgba(0,0,0,.3)",border:"1px solid #e2e8f0" }}>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"20px 24px",borderBottom:"1px solid #f1f5f9" }}>
-          <span style={{ fontFamily:"Syne",fontWeight:700,fontSize:17,color:"#0f172a" }}>{title}</span>
+          <span style={{ fontFamily:"Space Grotesk",fontWeight:700,fontSize:17,color:"#0f172a" }}>{title}</span>
           <button onClick={onClose} style={{ padding:6,borderRadius:8,border:"none",background:"#f1f5f9",cursor:"pointer",display:"flex" }}>{I.x}</button>
         </div>
         <div style={{ padding:24 }}>{children}</div>
@@ -109,7 +109,7 @@ function Modal({ title, onClose, children, wide }) {
 
 // ─── INPUT ───────────────────────────────────────────────────
 function Inp({ label, value, onChange, type="text", options, span, placeholder="" }) {
-  const s = { width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none",boxSizing:"border-box" };
+  const s = { width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Plus Jakarta Sans",outline:"none",boxSizing:"border-box" };
   return (
     <div style={{ gridColumn: span === 2 ? "1/-1" : "auto" }}>
       <label style={{ display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:5 }}>{label}</label>
@@ -130,7 +130,7 @@ function Btn({ children, onClick, color="#4f46e5", sm, outline, danger }) {
   const tc = outline ? color : "#fff";
   const border = outline ? `1.5px solid ${color}` : "none";
   return (
-    <button onClick={onClick} style={{ display:"flex",alignItems:"center",gap:6,background:bg,color:tc,border,borderRadius:10,padding: sm ? "6px 14px" : "9px 18px",fontSize: sm ? 12 : 13,fontWeight:700,cursor:"pointer",fontFamily:"Mulish",whiteSpace:"nowrap" }}>
+    <button onClick={onClick} className="mr-btn" style={{ display:"flex",alignItems:"center",gap:6,background:bg,color:tc,border,borderRadius:10,padding: sm ? "6px 14px" : "10px 20px",fontSize: sm ? 12 : 13,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap",transition:"all .15s",boxShadow:outline?"none":"0 2px 8px rgba(0,0,0,.1)" }}>
       {children}
     </button>
   );
@@ -155,7 +155,7 @@ function Login({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)",fontFamily:"Mulish",position:"relative",overflow:"hidden" }}>
+    <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)",fontFamily:"Plus Jakarta Sans",position:"relative",overflow:"hidden" }}>
       <FontLink />
       {/* bg pattern */}
       <div style={{ position:"absolute",inset:0,backgroundImage:"radial-gradient(circle at 25% 25%, rgba(99,102,241,.15) 0%, transparent 50%), radial-gradient(circle at 75% 75%, rgba(139,92,246,.1) 0%, transparent 50%)" }} />
@@ -164,32 +164,32 @@ function Login({ onLogin }) {
         {/* Logo */}
         <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:36 }}>
           <div style={{ width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#4f46e5,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-            <span style={{ color:"#fff",fontFamily:"Syne",fontWeight:800,fontSize:18 }}>MR</span>
+            <span style={{ color:"#fff",fontFamily:"Space Grotesk",fontWeight:800,fontSize:18 }}>MR</span>
           </div>
           <div>
-            <div style={{ fontFamily:"Syne",fontWeight:800,color:"#fff",fontSize:20,lineHeight:1.1 }}>MR Cobranças</div>
+            <div style={{ fontFamily:"Space Grotesk",fontWeight:800,color:"#fff",fontSize:20,lineHeight:1.1 }}>MR Cobranças</div>
             <div style={{ color:"rgba(255,255,255,.5)",fontSize:12 }}>CRM Jurídico</div>
           </div>
         </div>
 
-        <h1 style={{ fontFamily:"Syne",fontWeight:700,color:"#fff",fontSize:26,marginBottom:6 }}>Entrar</h1>
+        <h1 style={{ fontFamily:"Space Grotesk",fontWeight:700,color:"#fff",fontSize:26,marginBottom:6 }}>Entrar</h1>
         <p style={{ color:"rgba(255,255,255,.5)",fontSize:13,marginBottom:28 }}>Acesse sua conta para continuar</p>
 
         <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
           <div>
             <label style={{ color:"rgba(255,255,255,.7)",fontSize:12,fontWeight:600,display:"block",marginBottom:6 }}>E-mail</label>
             <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="seu@email.com"
-              style={{ width:"100%",padding:"11px 14px",background:"rgba(255,255,255,.08)",border:"1.5px solid rgba(255,255,255,.15)",borderRadius:10,color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"Mulish" }} />
+              style={{ width:"100%",padding:"11px 14px",background:"rgba(255,255,255,.08)",border:"1.5px solid rgba(255,255,255,.15)",borderRadius:10,color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans" }} />
           </div>
           <div>
             <label style={{ color:"rgba(255,255,255,.7)",fontSize:12,fontWeight:600,display:"block",marginBottom:6 }}>Senha</label>
             <input value={senha} onChange={e => setSenha(e.target.value)} type="password" placeholder="••••••••"
-              style={{ width:"100%",padding:"11px 14px",background:"rgba(255,255,255,.08)",border:"1.5px solid rgba(255,255,255,.15)",borderRadius:10,color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"Mulish" }}
+              style={{ width:"100%",padding:"11px 14px",background:"rgba(255,255,255,.08)",border:"1.5px solid rgba(255,255,255,.15)",borderRadius:10,color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans" }}
               onKeyDown={e => e.key === "Enter" && handleLogin()} />
           </div>
           {err && <p style={{ color:"#f87171",fontSize:12,textAlign:"center" }}>{err}</p>}
           <button onClick={handleLogin} disabled={loading}
-            style={{ marginTop:8,padding:"12px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",border:"none",borderRadius:12,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"Syne",opacity: loading ? .7 : 1 }}>
+            style={{ marginTop:8,padding:"12px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",border:"none",borderRadius:12,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"Space Grotesk",opacity: loading ? .7 : 1 }}>
             {loading ? "Verificando..." : "Acessar sistema →"}
           </button>
         </div>
@@ -256,7 +256,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
     <div style={{maxWidth:1200}}>
       {/* Header */}
       <div style={{marginBottom:24}}>
-        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:"#0f172a",marginBottom:4}}>
+        <h2 style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:26,color:"#0f172a",marginBottom:4}}>
           {saudacao}, {user.nome.split(" ")[0]}!
         </h2>
         <p style={{fontSize:13,color:"#64748b"}}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p>
@@ -283,7 +283,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
             </div>
           </div>
           <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
-            style={{background:"rgba(255,255,255,.2)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:10,padding:"9px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish",whiteSpace:"nowrap"}}>
+            style={{background:"rgba(255,255,255,.2)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:10,padding:"9px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Plus Jakarta Sans",whiteSpace:"nowrap"}}>
             Ver lembretes →
           </button>
         </div>
@@ -292,32 +292,18 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
       {/* KPIs Principais */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
         {[
-          {
-            l:"Carteira Total", v:fmt(totalCarteira),
-            sub:`${devedores.length} devedor${devedores.length!==1?"es":""}`,
-            ic:"💼", g:"linear-gradient(135deg,#4f46e5,#6d28d9)",
-          },
-          {
-            l:"Recuperado", v:fmt(totalRecuperado),
-            sub:`${taxaRecuperacao.toFixed(1)}% da carteira`,
-            ic:"✅", g:"linear-gradient(135deg,#059669,#065f46)",
-          },
-          {
-            l:"Em Aberto", v:fmt(emAberto),
-            sub:`${(100-taxaRecuperacao).toFixed(1)}% pendente`,
-            ic:"⏳", g:"linear-gradient(135deg,#dc2626,#9f1239)",
-          },
-          {
-            l:"Acordos Ativos", v:acordosAtivos,
-            sub:`${acordosTotal} acordo${acordosTotal!==1?"s":""} total`,
-            ic:"🤝", g:"linear-gradient(135deg,#d97706,#b45309)",
-          },
+          { l:"Carteira Total",  v:fmt(totalCarteira),  sub:`${devedores.length} devedor${devedores.length!==1?"es":""}`, ic:"💼", g:"linear-gradient(135deg,#6366f1,#8b5cf6)", glow:"rgba(99,102,241,.35)" },
+          { l:"Recuperado",      v:fmt(totalRecuperado), sub:`${taxaRecuperacao.toFixed(1)}% da carteira`,                ic:"✅", g:"linear-gradient(135deg,#10b981,#059669)", glow:"rgba(16,185,129,.35)" },
+          { l:"Em Aberto",       v:fmt(emAberto),        sub:`${(100-taxaRecuperacao).toFixed(1)}% pendente`,             ic:"⏳", g:"linear-gradient(135deg,#ef4444,#dc2626)", glow:"rgba(239,68,68,.35)" },
+          { l:"Acordos Ativos",  v:acordosAtivos,        sub:`${acordosTotal} acordo${acordosTotal!==1?"s":""} total`,    ic:"🤝", g:"linear-gradient(135deg,#f59e0b,#d97706)", glow:"rgba(245,158,11,.35)" },
         ].map((k,i)=>(
-          <div key={i} style={{background:k.g,borderRadius:18,padding:"20px 22px",color:"#fff",position:"relative",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,.12)"}}>
-            <div style={{position:"absolute",right:16,top:16,fontSize:28,opacity:.2}}>{k.ic}</div>
-            <p style={{fontSize:11,opacity:.85,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:".06em"}}>{k.l}</p>
-            <p style={{fontSize:24,fontFamily:"Syne",fontWeight:800,marginBottom:4}}>{k.v}</p>
-            <p style={{fontSize:11,opacity:.7}}>{k.sub}</p>
+          <div key={i} className="kpi-card" style={{background:k.g,borderRadius:20,padding:"22px 24px",color:"#fff",position:"relative",overflow:"hidden",boxShadow:`0 8px 28px ${k.glow}`,cursor:"default"}}>
+            <div style={{position:"absolute",right:-16,top:-16,width:96,height:96,borderRadius:99,background:"rgba(255,255,255,.08)"}}/>
+            <div style={{position:"absolute",right:8,bottom:-28,width:72,height:72,borderRadius:99,background:"rgba(255,255,255,.05)"}}/>
+            <div style={{position:"absolute",right:18,top:16,fontSize:28,opacity:.22}}>{k.ic}</div>
+            <p style={{fontSize:10,fontWeight:800,marginBottom:10,textTransform:"uppercase",letterSpacing:".1em",opacity:.75}}>{k.l}</p>
+            <p style={{fontSize:27,fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,marginBottom:6,letterSpacing:"-1px",lineHeight:1}}>{k.v}</p>
+            <p style={{fontSize:11,opacity:.65,fontWeight:500,marginTop:6}}>{k.sub}</p>
           </div>
         ))}
       </div>
@@ -337,10 +323,10 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.06)";}}>
             <div>
               <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
-              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:k.cor}}>{k.v}</p>
+              <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:26,color:k.cor}}>{k.v}</p>
               <p style={{fontSize:10,color:k.cor,opacity:.6,marginTop:3}}>clique para ver →</p>
             </div>
-            <div style={{width:48,height:48,borderRadius:99,background:`${k.cor}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"Syne",fontWeight:800,color:k.cor}}>
+            <div style={{width:48,height:48,borderRadius:99,background:`${k.cor}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontFamily:"Space Grotesk",fontWeight:800,color:k.cor}}>
               {k.v>0?k.v:"—"}
             </div>
           </div>
@@ -351,8 +337,8 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
 
         {/* Taxa de Recuperação visual */}
-        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:4}}>📊 Taxa de Recuperação</p>
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #e8edf2",boxShadow:"0 1px 6px rgba(0,0,0,.05)",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+          <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:4}}>📊 Taxa de Recuperação</p>
           <p style={{fontSize:11,color:"#94a3b8",marginBottom:18}}>Progresso da carteira</p>
           {/* Donut visual com CSS */}
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:16}}>
@@ -369,7 +355,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
                 </defs>
               </svg>
               <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-                <p style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",lineHeight:1}}>{taxaRecuperacao.toFixed(0)}%</p>
+                <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a",lineHeight:1}}>{taxaRecuperacao.toFixed(0)}%</p>
                 <p style={{fontSize:9,color:"#94a3b8",marginTop:2}}>recuperado</p>
               </div>
             </div>
@@ -390,11 +376,11 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
         </div>
 
         {/* Lembretes do dia */}
-        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #e8edf2",boxShadow:"0 1px 6px rgba(0,0,0,.05)",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-            <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>🔔 Agenda de Cobrança</p>
+            <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a"}}>🔔 Agenda de Cobrança</p>
             <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
-              style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish"}}>Ver tudo</button>
+              style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Plus Jakarta Sans"}}>Ver tudo</button>
           </div>
           <p style={{fontSize:11,color:"#94a3b8",marginBottom:14}}>Próximos contatos e promessas</p>
           {lemsUrgentes.length===0&&lemsProx7.length===0&&(
@@ -424,8 +410,8 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
       </div>
 
       {/* Linha 4: Status por funil */}
-      <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-        <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:16}}>📈 Funil de Cobrança</p>
+      <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #e8edf2",boxShadow:"0 1px 6px rgba(0,0,0,.05)",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+        <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:16}}>📈 Funil de Cobrança</p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:8}}>
           {[
             {v:"novo",           l:"Novo",           cor:"#64748b",bg:"#f1f5f9"},
@@ -491,7 +477,7 @@ const maskCEP=v=>v.replace(/\D/g,"").replace(/(\d{5})(\d{3})/,"$1-$2").slice(0,9
 
 // Componentes de input internos
 function INP({label,value,onChange,type="text",span,opts,placeholder}){
-  const sty={width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"};
+  const sty={width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"};
   return(
     <div style={span?{gridColumn:"1/-1"}:{}}>
       {label&&<label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>{label}</label>}
@@ -554,7 +540,7 @@ function ModalPagamento({parcela, onConfirmar, onFechar}){
   return(
     <Modal title={`💰 Registrar Pagamento — Parcela ${parcela.numeroParcela}`} onClose={onFechar}>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
-        <div style={{background:"#f8fafc",borderRadius:10,padding:12,display:"flex",justifyContent:"space-between"}}>
+        <div style={{background:"#f1f5f9",borderRadius:10,padding:12,display:"flex",justifyContent:"space-between"}}>
           <span style={{fontSize:12,color:"#64748b"}}>Valor da parcela</span>
           <span style={{fontSize:16,fontWeight:800,color:"#4f46e5"}}>{fmt(parcela.valorParcela)}</span>
         </div>
@@ -567,7 +553,7 @@ function ModalPagamento({parcela, onConfirmar, onFechar}){
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Observações</label>
           <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2}
-            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
         </div>
         {parseFloat(valorPago)<parcela.valorParcela&&(
           <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#92400e"}}>
@@ -629,9 +615,9 @@ function FormNovoAcordo({devedor, credores, user, onSalvar, onCancelar}){
   }
 
   return(
-    <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"2px solid #4f46e5"}}>
+    <div style={{background:"#f1f5f9",borderRadius:14,padding:16,border:"2px solid #4f46e5"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <p style={{fontFamily:"Syne",fontWeight:800,fontSize:14,color:"#4f46e5"}}>🤝 Novo Acordo</p>
+        <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:14,color:"#4f46e5"}}>🤝 Novo Acordo</p>
         <button onClick={onCancelar} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:18}}>✕</button>
       </div>
 
@@ -714,7 +700,7 @@ function FormNovoAcordo({devedor, credores, user, onSalvar, onCancelar}){
               </tbody>
             </table>
           </div>
-          <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 10px",background:"#f8fafc",borderRadius:"0 0 10px 10px",border:"1px solid #e2e8f0",borderTop:"none",fontSize:12}}>
+          <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 10px",background:"#f1f5f9",borderRadius:"0 0 10px 10px",border:"1px solid #e2e8f0",borderTop:"none",fontSize:12}}>
             <span style={{color:"#64748b"}}>Total: <b style={{color:"#4f46e5"}}>{fmt(parcelas.reduce((s,p)=>s+p.valorParcela,0))}</b></span>
           </div>
         </div>
@@ -724,7 +710,7 @@ function FormNovoAcordo({devedor, credores, user, onSalvar, onCancelar}){
       <div style={{marginBottom:12}}>
         <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
         <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2}
-          style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+          style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
       </div>
 
       <div style={{display:"flex",gap:8}}>
@@ -858,7 +844,7 @@ function AbaAcordos({devedor, acordos, credores, user, onAtualizarDevedor}){
 
       {/* Lista de acordos */}
       {acordosLocal.length===0&&!novoAcordo&&(
-        <div style={{textAlign:"center",padding:32,color:"#94a3b8",background:"#f8fafc",borderRadius:12}}>
+        <div style={{textAlign:"center",padding:32,color:"#94a3b8",background:"#f1f5f9",borderRadius:12}}>
           <div style={{fontSize:36,marginBottom:8}}>🤝</div>
           <p style={{fontWeight:600}}>Nenhum acordo registrado</p>
           <p style={{fontSize:12,marginTop:4}}>Clique em "+ Novo Acordo" para registrar um acordo de parcelamento.</p>
@@ -875,7 +861,7 @@ function AbaAcordos({devedor, acordos, credores, user, onAtualizarDevedor}){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <span style={{fontFamily:"Syne",fontWeight:800,fontSize:15,color:"#0f172a"}}>Acordo — {fmtDate(ac.dataAcordo)}</span>
+                  <span style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:15,color:"#0f172a"}}>Acordo — {fmtDate(ac.dataAcordo)}</span>
                   <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:bs.bg,color:bs.cor}}>{bs.l}</span>
                 </div>
                 <div style={{display:"flex",gap:14,fontSize:11,color:"#64748b",flexWrap:"wrap"}}>
@@ -906,7 +892,7 @@ function AbaAcordos({devedor, acordos, credores, user, onAtualizarDevedor}){
             <div style={{maxHeight:240,overflowY:"auto",border:"1px solid #f1f5f9",borderRadius:10,overflow:"hidden"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead>
-                  <tr style={{background:"#f8fafc",position:"sticky",top:0}}>
+                  <tr style={{background:"#f1f5f9",position:"sticky",top:0}}>
                     {["#","Vencimento","Valor","Status","Data Pag.","Forma","Ação"].map(h=>(
                       <th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>
                     ))}
@@ -944,7 +930,7 @@ function AbaAcordos({devedor, acordos, credores, user, onAtualizarDevedor}){
             </div>
 
             {ac.observacoes&&(
-              <p style={{fontSize:11,color:"#94a3b8",marginTop:8,fontStyle:"italic",padding:"6px 10px",background:"#f8fafc",borderRadius:7}}>
+              <p style={{fontSize:11,color:"#94a3b8",marginTop:8,fontStyle:"italic",padding:"6px 10px",background:"#f1f5f9",borderRadius:7}}>
                 📝 {ac.observacoes}
               </p>
             )}
@@ -1100,13 +1086,13 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
       {/* ── REGISTROS DE CONTATO ─────────────────────────────── */}
       <div style={{background:"#fff",borderRadius:14,border:"1.5px solid #e2e8f0",overflow:"hidden",marginBottom:18}}>
         {/* Cabeçalho */}
-        <div style={{padding:"14px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc"}}>
+        <div style={{padding:"14px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f1f5f9"}}>
           <div>
-            <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>📋 Registros de Contato</p>
+            <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a"}}>📋 Registros de Contato</p>
             <p style={{fontSize:11,color:"#94a3b8",marginTop:1}}>Histórico detalhado de cada tentativa de cobrança</p>
           </div>
           <button onClick={()=>setShowFormReg(v=>!v)}
-            style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish",display:"flex",alignItems:"center",gap:6}}>
+            style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Plus Jakarta Sans",display:"flex",alignItems:"center",gap:6}}>
             {showFormReg?"✕ Fechar":"+ Registrar Contato"}
           </button>
         </div>
@@ -1128,14 +1114,14 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
               <div>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Tipo de Contato</label>
                 <select value={formReg.tipo} onChange={e=>FR("tipo",e.target.value)}
-                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                   {[["ligacao","📞 Ligação"],["whatsapp","📱 WhatsApp"],["email","📧 E-mail"],["carta","✉️ Carta"],["visita","🚗 Visita"],["outro","🔹 Outro"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Resultado</label>
                 <select value={formReg.resultado} onChange={e=>FR("resultado",e.target.value)}
-                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                   {[["sem_resposta","Sem resposta"],["numero_invalido","Nº inválido"],["contato_estabelecido","Contato feito"],["recusou_negociar","Recusou"],["demonstrou_interesse","Interessado"],["acordo_verbal","Acordo verbal"],["outro","Outro"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
@@ -1146,7 +1132,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
               <textarea value={formReg.relatorio} onChange={e=>FR("relatorio",e.target.value)}
                 placeholder="Descreva o que aconteceu neste contato: o que o cliente disse, compromissos assumidos, dificuldades relatadas..."
                 rows={4}
-                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical",lineHeight:1.6}}/>
+                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical",lineHeight:1.6}}/>
             </div>
 
             <div style={{marginBottom:12}}>
@@ -1154,7 +1140,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
               <textarea value={formReg.mensagem} onChange={e=>FR("mensagem",e.target.value)}
                 placeholder="Cole aqui a mensagem exata que foi enviada ao cliente (opcional)..."
                 rows={3}
-                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical",lineHeight:1.6,background:"#f8fafc",color:"#475569"}}/>
+                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical",lineHeight:1.6,background:"#f1f5f9",color:"#475569"}}/>
             </div>
 
             <div style={{display:"flex",gap:8}}>
@@ -1193,7 +1179,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
               </div>
 
               {/* Relatório */}
-              <div style={{background:"#f8fafc",borderRadius:9,padding:"10px 12px",marginBottom:r.mensagem?8:0,border:"1px solid #f1f5f9"}}>
+              <div style={{background:"#f1f5f9",borderRadius:9,padding:"10px 12px",marginBottom:r.mensagem?8:0,border:"1px solid #f1f5f9"}}>
                 <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:5}}>📝 Relatório</p>
                 <p style={{fontSize:13,color:"#0f172a",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{r.relatorio}</p>
               </div>
@@ -1202,7 +1188,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
               {r.mensagem&&(
                 <div style={{background:"#f0fdf4",borderRadius:9,padding:"10px 12px",border:"1px solid #bbf7d0"}}>
                   <p style={{fontSize:10,fontWeight:700,color:"#16a34a",textTransform:"uppercase",marginBottom:5}}>💬 Mensagem Enviada</p>
-                  <p style={{fontSize:12,color:"#166534",lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"Mulish"}}>{r.mensagem}</p>
+                  <p style={{fontSize:12,color:"#166534",lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"Plus Jakarta Sans"}}>{r.mensagem}</p>
                 </div>
               )}
             </div>
@@ -1219,7 +1205,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
         ].map(k=>(
           <div key={k.l} style={{background:k.bg,borderRadius:12,padding:"12px 14px"}}>
             <p style={{fontSize:10,fontWeight:700,color:k.cor,textTransform:"uppercase",marginBottom:4}}>{k.ic} {k.l}</p>
-            <p style={{fontFamily:"Syne",fontWeight:800,fontSize:20,color:k.cor}}>{k.v}</p>
+            <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:20,color:k.cor}}>{k.v}</p>
           </div>
         ))}
       </div>
@@ -1228,13 +1214,13 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
       <div style={{marginBottom:18}}>
         {!showForm ? (
           <button onClick={()=>setShowForm(true)}
-            style={{width:"100%",padding:"13px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"Mulish",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            style={{width:"100%",padding:"13px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"Plus Jakarta Sans",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
             🔔 Criar Lembrete de Cobrança para {sel.nome.split(" ")[0]}
           </button>
         ) : (
           <div style={{background:"#fff",borderRadius:14,padding:18,border:"2px solid #4f46e5"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:14,color:"#4f46e5"}}>🔔 Novo Lembrete — {sel.nome.split(" ")[0]}</p>
+              <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:14,color:"#4f46e5"}}>🔔 Novo Lembrete — {sel.nome.split(" ")[0]}</p>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:20}}>✕</button>
             </div>
 
@@ -1242,7 +1228,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:12}}>
               {TIPOS_LEM.map(t=>(
                 <button key={t.v} onClick={()=>FL("tipo",t.v)}
-                  style={{padding:"7px 6px",border:`1.5px solid ${formLem.tipo===t.v?t.cor:"#e2e8f0"}`,borderRadius:9,background:formLem.tipo===t.v?t.bg:"#fff",color:formLem.tipo===t.v?t.cor:"#64748b",fontWeight:700,fontSize:10,cursor:"pointer",fontFamily:"Mulish",textAlign:"left"}}>
+                  style={{padding:"7px 6px",border:`1.5px solid ${formLem.tipo===t.v?t.cor:"#e2e8f0"}`,borderRadius:9,background:formLem.tipo===t.v?t.bg:"#fff",color:formLem.tipo===t.v?t.cor:"#64748b",fontWeight:700,fontSize:10,cursor:"pointer",fontFamily:"Plus Jakarta Sans",textAlign:"left"}}>
                   {t.l}
                 </button>
               ))}
@@ -1253,7 +1239,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                 <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Descrição *</label>
                 <input value={formLem.descricao} onChange={e=>FL("descricao",e.target.value)}
                   placeholder="Ex: Cliente prometeu pagar R$ 500,00"
-                  style={{width:"100%",padding:"9px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                  style={{width:"100%",padding:"9px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Data Prometida *</label>
@@ -1268,7 +1254,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
               <div>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Prioridade</label>
                 <select value={formLem.prioridade} onChange={e=>FL("prioridade",e.target.value)}
-                  style={{width:"100%",padding:"9px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                  style={{width:"100%",padding:"9px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                   {PRIOR.map(p=><option key={p.v} value={p.v}>{p.l}</option>)}
                 </select>
               </div>
@@ -1276,7 +1262,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                 <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Observações</label>
                 <textarea value={formLem.observacoes} onChange={e=>FL("observacoes",e.target.value)}
                   rows={2} placeholder="Detalhes da promessa ou combinado..."
-                  style={{width:"100%",padding:"9px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                  style={{width:"100%",padding:"9px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
               </div>
             </div>
 
@@ -1302,7 +1288,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
       {/* Lembretes ativos deste devedor */}
       {lemPend.length>0&&(
         <div style={{marginBottom:18}}>
-          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#d97706",marginBottom:8}}>🔔 Lembretes Pendentes</p>
+          <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#d97706",marginBottom:8}}>🔔 Lembretes Pendentes</p>
           {lemPend.map(l=>{
             const tp = tipoMap[l.tipo]||tipoMap.outro;
             const venc = l.data_prometida<hoje;
@@ -1330,9 +1316,9 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
 
       {/* Timeline de eventos */}
       <div>
-        <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>📋 Histórico Completo</p>
+        <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>📋 Histórico Completo</p>
         {eventos.length===0&&(
-          <div style={{textAlign:"center",padding:32,background:"#f8fafc",borderRadius:12,color:"#94a3b8"}}>
+          <div style={{textAlign:"center",padding:32,background:"#f1f5f9",borderRadius:12,color:"#94a3b8"}}>
             <div style={{fontSize:36,marginBottom:8}}>📋</div>
             <p>Nenhum evento registrado ainda.</p>
             <p style={{fontSize:12,marginTop:4}}>Contatos e lembretes aparecerão aqui.</p>
@@ -1361,7 +1347,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                       ):(
                         <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:"#f1f5f9",color:"#64748b"}}>{cTipoMap[ev.tipo]||ev.tipo}</span>
                       )}
-                      {!isLem&&ev.resultado&&<span style={{fontSize:10,color:"#475569",fontWeight:600,padding:"1px 7px",borderRadius:99,background:"#f8fafc"}}>{cResMap[ev.resultado]||ev.resultado}</span>}
+                      {!isLem&&ev.resultado&&<span style={{fontSize:10,color:"#475569",fontWeight:600,padding:"1px 7px",borderRadius:99,background:"#f1f5f9"}}>{cResMap[ev.resultado]||ev.resultado}</span>}
                       {concLem&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:"#dcfce7",color:"#15803d"}}>✅ Concluído</span>}
                       {vencLem&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:"#fee2e2",color:"#dc2626"}}>⚠️ Vencido</span>}
                     </div>
@@ -1746,7 +1732,7 @@ function CustasAvulsasForm({ onSalvar }) {
     <div style={{background:"#fff7ed",borderRadius:14,padding:16,border:"1.5px solid #fed7aa",marginTop:8}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div>
-          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#c2410c"}}>🏛 Lançar Custas Avulsas</p>
+          <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#c2410c"}}>🏛 Lançar Custas Avulsas</p>
           <p style={{fontSize:11,color:"#9a3412",marginTop:2}}>Só correção monetária, sem juros — lançamento independente de dívida</p>
         </div>
         <button onClick={addCusta} style={{background:"#c2410c",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Custa</button>
@@ -1759,9 +1745,9 @@ function CustasAvulsasForm({ onSalvar }) {
       {custas.map((c,ci)=>(
         <div key={c.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
           <input placeholder="Ex: custa judicial - 01/12/2023" value={c.descricao} onChange={e=>upd(ci,"descricao",e.target.value)}
-            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none",fontFamily:"Mulish"}}/>
+            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}/>
           <input type="number" placeholder="Valor (R$)" value={c.valor} onChange={e=>upd(ci,"valor",e.target.value)}
-            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none",fontFamily:"Mulish"}}/>
+            style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}/>
           <input type="date" value={c.data} onChange={e=>upd(ci,"data",e.target.value)}
             style={{padding:"7px 9px",border:"1.5px solid #fed7aa",borderRadius:8,fontSize:12,outline:"none"}}/>
           <button onClick={()=>rem(ci)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:6,padding:"5px 9px",cursor:"pointer",fontSize:12}}>✕</button>
@@ -2138,7 +2124,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
         <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",borderRadius:16,padding:"20px 24px",marginBottom:20,display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
           <div>
             <button onClick={fecharModal} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"none",borderRadius:7,padding:"4px 12px",cursor:"pointer",fontSize:12,marginBottom:10}}>← Voltar</button>
-            <p style={{fontFamily:"Syne",fontWeight:800,fontSize:24,color:"#fff",marginBottom:6}}>{sel.nome}</p>
+            <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:24,color:"#fff",marginBottom:6}}>{sel.nome}</p>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <BadgeDev status={sel.status}/>
               {credor&&<span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Credor: <b style={{color:"#a5f3fc"}}>{credor.nome?.split(" ").slice(0,3).join(" ")}</b></span>}
@@ -2149,7 +2135,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
             <div>
               <label style={{fontSize:10,color:"rgba(255,255,255,.5)",display:"block",marginBottom:3,textTransform:"uppercase"}}>Alterar Status</label>
-              <select value={sel.status} onChange={e=>atualizarStatus(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"none",fontSize:12,fontFamily:"Mulish",background:"rgba(255,255,255,.1)",color:"#fff",outline:"none"}}>
+              <select value={sel.status} onChange={e=>atualizarStatus(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"none",fontSize:12,fontFamily:"Plus Jakarta Sans",background:"rgba(255,255,255,.1)",color:"#fff",outline:"none"}}>
                 {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
               </select>
             </div>
@@ -2165,7 +2151,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
             <style>{`.tab-scroll::-webkit-scrollbar{height:3px}.tab-scroll::-webkit-scrollbar-track{background:transparent}.tab-scroll::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:99px}`}</style>
             {[["dados","📋 Dados"],["contatos","📞 Contatos"],["dividas","💳 Dívidas"],["acordos","🤝 Acordos"],["processos","⚖️ Processos"],["relatorio","📊 Relatório"]].map(([id,label])=>(
               <button key={id} onClick={()=>setAbaFicha(id)}
-                style={{padding:"10px 18px",border:"none",background:abaFicha===id?"#fafafe":"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2,whiteSpace:"nowrap",flexShrink:0,transition:"all .15s"}}>
+                style={{padding:"10px 18px",border:"none",background:abaFicha===id?"#fafafe":"none",cursor:"pointer",fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:12,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2,whiteSpace:"nowrap",flexShrink:0,transition:"all .15s"}}>
                 {label}
                 {id==="acordos"&&acordos.length>0&&<span style={{marginLeft:5,background:"#4f46e5",color:"#fff",borderRadius:99,fontSize:9,padding:"1px 5px"}}>{acordos.length}</span>}
               </button>
@@ -2177,7 +2163,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           </div>
         </div>
 
-        <div style={{background:"#fff",borderRadius:16,padding:20,border:"1px solid #f1f5f9"}}>
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #e8edf2",boxShadow:"0 1px 6px rgba(0,0,0,.05)"}}>
 
           {/* ABA DADOS */}
           {abaFicha==="dados"&&!editando&&(
@@ -2200,13 +2186,13 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                   ["Recebimento",fmtDate(sel.data_recebimento_carteira)],
                   ["Responsável",sel.responsavel],["Status",(STATUS_DEV.find(s=>s.v===sel.status)||STATUS_DEV[0]).l],
                 ].filter(([,v])=>v&&v!=="—").map(([k,v])=>(
-                  <div key={k} style={{padding:"10px 14px",background:"#f8fafc",borderRadius:10}}>
+                  <div key={k} style={{padding:"10px 14px",background:"#f1f5f9",borderRadius:10}}>
                     <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>{k}</p>
                     <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{v||"—"}</p>
                   </div>
                 ))}
               </div>
-              {sel.descricao_divida&&<div style={{marginTop:10,padding:"10px 14px",background:"#f8fafc",borderRadius:10}}><p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>Descrição da Dívida</p><p style={{fontSize:13,color:"#0f172a"}}>{sel.descricao_divida}</p></div>}
+              {sel.descricao_divida&&<div style={{marginTop:10,padding:"10px 14px",background:"#f1f5f9",borderRadius:10}}><p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>Descrição da Dívida</p><p style={{fontSize:13,color:"#0f172a"}}>{sel.descricao_divida}</p></div>}
               {sel.observacoes&&<div style={{marginTop:10,padding:"10px 14px",background:"#fef9c3",borderRadius:10}}><p style={{fontSize:10,color:"#92400e",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>Observações</p><p style={{fontSize:13,color:"#0f172a"}}>{sel.observacoes}</p></div>}
               <div style={{display:"flex",gap:8,marginTop:14}}>
                 {sel.telefone&&<Btn onClick={()=>abrirWp(sel)}>📱 WhatsApp</Btn>}
@@ -2217,12 +2203,12 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
 
           {/* ABA DADOS — MODO EDIÇÃO */}
           {abaFicha==="dados"&&editando&&(
-            <div style={{background:"#f8fafc",borderRadius:16,padding:20,border:"2px solid #4f46e5"}}>
-              <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#4f46e5",marginBottom:16}}>✏️ Editando Cadastro</p>
+            <div style={{background:"#f1f5f9",borderRadius:16,padding:20,border:"2px solid #4f46e5"}}>
+              <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#4f46e5",marginBottom:16}}>✏️ Editando Cadastro</p>
               <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid #e2e8f0"}}>
                 {SECOES.map(([id,label])=>(
                   <button key={id} onClick={()=>setSecaoForm(id)}
-                    style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:11,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-1}}>
+                    style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:11,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-1}}>
                     {label}
                   </button>
                 ))}
@@ -2232,13 +2218,13 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                   <INP label="Nome / Razão Social *" value={formEdit.nome||""} onChange={v=>FE("nome",v)} span={2}/>
                   <div>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo</label>
-                    <div style={{display:"flex",gap:8}}>{["PF","PJ"].map(t=><button key={t} onClick={()=>FE("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${formEdit.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:formEdit.tipo===t?"#4f46e5":"#fff",color:formEdit.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 PF":"🏢 PJ"}</button>)}</div>
+                    <div style={{display:"flex",gap:8}}>{["PF","PJ"].map(t=><button key={t} onClick={()=>FE("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${formEdit.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:formEdit.tipo===t?"#4f46e5":"#fff",color:formEdit.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Plus Jakarta Sans"}}>{t==="PF"?"👤 PF":"🏢 PJ"}</button>)}</div>
                   </div>
                   <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>CPF / CNPJ</label><input value={formEdit.cpf_cnpj||""} onChange={e=>FE("cpf_cnpj",formEdit.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/></div>
                   {formEdit.tipo==="PF"?(<><INP label="RG" value={formEdit.rg||""} onChange={v=>FE("rg",v)}/><INP label="Data de Nascimento" value={formEdit.data_nascimento||""} onChange={v=>FE("data_nascimento",v)} type="date"/><INP label="Profissão" value={formEdit.profissao||""} onChange={v=>FE("profissao",v)} span={2}/></>):(<><INP label="Sócio / Responsável" value={formEdit.socio_nome||""} onChange={v=>FE("socio_nome",v)} span={2}/><INP label="CPF do Sócio" value={formEdit.socio_cpf||""} onChange={v=>FE("socio_cpf",maskCPF(v))}/></>)}
                   <INP label="E-mail" value={formEdit.email||""} onChange={v=>FE("email",v)} type="email"/>
-                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone</label><input value={formEdit.telefone||""} onChange={e=>FE("telefone",maskTel(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/></div>
-                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone 2</label><input value={formEdit.telefone2||""} onChange={e=>FE("telefone2",maskTel(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/></div>
+                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone</label><input value={formEdit.telefone||""} onChange={e=>FE("telefone",maskTel(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/></div>
+                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone 2</label><input value={formEdit.telefone2||""} onChange={e=>FE("telefone2",maskTel(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/></div>
                 </div>
               )}
               {secaoForm==="end"&&(
@@ -2258,7 +2244,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                   <INP label="Valor Nominal (R$)" value={formEdit.valor_nominal||""} onChange={v=>FE("valor_nominal",v)} type="number"/>
                   <INP label="Data de Origem" value={formEdit.data_origem_divida||""} onChange={v=>FE("data_origem_divida",v)} type="date"/>
                   <INP label="Recebimento Carteira" value={formEdit.data_recebimento_carteira||""} onChange={v=>FE("data_recebimento_carteira",v)} type="date" span={2}/>
-                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição / Origem</label><textarea value={formEdit.descricao_divida||""} onChange={e=>FE("descricao_divida",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição / Origem</label><textarea value={formEdit.descricao_divida||""} onChange={e=>FE("descricao_divida",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/></div>
                 </div>
               )}
               {secaoForm==="ctrl"&&(
@@ -2271,7 +2257,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                       placeholder="0000000-00.0000.8.09.0000"
                       style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
                   </div>
-                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/></div>
                 </div>
               )}
               <div style={{display:"flex",gap:8,marginTop:16}}>
@@ -2284,12 +2270,12 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           {/* ABA CONTATOS */}
           {abaFicha==="contatos"&&(
             <div>
-              <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:16,border:"1.5px dashed #e2e8f0"}}>
-                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:10}}>+ Registrar Contato</p>
+              <div style={{background:"#f1f5f9",borderRadius:12,padding:14,marginBottom:16,border:"1.5px dashed #e2e8f0"}}>
+                <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:10}}>+ Registrar Contato</p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                   <INP label="Tipo de Contato" value={novoContato.tipo} onChange={v=>setNovoContato(c=>({...c,tipo:v}))} opts={[{v:"ligacao",l:"📞 Ligação"},{v:"whatsapp",l:"📱 WhatsApp"},{v:"email",l:"📧 E-mail"},{v:"carta",l:"✉️ Carta"},{v:"visita",l:"🚗 Visita"},{v:"outro",l:"🔹 Outro"}]}/>
                   <INP label="Resultado" value={novoContato.resultado} onChange={v=>setNovoContato(c=>({...c,resultado:v}))} opts={[{v:"sem_resposta",l:"Sem resposta"},{v:"numero_invalido",l:"Número inválido"},{v:"contato_estabelecido",l:"Contato estabelecido"},{v:"recusou_negociar",l:"Recusou negociar"},{v:"demonstrou_interesse",l:"Demonstrou interesse"},{v:"acordo_verbal",l:"Acordo verbal"},{v:"outro",l:"Outro"}]}/>
-                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={novoContato.obs} onChange={e=>setNovoContato(c=>({...c,obs:e.target.value}))} rows={2} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={novoContato.obs} onChange={e=>setNovoContato(c=>({...c,obs:e.target.value}))} rows={2} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/></div>
                 </div>
                 <Btn onClick={registrarContato}>✅ Registrar</Btn>
               </div>
@@ -2311,7 +2297,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           {/* ABA DÍVIDAS */}
           {abaFicha==="dividas"&&(
             <div>
-              {dividas.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24,background:"#f8fafc",borderRadius:12}}>Nenhuma dívida cadastrada.</p>}
+              {dividas.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24,background:"#f1f5f9",borderRadius:12}}>Nenhuma dívida cadastrada.</p>}
               {dividas.map(div=>{
                 const ehSoCustas = div._so_custas === true;
                 const custas = div.custas||[];
@@ -2366,7 +2352,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                         {div.parcelas?.length>0&&(
                           <div style={{maxHeight:160,overflowY:"auto"}}>
                             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                              <thead><tr style={{background:"#f8fafc"}}>{["Nº","Valor","Vencimento","Status",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
+                              <thead><tr style={{background:"#f1f5f9"}}>{["Nº","Valor","Vencimento","Status",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
                               <tbody>{(div.parcelas||[]).map((p,pi)=>{
                                 const atr=p.status==="pendente"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date();
                                 const sR=atr?"atrasado":p.status;
@@ -2391,8 +2377,8 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                 );
               })}
               {/* Formulário nova dívida */}
-              <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:8}}>
-                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>➕ Nova Dívida</p>
+              <div style={{background:"#f1f5f9",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:8}}>
+                <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>➕ Nova Dívida</p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                   <Inp label="Descrição" value={nd.descricao} onChange={v=>ND("descricao",v)} span={2}/>
                   <Inp label="Valor Total (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
@@ -2410,7 +2396,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                   </div>
                 </div>
                 {/* Parcelamento — só se quiser parcelar */}
-                <div style={{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:10,border:"1px solid #e2e8f0"}}>
+                <div style={{background:"#f1f5f9",borderRadius:10,padding:12,marginBottom:10,border:"1px solid #e2e8f0"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".05em"}}>📅 Parcelamento (opcional)</p>
                     <span style={{fontSize:10,color:"#94a3b8"}}>Deixe em branco se a dívida não for parcelada</span>
@@ -2433,9 +2419,9 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                   {(nd.custas||[]).map((c,ci)=>(
                     <div key={c.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
                       <input placeholder="Descrição (ex: custa judicial - 01/12/2023)" value={c.descricao} onChange={e=>ND("custas",(nd.custas||[]).map((x,xi)=>xi===ci?{...x,descricao:e.target.value}:x))}
-                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Mulish"}}/>
+                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Plus Jakarta Sans"}}/>
                       <input type="number" placeholder="Valor (R$)" value={c.valor} onChange={e=>ND("custas",(nd.custas||[]).map((x,xi)=>xi===ci?{...x,valor:e.target.value}:x))}
-                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Mulish"}}/>
+                        style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none",fontFamily:"Plus Jakarta Sans"}}/>
                       <input type="date" value={c.data} onChange={e=>ND("custas",(nd.custas||[]).map((x,xi)=>xi===ci?{...x,data:e.target.value}:x))}
                         style={{padding:"6px 8px",border:"1.5px solid #fed7aa",borderRadius:7,fontSize:11,outline:"none"}}/>
                       <button onClick={()=>ND("custas",(nd.custas||[]).filter((_,xi)=>xi!==ci))}
@@ -2454,7 +2440,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                   <div style={{marginTop:12}}>
                     <div style={{maxHeight:180,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
                       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                        <thead><tr style={{background:"#f8fafc"}}>{["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
+                        <thead><tr style={{background:"#f1f5f9"}}>{["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
                         <tbody>{nd.parcelas.map((p,i)=>(
                           <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
                             <td style={{padding:"5px 9px",fontWeight:700}}>{i+1}</td>
@@ -2507,16 +2493,16 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           {abaFicha==="processos"&&(
             <div>
               {procsDevedor.length===0?(
-                <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12}}>
+                <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f1f5f9",borderRadius:12}}>
                   <div style={{fontSize:32,marginBottom:8}}>⚖️</div>
                   <p>Nenhum processo vinculado.</p>
-                  <button onClick={()=>{fecharModal();setTab&&setTab("processos");}} style={{marginTop:14,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>+ Cadastrar Processo</button>
+                  <button onClick={()=>{fecharModal();setTab&&setTab("processos");}} style={{marginTop:14,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Plus Jakarta Sans"}}>+ Cadastrar Processo</button>
                 </div>
               ):(
                 <div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                    <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>{procsDevedor.length} processo(s)</p>
-                    <button onClick={()=>{fecharModal();setTab&&setTab("processos");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish"}}>+ Novo</button>
+                    <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#0f172a"}}>{procsDevedor.length} processo(s)</p>
+                    <button onClick={()=>{fecharModal();setTab&&setTab("processos");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Plus Jakarta Sans"}}>+ Novo</button>
                   </div>
                   {procsDevedor.map(p=>(
                     <div key={p.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:10,background:"#fff"}}>
@@ -2546,7 +2532,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
             {WP_MSGS(wp).map((m,i)=>(
               <div key={i} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10}}>
                 <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8}}>{m.titulo}</p>
-                <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f8fafc",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
+                <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f1f5f9",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
                 <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>{I.wp} Abrir no WhatsApp</a>
               </div>
             ))}
@@ -2562,7 +2548,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10}}>
-        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
+        <h2 style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
         <Btn onClick={()=>{setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});setSecaoForm("id");abrirModal("novo")}}>{I.plus} Novo Devedor</Btn>
       </div>
 
@@ -2570,21 +2556,21 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:12,marginBottom:16,alignItems:"end"}}>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase"}}>Credor</label>
-          <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+          <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todos os credores</option>
             {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase"}}>Status</label>
-          <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+          <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todos os status</option>
             {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
           </select>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase"}}>Buscar</label>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome ou CPF/CNPJ..." style={{padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish",minWidth:200}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome ou CPF/CNPJ..." style={{padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans",minWidth:200}}/>
         </div>
       </div>
 
@@ -2592,7 +2578,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
-            <tr style={{background:"#f8fafc"}}>
+            <tr style={{background:"#f1f5f9"}}>
               {["Nome","CPF/CNPJ","Credor","Status","Valor Dívida","Acordos","Ações"].map(h=>(
                 <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:".05em"}}>{h}</th>
               ))}
@@ -2649,7 +2635,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid #e2e8f0"}}>
             {SECOES.map(([id,label],i)=>(
               <button key={id} onClick={()=>setSecaoForm(id)}
-                style={{flex:1,padding:"8px 4px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:11,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-1,textAlign:"center"}}>
+                style={{flex:1,padding:"8px 4px",border:"none",background:"none",cursor:"pointer",fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:11,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-1,textAlign:"center"}}>
                 {label}
               </button>
             ))}
@@ -2660,7 +2646,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               <INP label="Nome / Razão Social *" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo</label>
-                <div style={{display:"flex",gap:8}}>{["PF","PJ"].map(t=><button key={t} onClick={()=>F("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${form.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.tipo===t?"#4f46e5":"#fff",color:form.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}</div>
+                <div style={{display:"flex",gap:8}}>{["PF","PJ"].map(t=><button key={t} onClick={()=>F("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${form.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.tipo===t?"#4f46e5":"#fff",color:form.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Plus Jakarta Sans"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}</div>
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>CPF / CNPJ</label>
@@ -2670,11 +2656,11 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               <INP label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone Principal (WhatsApp)</label>
-                <input value={form.telefone} onChange={e=>F("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                <input value={form.telefone} onChange={e=>F("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone Secundário</label>
-                <input value={form.telefone2} onChange={e=>F("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                <input value={form.telefone2} onChange={e=>F("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
               </div>
             </div>
           )}
@@ -2703,7 +2689,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               <INP label="Data de Recebimento da Carteira" value={form.data_recebimento_carteira} onChange={v=>F("data_recebimento_carteira",v)} type="date" span={2}/>
               <div style={{gridColumn:"1/-1"}}>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição / Origem</label>
-                <textarea value={form.descricao_divida} onChange={e=>F("descricao_divida",e.target.value)} placeholder="Ex: Contrato de Compra e Venda nº 001/2023" rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                <textarea value={form.descricao_divida} onChange={e=>F("descricao_divida",e.target.value)} placeholder="Ex: Contrato de Compra e Venda nº 001/2023" rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
               </div>
             </div>
           )}
@@ -2719,7 +2705,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
-                <textarea value={form.observacoes||""} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                <textarea value={form.observacoes||""} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
               </div>
             </div>
           )}
@@ -2748,7 +2734,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           {WP_MSGS(wp).map((m,i)=>(
             <div key={i} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10}}>
               <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8}}>{m.titulo}</p>
-              <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f8fafc",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
+              <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f1f5f9",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
               <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>{I.wp} Abrir no WhatsApp</a>
             </div>
           ))}
@@ -2771,15 +2757,15 @@ function Credores({ credores, setCredores }) {
   return (
     <div>
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18 }}>
-        <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a" }}>Credores</h2>
+        <h2 style={{ fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a" }}>Credores</h2>
         <Btn onClick={()=>setModal(true)}>{I.plus} Novo Credor</Btn>
       </div>
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16 }}>
         {credores.map(c=>(
-          <div key={c.id} style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",borderTop:`4px solid ${c.ativo?"#4f46e5":"#e2e8f0"}` }}>
+          <div key={c.id} style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #e8edf2",boxShadow:"0 1px 6px rgba(0,0,0,.05)",borderTop:`4px solid ${c.ativo?"#4f46e5":"#e2e8f0"}` }}>
             <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12 }}>
               <div>
-                <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a" }}>{c.nome}</p>
+                <p style={{ fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a" }}>{c.nome}</p>
                 <p style={{ fontSize:11,color:"#94a3b8",fontFamily:"monospace",marginTop:2 }}>{c.cpf_cnpj}</p>
               </div>
               <span style={{ fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:c.ativo?"#ede9fe":"#f1f5f9",color:c.ativo?"#6d28d9":"#94a3b8" }}>{c.ativo?"Ativo":"Inativo"}</span>
@@ -3001,7 +2987,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
             <div>
               <p style={{fontFamily:"monospace",fontSize:13,color:"#a5f3fc",fontWeight:700,marginBottom:4}}>{sel.numero}</p>
-              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:20,color:"#fff",marginBottom:6}}>{dev?.nome||"Devedor não vinculado"}</p>
+              <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:20,color:"#fff",marginBottom:6}}>{dev?.nome||"Devedor não vinculado"}</p>
               <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                 <BadgeProc status={sel.status}/>
                 <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Tipo: <b style={{color:"#e0e7ff"}}>{sel.tipo}</b></span>
@@ -3024,14 +3010,14 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
         <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid #f1f5f9"}}>
           {[["dados","📋 Dados do Processo"],["andamentos","📌 Andamentos"]].map(([id,label])=>(
             <button key={id} onClick={()=>{setAbaFicha(id);setEditando(false);}}
-              style={{padding:"9px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2}}>
+              style={{padding:"9px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:13,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2}}>
               {label}
               {id==="andamentos"&&procAnds.length>0&&<span style={{marginLeft:5,background:"#4f46e5",color:"#fff",borderRadius:99,fontSize:9,padding:"1px 5px"}}>{procAnds.length}</span>}
             </button>
           ))}
         </div>
 
-        <div style={{background:"#fff",borderRadius:16,padding:20,border:"1px solid #f1f5f9"}}>
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #e8edf2",boxShadow:"0 1px 6px rgba(0,0,0,.05)"}}>
 
           {/* ABA DADOS */}
           {abaFicha==="dados"&&!editando&&(
@@ -3057,7 +3043,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                   ["Data de Distribuição", fmtDate(sel.data_distribuicao)],
                   ["Próximo Prazo", sel.proximo_prazo?fmtDate(sel.proximo_prazo)+(diasPrazo!==null?` (${diasPrazo}d)`:""):null],
                 ].filter(([,v])=>v&&v!=="—"&&v!=="R$ 0,00").map(([k,v])=>(
-                  <div key={k} style={{padding:"10px 14px",background:"#f8fafc",borderRadius:10}}>
+                  <div key={k} style={{padding:"10px 14px",background:"#f1f5f9",borderRadius:10}}>
                     <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>{k}</p>
                     <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{v||"—"}</p>
                   </div>
@@ -3089,7 +3075,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                 {[["Devedor",devedores.map(d=>({v:d.id,l:d.nome})),"devedor_id"],["Credor",credores.map(c=>({v:c.id,l:c.nome})),"credor_id"]].map(([label,opts,key])=>(
                   <div key={key}>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
-                    <select value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                    <select value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                       <option value="">— Selecione —</option>
                       {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
                     </select>
@@ -3099,7 +3085,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                 {[["Tipo",PROC_TIPOS,"tipo"],["Fase",PROC_FASES,"fase"],["Instância",PROC_INST,"instancia"],["Tribunal",PROC_TRIB,"tribunal"]].map(([label,opts,key])=>(
                   <div key={key}>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
-                    <select value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                    <select value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                       {opts.map(o=><option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
@@ -3107,23 +3093,23 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                 {/* Vara, Valor, Datas */}
                 <div style={{gridColumn:"1/-1"}}>
                   <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vara / Câmara</label>
-                  <input value={formEdit.vara||""} onChange={e=>FE("vara",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                  <input value={formEdit.vara||""} onChange={e=>FE("vara",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
                 </div>
                 {[["Valor (R$)","valor","number"],["Data de Ajuizamento","data_ajuizamento","date"],["Data de Distribuição","data_distribuicao","date"],["Próximo Prazo","proximo_prazo","date"]].map(([label,key,type])=>(
                   <div key={key}>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
-                    <input type={type} value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                    <input type={type} value={formEdit[key]||""} onChange={e=>FE(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
                   </div>
                 ))}
                 <div>
                   <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Status</label>
-                  <select value={formEdit.status||"em_andamento"} onChange={e=>FE("status",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                  <select value={formEdit.status||"em_andamento"} onChange={e=>FE("status",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                     {PROC_STATUS.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div style={{gridColumn:"1/-1"}}>
                   <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
-                  <textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                  <textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginTop:16}}>
@@ -3137,12 +3123,12 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
           {abaFicha==="andamentos"&&(
             <div>
               {/* Formulário novo andamento */}
-              <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,border:"1.5px dashed #e2e8f0"}}>
-                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>+ Registrar Andamento</p>
+              <div style={{background:"#f1f5f9",borderRadius:12,padding:14,marginBottom:20,border:"1.5px dashed #e2e8f0"}}>
+                <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>+ Registrar Andamento</p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                   <div>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo</label>
-                    <select value={andForm.tipo} onChange={e=>setAndForm(f=>({...f,tipo:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                    <select value={andForm.tipo} onChange={e=>setAndForm(f=>({...f,tipo:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                       {AND_TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
@@ -3152,7 +3138,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                   </div>
                   <div style={{gridColumn:"1/-1"}}>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição *</label>
-                    <textarea value={andForm.descricao} onChange={e=>setAndForm(f=>({...f,descricao:e.target.value}))} rows={3} placeholder="Descreva o andamento processual..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                    <textarea value={andForm.descricao} onChange={e=>setAndForm(f=>({...f,descricao:e.target.value}))} rows={3} placeholder="Descreva o andamento processual..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
                   </div>
                   <div>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Próximo Prazo (opcional)</label>
@@ -3160,7 +3146,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                   </div>
                   <div>
                     <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Responsável</label>
-                    <input value={andForm.responsavel||user?.nome||""} onChange={e=>setAndForm(f=>({...f,responsavel:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                    <input value={andForm.responsavel||user?.nome||""} onChange={e=>setAndForm(f=>({...f,responsavel:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
                   </div>
                 </div>
                 <div style={{marginTop:12}}>
@@ -3170,7 +3156,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
 
               {/* Lista de andamentos */}
               {procAnds.length===0&&(
-                <p style={{fontSize:13,color:"#94a3b8",textAlign:"center",padding:24,background:"#f8fafc",borderRadius:12}}>Nenhum andamento registrado.</p>
+                <p style={{fontSize:13,color:"#94a3b8",textAlign:"center",padding:24,background:"#f1f5f9",borderRadius:12}}>Nenhum andamento registrado.</p>
               )}
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {procAnds.map((a,i)=>{
@@ -3217,7 +3203,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,flexWrap:"wrap",gap:10}}>
-        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Processos</h2>
+        <h2 style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a"}}>Processos</h2>
         <Btn onClick={()=>{setForm({...FORM_PROC_VAZIO});setModal(true)}}>{I.plus} Novo Processo</Btn>
       </div>
 
@@ -3225,28 +3211,28 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:10,marginBottom:14,alignItems:"end"}}>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Credor</label>
-          <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+          <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todos os credores</option>
             {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Fase</label>
-          <select value={filtroFase} onChange={e=>setFiltroFase(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+          <select value={filtroFase} onChange={e=>setFiltroFase(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todas as fases</option>
             {PROC_FASES.map(f=><option key={f} value={f}>{f}</option>)}
           </select>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tribunal</label>
-          <select value={filtroTrib} onChange={e=>setFiltroTrib(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+          <select value={filtroTrib} onChange={e=>setFiltroTrib(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todos os tribunais</option>
             {PROC_TRIB.map(t=><option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Buscar</label>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Número ou devedor..." style={{padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish",minWidth:180}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Número ou devedor..." style={{padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans",minWidth:180}}/>
         </div>
       </div>
 
@@ -3254,7 +3240,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
       <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
-            <tr style={{background:"#f8fafc"}}>
+            <tr style={{background:"#f1f5f9"}}>
               {["Nº do Processo","Devedor","Credor","Tipo","Fase","Próximo Prazo","Tribunal","Ações"].map(h=>(
                 <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:".05em",whiteSpace:"nowrap"}}>{h}</th>
               ))}
@@ -3296,7 +3282,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                   <td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}>
                     <div style={{display:"flex",gap:6}}>
                       <button onClick={()=>{setFichaId(p.id);setAbaFicha("andamentos");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>📌 And.</button>
-                      <button onClick={()=>{setFichaId(p.id);setAbaFicha("dados");}} style={{background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:11}}>Ver →</button>
+                      <button onClick={()=>{setFichaId(p.id);setAbaFicha("dados");}} style={{background:"#f1f5f9",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:11}}>Ver →</button>
                     </div>
                   </td>
                 </tr>
@@ -3331,7 +3317,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
             {[["Devedor",devedores.map(d=>({v:d.id,l:d.nome})),"devedor_id"],["Credor",credores.map(c=>({v:c.id,l:c.nome})),"credor_id"]].map(([label,opts,key])=>(
               <div key={key}>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
-                <select value={form[key]||""} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                <select value={form[key]||""} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                   <option value="">— Selecione —</option>
                   {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
                 </select>
@@ -3341,7 +3327,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
             {[["Tipo",PROC_TIPOS,"tipo"],["Fase",PROC_FASES,"fase"],["Instância",PROC_INST,"instancia"],["Tribunal",PROC_TRIB,"tribunal"]].map(([label,opts,key])=>(
               <div key={key}>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
-                <select value={form[key]||opts[0]} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                <select value={form[key]||opts[0]} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                   {opts.map(o=><option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
@@ -3349,19 +3335,19 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
             {/* Vara */}
             <div style={{gridColumn:"1/-1"}}>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vara / Câmara</label>
-              <input value={form.vara} onChange={e=>F("vara",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              <input value={form.vara} onChange={e=>F("vara",e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
             </div>
             {/* Datas e valor */}
             {[["Valor (R$)","valor","number"],["Data de Ajuizamento","data_ajuizamento","date"],["Data de Distribuição","data_distribuicao","date"],["Próximo Prazo","proximo_prazo","date"]].map(([label,key,type])=>(
               <div key={key}>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
-                <input type={type} value={form[key]||""} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                <input type={type} value={form[key]||""} onChange={e=>F(key,e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
               </div>
             ))}
             {/* Observações */}
             <div style={{gridColumn:"1/-1"}}>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
-              <textarea value={form.observacoes||""} onChange={e=>F("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+              <textarea value={form.observacoes||""} onChange={e=>F("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
             </div>
           </div>
           <div style={{display:"flex",gap:10,marginTop:20}}>
@@ -3400,11 +3386,11 @@ function Regua({ processos, devedores, regua, setRegua }) {
 
   return (
     <div>
-      <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:18 }}>Régua de Cobrança</h2>
+      <h2 style={{ fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:18 }}>Régua de Cobrança</h2>
       <div style={{ marginBottom:16 }}>
         <label style={{ fontSize:12,fontWeight:700,color:"#64748b",display:"block",marginBottom:6 }}>Selecionar Processo</label>
         <select value={selId||""} onChange={e=>setSelId(parseInt(e.target.value))}
-          style={{ width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,outline:"none",fontFamily:"Mulish" }}>
+          style={{ width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans" }}>
           {processos.map(p=><option key={p.id} value={p.id}>{p.numero} — {devedores.find(d=>d.id===p.devedor_id)?.nome}</option>)}
         </select>
       </div>
@@ -3414,9 +3400,9 @@ function Regua({ processos, devedores, regua, setRegua }) {
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24 }}>
             <div>
               <p style={{ fontFamily:"monospace",fontSize:12,color:"#4f46e5",fontWeight:700 }}>{proc.numero}</p>
-              <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:16,color:"#0f172a" }}>{devedores.find(d=>d.id===proc.devedor_id)?.nome}</p>
+              <p style={{ fontFamily:"Space Grotesk",fontWeight:700,fontSize:16,color:"#0f172a" }}>{devedores.find(d=>d.id===proc.devedor_id)?.nome}</p>
             </div>
-            <span style={{ fontFamily:"Syne",fontWeight:800,fontSize:18,color:"#4f46e5" }}>{fmt(proc.valor)}</span>
+            <span style={{ fontFamily:"Space Grotesk",fontWeight:800,fontSize:18,color:"#4f46e5" }}>{fmt(proc.valor)}</span>
           </div>
 
           {/* Timeline visual */}
@@ -3971,19 +3957,19 @@ function Calculadora({ devedores }) {
 
   return (
     <div>
-      <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:4}}>Calculadora</h2>
+      <h2 style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:4}}>Calculadora</h2>
       <p style={{fontSize:13,color:"#64748b",marginBottom:18}}>Atualização monetária com honorários integrados — Resumo de Débito.</p>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
 
         {/* ── PAINEL ESQUERDO — Parâmetros ── */}
         <div style={{background:"#fff",borderRadius:18,padding:24,border:"1px solid #f1f5f9",display:"flex",flexDirection:"column",gap:0}}>
-          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a"}}>Parâmetros</p>
+          <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,marginBottom:14,color:"#0f172a"}}>Parâmetros</p>
 
           {/* Devedor */}
           <div style={{marginBottom:12}}>
             <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Carregar Devedor (opcional)</label>
-            <select value={devId} onChange={e=>loadDev(e.target.value)} style={{width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Mulish",outline:"none"}}>
+            <select value={devId} onChange={e=>loadDev(e.target.value)} style={{width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,fontFamily:"Plus Jakarta Sans",outline:"none"}}>
               <option value="">— Digitar manualmente —</option>
               {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
             </select>
@@ -3995,7 +3981,7 @@ function Calculadora({ devedores }) {
             const dividas = d?.dividas||[];
             if(!dividas.length) return null;
             return(
-              <div style={{marginBottom:12,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
+              <div style={{marginBottom:12,background:"#f1f5f9",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
                 <p style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase"}}>Selecionar Dívidas</p>
                 {dividas.map(div=>(
                   <label key={div.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,cursor:"pointer"}}>
@@ -4027,7 +4013,7 @@ function Calculadora({ devedores }) {
             {/* Indexador */}
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Indexador</label>
-              <select value={indexador} onChange={e=>setIndexador(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+              <select value={indexador} onChange={e=>setIndexador(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                 {[["igpm","IGP-M"],["ipca","IPCA"],["selic","SELIC/CDI"],["inpc","INPC"],["nenhum","Sem correção"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
               </select>
             </div>
@@ -4043,7 +4029,7 @@ function Calculadora({ devedores }) {
             <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase"}}>Regime de Juros</label>
             <div style={{display:"flex",gap:8}}>
               {[["composto","Juros Compostos"],["simples","Juros Simples"]].map(([v,l])=>(
-                <button key={v} onClick={()=>setRegimeJuros(v)} style={{flex:1,padding:"7px",border:`1.5px solid ${regimeJuros===v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:regimeJuros===v?"#4f46e5":"#fff",color:regimeJuros===v?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{l}</button>
+                <button key={v} onClick={()=>setRegimeJuros(v)} style={{flex:1,padding:"7px",border:`1.5px solid ${regimeJuros===v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:regimeJuros===v?"#4f46e5":"#fff",color:regimeJuros===v?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Plus Jakarta Sans"}}>{l}</button>
               ))}
             </div>
           </div>
@@ -4056,7 +4042,7 @@ function Calculadora({ devedores }) {
             </div>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Multa incide sobre</label>
-              <select value={baseMulta} onChange={e=>setBaseMulta(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+              <select value={baseMulta} onChange={e=>setBaseMulta(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                 <option value="original">Principal original</option>
                 <option value="corrigido">Principal corrigido</option>
               </select>
@@ -4104,7 +4090,7 @@ function Calculadora({ devedores }) {
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
           {!resultado ? (
-            <div style={{background:"#f8fafc",borderRadius:18,padding:24,border:"1px solid #f1f5f9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:320}}>
+            <div style={{background:"#f1f5f9",borderRadius:18,padding:24,border:"1px solid #f1f5f9",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:320}}>
               <div style={{fontSize:44,marginBottom:12}}>🧮</div>
               <p style={{color:"#94a3b8",fontSize:13,textAlign:"center"}}>Preencha os parâmetros e clique em Calcular</p>
             </div>
@@ -4115,10 +4101,10 @@ function Calculadora({ devedores }) {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                   <div>
                     <p style={{color:"rgba(255,255,255,.5)",fontSize:11,marginBottom:2}}>Total Atualizado</p>
-                    <p style={{fontFamily:"Syne",fontWeight:800,fontSize:30,color:"#fff"}}>{fmt(resultado.total)}</p>
+                    <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:30,color:"#fff"}}>{fmt(resultado.total)}</p>
                     <p style={{color:"rgba(255,255,255,.4)",fontSize:11}}>{resultado.meses} meses · {IDX_LABEL[indexador]} · {regimeJuros==="composto"?"J. Compostos":"J. Simples"}</p>
                   </div>
-                  <button onClick={exportarPDF} style={{background:"rgba(255,255,255,.1)",color:"#a5f3fc",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish",whiteSpace:"nowrap"}}>
+                  <button onClick={exportarPDF} style={{background:"rgba(255,255,255,.1)",color:"#a5f3fc",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Plus Jakarta Sans",whiteSpace:"nowrap"}}>
                     📄 Exportar PDF
                   </button>
                 </div>
@@ -4244,8 +4230,8 @@ function Calculadora({ devedores }) {
                 return(
                   <div style={{background:"#fff",borderRadius:16,border:"1px solid #e2e8f0",overflow:"hidden"}}>
                     {/* Cabeçalho */}
-                    <div style={{padding:"12px 18px",borderBottom:"2px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc"}}>
-                      <p style={{fontFamily:"Syne",fontWeight:800,fontSize:14,color:"#0f172a"}}>📋 Planilha de Atualização</p>
+                    <div style={{padding:"12px 18px",borderBottom:"2px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f1f5f9"}}>
+                      <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:14,color:"#0f172a"}}>📋 Planilha de Atualização</p>
                       <p style={{fontSize:11,color:"#94a3b8"}}>{linhasParcelas.length} prestação{linhasParcelas.length>1?"ões":""}{todasCustas.length>0?` + ${todasCustas.length} custa${todasCustas.length>1?"s":""}`:""}</p>
                     </div>
 
@@ -4326,8 +4312,8 @@ function Calculadora({ devedores }) {
                         )}
                         {/* Total Geral destacado */}
                         <div style={{display:"flex",gap:32,justifyContent:"flex-end",width:"100%",borderTop:"3px double #1d4ed8",paddingTop:10,marginTop:4}}>
-                          <span style={{fontFamily:"Syne",fontSize:15,fontWeight:800,color:"#1d4ed8"}}>TOTAL GERAL</span>
-                          <span style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"#1d4ed8",minWidth:120,textAlign:"right"}}>{fmt(totalGeral+honTotal)}</span>
+                          <span style={{fontFamily:"Space Grotesk",fontSize:15,fontWeight:800,color:"#1d4ed8"}}>TOTAL GERAL</span>
+                          <span style={{fontFamily:"Space Grotesk",fontSize:16,fontWeight:800,color:"#1d4ed8",minWidth:120,textAlign:"right"}}>{fmt(totalGeral+honTotal)}</span>
                         </div>
                       </div>
                     </div>
@@ -4474,7 +4460,7 @@ function Lembretes({ devedores, credores, user }) {
       {/* Cabeçalho */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10}}>
         <div>
-          <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>🔔 Lembretes e Alertas</h2>
+          <h2 style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a"}}>🔔 Lembretes e Alertas</h2>
           <p style={{fontSize:13,color:"#64748b",marginTop:2}}>Controle de promessas de pagamento e retornos de cobrança</p>
         </div>
         <Btn onClick={()=>setModal(true)} color="#4f46e5">+ Novo Lembrete</Btn>
@@ -4491,7 +4477,7 @@ function Lembretes({ devedores, credores, user }) {
           <div key={k.l} style={{background:k.bg,borderRadius:14,padding:"14px 16px",cursor:"pointer"}}
             onClick={()=>{setFiltroStatus("pendente");setFiltroPrior("");}}>
             <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
-            <p style={{fontFamily:"Syne",fontWeight:800,fontSize:28,color:k.cor}}>{k.v}</p>
+            <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:28,color:k.cor}}>{k.v}</p>
             <p style={{fontSize:10,color:k.cor,opacity:.7,marginTop:2}}>{k.sub}</p>
           </div>
         ))}
@@ -4502,7 +4488,7 @@ function Lembretes({ devedores, credores, user }) {
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Status</label>
           <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}
-            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todos</option>
             <option value="pendente">⏳ Pendentes</option>
             <option value="concluido">✅ Concluídos</option>
@@ -4512,7 +4498,7 @@ function Lembretes({ devedores, credores, user }) {
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Prioridade</label>
           <select value={filtroPrior} onChange={e=>setFiltroPrior(e.target.value)}
-            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todas</option>
             {PRIOR.map(p=><option key={p.v} value={p.v}>{p.l}</option>)}
           </select>
@@ -4520,7 +4506,7 @@ function Lembretes({ devedores, credores, user }) {
         <div>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Buscar</label>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Devedor ou descrição..."
-            style={{padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish",minWidth:200}}/>
+            style={{padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Plus Jakarta Sans",minWidth:200}}/>
         </div>
       </div>
 
@@ -4621,7 +4607,7 @@ function Lembretes({ devedores, credores, user }) {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {TIPOS_LEM.map(t=>(
                   <button key={t.v} onClick={()=>F("tipo",t.v)}
-                    style={{padding:"9px 12px",border:`1.5px solid ${form.tipo===t.v?t.cor:"#e2e8f0"}`,borderRadius:10,background:form.tipo===t.v?t.bg:"#fff",color:form.tipo===t.v?t.cor:"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish",textAlign:"left"}}>
+                    style={{padding:"9px 12px",border:`1.5px solid ${form.tipo===t.v?t.cor:"#e2e8f0"}`,borderRadius:10,background:form.tipo===t.v?t.bg:"#fff",color:form.tipo===t.v?t.cor:"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Plus Jakarta Sans",textAlign:"left"}}>
                     {t.l}
                   </button>
                 ))}
@@ -4632,7 +4618,7 @@ function Lembretes({ devedores, credores, user }) {
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Devedor *</label>
               <select value={form.devedor_id} onChange={e=>F("devedor_id",e.target.value)}
-                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
                 <option value="">— Selecione o devedor —</option>
                 {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
               </select>
@@ -4643,7 +4629,7 @@ function Lembretes({ devedores, credores, user }) {
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição *</label>
               <input value={form.descricao} onChange={e=>F("descricao",e.target.value)}
                 placeholder="Ex: Cliente prometeu pagar R$ 500 no dia 15/04"
-                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans"}}/>
             </div>
 
             {/* Data e hora */}
@@ -4666,7 +4652,7 @@ function Lembretes({ devedores, credores, user }) {
               <div style={{display:"flex",gap:8}}>
                 {PRIOR.map(p=>(
                   <button key={p.v} onClick={()=>F("prioridade",p.v)}
-                    style={{flex:1,padding:"8px",border:`1.5px solid ${form.prioridade===p.v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.prioridade===p.v?"#ede9fe":"#fff",color:form.prioridade===p.v?"#4f46e5":"#64748b",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Mulish"}}>
+                    style={{flex:1,padding:"8px",border:`1.5px solid ${form.prioridade===p.v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.prioridade===p.v?"#ede9fe":"#fff",color:form.prioridade===p.v?"#4f46e5":"#64748b",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Plus Jakarta Sans"}}>
                     {p.l}
                   </button>
                 ))}
@@ -4678,7 +4664,7 @@ function Lembretes({ devedores, credores, user }) {
               <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
               <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)}
                 placeholder="Detalhes adicionais sobre a promessa ou acordo verbal..."
-                rows={3} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                rows={3} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Plus Jakarta Sans",resize:"vertical"}}/>
             </div>
 
             <div style={{display:"flex",gap:10,paddingTop:4}}>
@@ -4768,19 +4754,19 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
   const KPI = ({l,v,c,sub}) => (
     <div style={{background:"#fff",borderRadius:16,padding:"16px 20px",border:"1px solid #f1f5f9"}}>
       <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:".05em",marginBottom:4}}>{l}</p>
-      <p style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:c||"#0f172a"}}>{v}</p>
+      <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:c||"#0f172a"}}>{v}</p>
       {sub&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{sub}</p>}
     </div>
   );
 
   return (
     <div>
-      <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:6}}>Relatórios & Carteira</h2>
+      <h2 style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:22,color:"#0f172a",marginBottom:6}}>Relatórios & Carteira</h2>
 
       {/* Abas */}
       <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
         {[["geral","📊 Geral"],["credor","🏛 Por Credor"],["despesas","💸 Despesas"]].map(([a,l])=>(
-          <button key={a} onClick={()=>setAbaRel(a)} style={{padding:"8px 18px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:abaRel===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaRel===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
+          <button key={a} onClick={()=>setAbaRel(a)} style={{padding:"8px 18px",border:"none",background:"none",cursor:"pointer",fontFamily:"Plus Jakarta Sans",fontWeight:700,fontSize:13,color:abaRel===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaRel===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
         ))}
       </div>
 
@@ -4788,7 +4774,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap",alignItems:"flex-end"}}>
         <div style={{flex:1,minWidth:200}}>
           <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Filtrar por Credor</label>
-          <select value={credorSel} onChange={e=>setCredorSel(e.target.value)} style={{width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+          <select value={credorSel} onChange={e=>setCredorSel(e.target.value)} style={{width:"100%",padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Plus Jakarta Sans"}}>
             <option value="">Todos os credores</option>
             {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
@@ -4812,11 +4798,11 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
           {/* Tabela devedores */}
           <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
             <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>Devedores — {devsFiltrados.length} registros</p>
+              <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a"}}>Devedores — {devsFiltrados.length} registros</p>
             </div>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                <thead><tr style={{background:"#f8fafc"}}>
+                <thead><tr style={{background:"#f1f5f9"}}>
                   {["Devedor","Credor","Status","Nominal","Pago","Em Aberto","Atraso"].map(h=>(
                     <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>
                   ))}
@@ -4854,12 +4840,12 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
             <div key={c.id} style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",marginBottom:16,overflow:"hidden"}}>
               <div style={{background:"linear-gradient(135deg,#4f46e5,#7c3aed)",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <p style={{fontFamily:"Syne",fontWeight:700,fontSize:15,color:"#fff"}}>{c.nome}</p>
+                  <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:15,color:"#fff"}}>{c.nome}</p>
                   <p style={{fontSize:11,color:"rgba(255,255,255,.7)"}}>{c.qtdDevedores} devedor{c.qtdDevedores>1?"es":""} · Taxa de recuperação: <b style={{color:"#a5f3fc"}}>{c.taxa}%</b></p>
                 </div>
                 <div style={{textAlign:"right"}}>
                   <p style={{fontSize:11,color:"rgba(255,255,255,.6)"}}>Em aberto</p>
-                  <p style={{fontFamily:"Syne",fontWeight:800,fontSize:20,color:"#fff"}}>{fmt(c.aberto)}</p>
+                  <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:20,color:"#fff"}}>{fmt(c.aberto)}</p>
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:0}}>
@@ -4889,12 +4875,12 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
         <div>
           <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
             <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f5f9"}}>
-              <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>Despesas por Devedor</p>
+              <p style={{fontFamily:"Space Grotesk",fontWeight:700,fontSize:14,color:"#0f172a"}}>Despesas por Devedor</p>
               <p style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Valores lançados nas dívidas como despesas operacionais</p>
             </div>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                <thead><tr style={{background:"#f8fafc"}}>
+                <thead><tr style={{background:"#f1f5f9"}}>
                   {["Devedor","Credor","Dívida","Despesas","Honorários Estimados","Status"].map(h=>(
                     <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>
                   ))}
@@ -4919,7 +4905,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
                 </tbody>
               </table>
             </div>
-            <div style={{padding:"10px 18px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",fontSize:12}}>
+            <div style={{padding:"10px 18px",background:"#f1f5f9",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",fontSize:12}}>
               <span style={{color:"#64748b"}}>Total de Despesas:</span>
               <b style={{color:"#d97706"}}>{fmt(devsFiltrados.reduce((s,d)=>(d.dividas||[]).reduce((ss,div)=>ss+(div.despesas||0),s),0))}</b>
             </div>
@@ -5026,65 +5012,121 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight:"100vh",display:"flex",fontFamily:"Mulish",background:"#f8fafc" }}>
+    <div style={{ minHeight:"100vh",display:"flex",fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#f1f5f9" }}>
       <FontLink/>
-      {sideOpen && <div onClick={()=>setSideOpen(false)} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:30 }}/>}
+      <style>{`
+        *{box-sizing:border-box}
+        ::-webkit-scrollbar{width:4px;height:4px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+        .nav-btn{transition:all .18s cubic-bezier(.4,0,.2,1)!important}
+        .nav-btn:hover:not(.active){background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.85)!important;transform:translateX(3px)}
+        .nav-btn.active{background:linear-gradient(135deg,#6366f1,#8b5cf6)!important;color:#fff!important;box-shadow:0 4px 15px rgba(99,102,241,.35)!important}
+        .mr-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+        .mr-btn:active{transform:scale(.97)}
+        @keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse2{0%,100%{opacity:1}50%{opacity:.5}}
+        .page-content{animation:fadeInUp .22s ease}
+        .sync-dot{animation:pulse2 1.2s infinite}
+        @media(max-width:768px){.mr-aside{transform:translateX(-100%)!important}.mr-aside.open{transform:translateX(0)!important}.mr-main{margin-left:0!important}}
+      `}</style>
 
-      <aside style={{ position:"fixed",top:0,left:0,bottom:0,width:220,background:"#0f172a",display:"flex",flexDirection:"column",zIndex:40,transform:sideOpen?"translateX(0)":"translateX(-100%)",transition:"transform .2s" }} className="lg-sidebar">
-        <style>{`.lg-sidebar{transform:translateX(0)!important}@media(max-width:768px){.lg-sidebar{transform:${sideOpen?"translateX(0)":"translateX(-100%)"}}}`}</style>
-        <div style={{ padding:"20px 18px",borderBottom:"1px solid rgba(255,255,255,.06)" }}>
-          <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-            <div style={{ width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#4f46e5,#7c3aed)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-              <span style={{ color:"#fff",fontFamily:"Syne",fontWeight:800,fontSize:14 }}>MR</span>
+      {sideOpen && <div onClick={()=>setSideOpen(false)} style={{ position:"fixed",inset:0,background:"rgba(15,12,41,.55)",zIndex:30,backdropFilter:"blur(3px)" }}/>}
+
+      {/* ── SIDEBAR ─── */}
+      <aside className={`mr-aside${sideOpen?" open":""}`} style={{ position:"fixed",top:0,left:0,bottom:0,width:248,background:"linear-gradient(180deg,#100d2e 0%,#17103d 60%,#0d0f1d 100%)",display:"flex",flexDirection:"column",zIndex:40,transition:"transform .25s cubic-bezier(.4,0,.2,1)",borderRight:"1px solid rgba(255,255,255,.06)",boxShadow:"4px 0 24px rgba(0,0,0,.25)" }}>
+        
+        {/* Logo */}
+        <div style={{ padding:"22px 18px 16px",borderBottom:"1px solid rgba(255,255,255,.05)" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:12 }}>
+            <div style={{ width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 16px rgba(99,102,241,.55)",flexShrink:0 }}>
+              <span style={{ color:"#fff",fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,letterSpacing:"-1px" }}>MR</span>
             </div>
             <div>
-              <p style={{ color:"#fff",fontFamily:"Syne",fontWeight:700,fontSize:14,lineHeight:1.1 }}>MR Cobranças</p>
-              <p style={{ color:"rgba(255,255,255,.4)",fontSize:10 }}>CRM Jurídico</p>
+              <p style={{ color:"#fff",fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:15,lineHeight:1.1,letterSpacing:"-.4px" }}>MR Cobranças</p>
+              <div style={{ display:"flex",alignItems:"center",gap:5,marginTop:4 }}>
+                <div style={{ width:5,height:5,borderRadius:99,background:"#4ade80" }}/>
+                <p style={{ color:"rgba(255,255,255,.35)",fontSize:9,letterSpacing:".6px",textTransform:"uppercase" }}>CRM Jurídico</p>
+              </div>
             </div>
           </div>
         </div>
-        <nav style={{ flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto",overflowX:"hidden",scrollbarWidth:"thin",scrollbarColor:"rgba(255,255,255,.1) transparent" }}>
+
+        {/* Nav */}
+        <nav style={{ flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto",overflowX:"hidden" }}>
           {NAV.map(n=>(
             <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); }}
-              style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"Mulish",fontSize:13,fontWeight:600,background:tab===n.id?"linear-gradient(135deg,#4f46e5,#7c3aed)":"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.5)",transition:"all .15s" }}>
-              {n.icon} {n.label}
+              className={`nav-btn${tab===n.id?" active":""}`}
+              style={{ display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:12,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:600,background:"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.4)",width:"100%",position:"relative",outline:"none" }}>
+              <span style={{ fontSize:17,flexShrink:0,lineHeight:1 }}>{n.icon}</span>
+              <span style={{ flex:1 }}>{n.label}</span>
+              {tab===n.id&&<div style={{ width:3,height:18,background:"#a5b4fc",borderRadius:"3px 0 0 3px",position:"absolute",right:0,top:"50%",transform:"translateY(-50%)" }}/>}
             </button>
           ))}
         </nav>
-        <div style={{ padding:"14px 16px",borderTop:"1px solid rgba(255,255,255,.06)" }}>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-            <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              <div style={{ width:30,height:30,borderRadius:99,background:"rgba(99,102,241,.3)",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <span style={{ color:"#818cf8",fontFamily:"Syne",fontWeight:800,fontSize:11 }}>{user.nome[0]}</span>
-              </div>
-              <div>
-                <p style={{ color:"#fff",fontSize:11,fontWeight:700 }}>{user.nome.split(" ")[0]}</p>
-                <p style={{ color:"rgba(255,255,255,.35)",fontSize:10 }}>{user.oab}</p>
+
+        {/* Usuário */}
+        <div style={{ padding:"12px 10px 16px",borderTop:"1px solid rgba(255,255,255,.05)" }}>
+          <div style={{ background:"rgba(255,255,255,.04)",borderRadius:14,padding:"11px 12px",border:"1px solid rgba(255,255,255,.07)",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:10,minWidth:0 }}>
+              <div style={{ width:36,height:36,borderRadius:12,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,fontWeight:700,color:"#fff",fontFamily:"'Space Grotesk',sans-serif" }}>{user.nome[0]}</div>
+              <div style={{ minWidth:0 }}>
+                <p style={{ color:"#f1f5f9",fontSize:12,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user.nome.split(" ")[0]}</p>
+                <p style={{ color:"rgba(255,255,255,.28)",fontSize:10,marginTop:1 }}>{user.oab}</p>
               </div>
             </div>
             <div style={{ display:"flex",gap:4 }}>
-              <button onClick={carregarTudo} title="Atualizar" style={{ color:"rgba(255,255,255,.4)",background:"none",border:"none",cursor:"pointer",fontSize:14,padding:4 }}>🔄</button>
-              <button onClick={()=>setUser(null)} title="Sair" style={{ color:"rgba(255,255,255,.3)",background:"none",border:"none",cursor:"pointer",padding:4 }}>{I.logout}</button>
+              <button onClick={carregarTudo} title="Atualizar" style={{ color:"rgba(255,255,255,.3)",background:"rgba(255,255,255,.06)",border:"none",cursor:"pointer",fontSize:13,padding:"6px 7px",borderRadius:9,transition:"all .15s",lineHeight:1 }}
+                onMouseEnter={e=>{e.currentTarget.style.color="#fff";e.currentTarget.style.background="rgba(255,255,255,.12)"}} onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,.3)";e.currentTarget.style.background="rgba(255,255,255,.06)"}}>🔄</button>
+              <button onClick={()=>setUser(null)} title="Sair" style={{ color:"rgba(255,255,255,.3)",background:"rgba(255,255,255,.06)",border:"none",cursor:"pointer",padding:"6px 7px",borderRadius:9,display:"flex",alignItems:"center",transition:"all .15s" }}
+                onMouseEnter={e=>{e.currentTarget.style.color="#fca5a5";e.currentTarget.style.background="rgba(220,38,38,.15)"}} onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,.3)";e.currentTarget.style.background="rgba(255,255,255,.06)"}}>{I.logout}</button>
             </div>
           </div>
         </div>
       </aside>
 
-      <main style={{ flex:1,marginLeft:220,display:"flex",flexDirection:"column",minWidth:0 }}>
-        <style>{`@media(max-width:768px){main{margin-left:0!important}}`}</style>
-        <header style={{ background:"#fff",borderBottom:"1px solid #f1f5f9",padding:"12px 24px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:20 }}>
-          <button onClick={()=>setSideOpen(true)} style={{ background:"none",border:"none",cursor:"pointer",color:"#64748b",display:"flex",padding:4 }}>{I.menu}</button>
-          <span style={{ fontFamily:"Syne",fontWeight:700,fontSize:16,color:"#0f172a" }}>{NAV.find(n=>n.id===tab)?.label}</span>
-          {carregando && <span style={{ fontSize:11,color:"#94a3b8" }}>⏳ sincronizando...</span>}
-          <span style={{ marginLeft:"auto",fontSize:12,color:"#94a3b8" }}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</span>
-        </header>
-        <div style={{ flex:1,padding:24,overflowY:"auto" }}>
-          {carregando && devedores.length===0 ? (
-            <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:200,flexDirection:"column",gap:12 }}>
-              <div style={{ fontSize:36 }}>⏳</div>
-              <p style={{ color:"#94a3b8",fontSize:14 }}>Carregando dados do servidor...</p>
+      {/* ── MAIN ─── */}
+      <main className="mr-main" style={{ flex:1,marginLeft:248,display:"flex",flexDirection:"column",minWidth:0 }}>
+        
+        {/* Header */}
+        <header style={{ background:"rgba(255,255,255,.9)",backdropFilter:"blur(16px)",WebkitBackdropFilter:"blur(16px)",borderBottom:"1px solid #e2e8f0",padding:"0 28px",display:"flex",alignItems:"center",gap:14,position:"sticky",top:0,zIndex:20,height:60,boxShadow:"0 1px 12px rgba(0,0,0,.07)" }}>
+          <button onClick={()=>setSideOpen(v=>!v)} style={{ background:"none",border:"none",cursor:"pointer",color:"#64748b",display:"flex",padding:6,borderRadius:9,transition:"all .15s" }}
+            onMouseEnter={e=>{e.currentTarget.style.background="#f1f5f9";e.currentTarget.style.color="#374151"}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="#64748b"}}>{I.menu}</button>
+          
+          <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+            <span style={{ fontSize:11,color:"#94a3b8",fontWeight:500 }}>MR</span>
+            <span style={{ color:"#d1d5db",fontSize:13 }}>›</span>
+            <span style={{ fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,color:"#0f172a",letterSpacing:"-.4px" }}>{NAV.find(n=>n.id===tab)?.label}</span>
+          </div>
+
+          {carregando && (
+            <div style={{ display:"flex",alignItems:"center",gap:7,background:"#ede9fe",borderRadius:99,padding:"4px 12px",border:"1px solid #ddd6fe" }}>
+              <div className="sync-dot" style={{ width:7,height:7,borderRadius:99,background:"#6366f1" }}/>
+              <span style={{ fontSize:11,color:"#6366f1",fontWeight:700 }}>Sincronizando</span>
             </div>
-          ) : PAGE[tab]}
+          )}
+
+          <div style={{ marginLeft:"auto",display:"flex",alignItems:"center",gap:10 }}>
+            <p style={{ fontSize:12,color:"#94a3b8",fontWeight:500 }}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
+            {lembretesList.filter(l=>l.status==="pendente"&&l.data_prometida<=new Date().toISOString().slice(0,10)).length>0&&(
+              <button onClick={()=>setTab("lembretes")} style={{ position:"relative",background:"linear-gradient(135deg,#fef2f2,#fee2e2)",border:"1px solid #fecaca",borderRadius:10,padding:"6px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .15s",boxShadow:"0 1px 4px rgba(220,38,38,.15)" }}
+                onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 12px rgba(220,38,38,.25)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 4px rgba(220,38,38,.15)"}>
+                <span style={{ fontSize:15 }}>🔔</span>
+                <span style={{ fontSize:12,color:"#dc2626",fontWeight:800 }}>{lembretesList.filter(l=>l.status==="pendente"&&l.data_prometida<=new Date().toISOString().slice(0,10)).length}</span>
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Page content */}
+        <div style={{ flex:1,padding:"26px 30px",overflowY:"auto" }}>
+          {carregando && devedores.length===0 ? (
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",flexDirection:"column",gap:16 }}>
+              <div style={{ width:60,height:60,borderRadius:20,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,boxShadow:"0 8px 32px rgba(99,102,241,.4)" }}>⏳</div>
+              <p style={{ color:"#475569",fontSize:15,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif" }}>Carregando dados...</p>
+              <p style={{ color:"#94a3b8",fontSize:13 }}>Conectando ao Supabase</p>
+            </div>
+          ) : <div className="page-content">{PAGE[tab]}</div>}
         </div>
       </main>
     </div>
