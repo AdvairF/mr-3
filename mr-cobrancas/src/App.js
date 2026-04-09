@@ -1088,16 +1088,17 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
     const validas = custasNovas.filter(c=>c.descricao&&c.valor&&c.data);
     if(!validas.length) return alert("Preencha descrição, valor e data de todas as custas.");
     // Cria uma "dívida" especial só de custas (sem valor principal, só custas)
+    const totalCustas = validas.reduce((s,c)=>s+(parseFloat(c.valor)||0),0);
     const dividaCustas = {
       id:Date.now(),
       descricao:"Custas Judiciais",
-      valor_total:0, // sem valor principal
+      valor_total:totalCustas,   // soma de todas as custas
       data_origem:validas[0].data,
       data_vencimento:validas[0].data,
       parcelas:[], criada_em:new Date().toISOString().slice(0,10),
       indexador:"igpm",multa_pct:0,juros_am:0,honorarios_pct:0,
       data_inicio_atualizacao:validas[0].data,
-      despesas:0,observacoes:"Lançamento avulso de custas",
+      despesas:0,observacoes:"Lançamento avulso de custas judiciais",
       custas:validas, _so_custas:true,
     };
     const dividas=[...(sel.dividas||[]),dividaCustas];
@@ -1366,38 +1367,80 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
             <div>
               {dividas.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24,background:"#f8fafc",borderRadius:12}}>Nenhuma dívida cadastrada.</p>}
               {dividas.map(div=>{
-                const pct=div.parcelas?.length>0?Math.round(div.parcelas.filter(p=>p.status==="pago").length/div.parcelas.length*100):0;
+                const ehSoCustas = div._so_custas === true;
+                const custas = div.custas||[];
+                const totalCustas = custas.reduce((s,c)=>s+(parseFloat(c.valor)||0),0);
+                const pct = div.parcelas?.length>0 ? Math.round(div.parcelas.filter(p=>p.status==="pago").length/div.parcelas.length*100) : 0;
+                const bordaColor = ehSoCustas ? "#fed7aa" : "#e2e8f0";
+                const bgColor    = ehSoCustas ? "#fffbf7" : "#fff";
                 return(
-                  <div key={div.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
+                  <div key={div.id} style={{border:`1.5px solid ${bordaColor}`,borderRadius:14,padding:14,marginBottom:12,background:bgColor}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                      <div>
-                        <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao}</p>
-                        <p style={{fontSize:11,color:"#64748b"}}>{div.parcelas?.length||0} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</p>
-                        {div.indexador&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Índice: {div.indexador?.toUpperCase()} · Juros: {div.juros_am}%am · Multa: {div.multa_pct}% · Honorários: {div.honorarios_pct}%</p>}
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                          {ehSoCustas&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:"#fed7aa",color:"#c2410c"}}>🏛 CUSTAS</span>}
+                          <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao}</p>
+                        </div>
+                        {ehSoCustas ? (
+                          // Exibição especial para custas
+                          <div>
+                            <p style={{fontSize:11,color:"#c2410c",fontWeight:600}}>
+                              {custas.length} item{custas.length>1?"s":""} · Total: <b>{fmt(totalCustas)}</b> · Só correção monetária
+                            </p>
+                            {custas.map((c,ci)=>(
+                              <div key={ci} style={{display:"flex",gap:12,fontSize:11,color:"#64748b",marginTop:3}}>
+                                <span style={{color:"#0f172a",fontWeight:600}}>{c.descricao}</span>
+                                <span style={{color:"#c2410c",fontWeight:700}}>{fmt(parseFloat(c.valor)||0)}</span>
+                                <span>{fmtDate(c.data)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          // Exibição normal para dívidas
+                          <div>
+                            <p style={{fontSize:11,color:"#64748b"}}>
+                              {div.parcelas?.length>0
+                                ? <>{div.parcelas.length} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</>
+                                : <>À vista · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · Venc: {fmtDate(div.data_vencimento||div.data_origem)}</>
+                              }
+                            </p>
+                            {div.indexador&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Índice: {div.indexador?.toUpperCase()} · Juros: {div.juros_am}%am · Multa: {div.multa_pct}% · Honorários: {div.honorarios_pct}%</p>}
+                          </div>
+                        )}
                       </div>
-                      <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑</button>
+                      <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"3px 8px",cursor:"pointer",fontSize:10,marginLeft:8}}>🗑</button>
                     </div>
-                    <div style={{height:4,background:"#f1f5f9",borderRadius:99,marginBottom:10}}><div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/></div>
-                    <div style={{maxHeight:160,overflowY:"auto"}}>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                        <thead><tr style={{background:"#f8fafc"}}>{["Nº","Valor","Vencimento","Status",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
-                        <tbody>{(div.parcelas||[]).map((p,pi)=>{
-                          const atr=p.status==="pendente"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date();
-                          const sR=atr?"atrasado":p.status;
-                          const cS={pago:"#16a34a",atrasado:"#dc2626",pendente:"#64748b"};
-                          const bS={pago:"#dcfce7",atrasado:"#fee2e2",pendente:"#f1f5f9"};
-                          return(
-                            <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
-                              <td style={{padding:"5px 8px",fontWeight:700}}>{pi+1}</td>
-                              <td style={{padding:"5px 8px",color:"#4f46e5",fontWeight:700}}>{fmt(p.valor)}</td>
-                              <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc||p.vencimento)}</td>
-                              <td style={{padding:"5px 8px"}}><span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bS[sR]||"#f1f5f9",color:cS[sR]||"#64748b"}}>{sR==="pago"?"Pago":sR==="atrasado"?"Atrasado":"Pendente"}</span></td>
-                              <td style={{padding:"5px 8px"}}>{p.status!=="pago"?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓</button>:<button onClick={()=>toggleParcela(div.id,p.id,"pendente")} style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10}}>↩</button>}</td>
-                            </tr>
-                          );
-                        })}</tbody>
-                      </table>
-                    </div>
+                    {!ehSoCustas&&(
+                      <>
+                        {div.parcelas?.length>0&&(
+                          <div style={{height:4,background:"#f1f5f9",borderRadius:99,marginBottom:10}}>
+                            <div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/>
+                          </div>
+                        )}
+                        {div.parcelas?.length>0&&(
+                          <div style={{maxHeight:160,overflowY:"auto"}}>
+                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                              <thead><tr style={{background:"#f8fafc"}}>{["Nº","Valor","Vencimento","Status",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
+                              <tbody>{(div.parcelas||[]).map((p,pi)=>{
+                                const atr=p.status==="pendente"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date();
+                                const sR=atr?"atrasado":p.status;
+                                const cS={pago:"#16a34a",atrasado:"#dc2626",pendente:"#64748b"};
+                                const bS={pago:"#dcfce7",atrasado:"#fee2e2",pendente:"#f1f5f9"};
+                                return(
+                                  <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
+                                    <td style={{padding:"5px 8px",fontWeight:700}}>{pi+1}</td>
+                                    <td style={{padding:"5px 8px",color:"#4f46e5",fontWeight:700}}>{fmt(p.valor)}</td>
+                                    <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc||p.vencimento)}</td>
+                                    <td style={{padding:"5px 8px"}}><span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bS[sR]||"#f1f5f9",color:cS[sR]||"#64748b"}}>{sR==="pago"?"Pago":sR==="atrasado"?"Atrasado":"Pendente"}</span></td>
+                                    <td style={{padding:"5px 8px"}}>{p.status!=="pago"?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓</button>:<button onClick={()=>toggleParcela(div.id,p.id,"pendente")} style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10}}>↩</button>}</td>
+                                  </tr>
+                                );
+                              })}</tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 );
               })}
