@@ -280,32 +280,30 @@ function Dashboard({ devedores, processos, andamentos, user }) {
   );
 }
 
+
 // ═══════════════════════════════════════════════════════════════
 // DEVEDORES
 // ═══════════════════════════════════════════════════════════════
 const FORM_DEV = { nome:"",cpf_cnpj:"",tipo:"PJ",telefone:"",email:"",cidade:"Goiânia",status:"ativo",credor_id:"" };
+const DIVIDA_VAZIA = { descricao:"", valor_total:"", data_primeira_parcela:"", qtd_parcelas:"1", parcelas:[] };
 
 function Devedores({ devedores, setDevedores, credores }) {
   const [search, setSearch] = useState("");
-  const [modal, setModal]   = useState(null); // null | "novo" | "ver"
+  const [modal, setModal]   = useState(null);
   const [sel, setSel]       = useState(null);
-  const [aba, setAba]       = useState("dividas"); // "dados" | "dividas"
+  const [aba, setAba]       = useState("dividas");
   const [form, setForm]     = useState(FORM_DEV);
   const [loading, setLoading] = useState(false);
   const [wp, setWp]         = useState(null);
+  const [nd, setNd]         = useState(DIVIDA_VAZIA);
   const F = (k,v) => setForm(f=>({...f,[k]:v}));
-
-  // ── Estado da nova dívida ────────────────────────────────────
-  const DIVIDA_VAZIA = { descricao:"", valor_total:"", data_vencimento:"", usar_parcelas:false, qtd_parcelas:"1", data_primeira_parcela:"", parcelas:[] };
-  const [novaDivida, setNovaDivida] = useState(DIVIDA_VAZIA);
-  const ND = (k,v) => setNovaDivida(d=>({...d,[k]:v}));
+  const ND = (k,v) => setNd(d=>({...d,[k]:v}));
 
   const filtered = devedores.filter(d =>
     (d.nome||"").toLowerCase().includes(search.toLowerCase()) ||
     (d.cpf_cnpj||"").includes(search)
   );
 
-  // ── Gerar parcelas iguais ────────────────────────────────────
   function gerarParcs(total, qtd, dataInicio) {
     const arr = [];
     for(let i=0;i<qtd;i++){
@@ -316,82 +314,59 @@ function Devedores({ devedores, setDevedores, credores }) {
     return arr;
   }
 
-  // ── Confirmar parcelas da nova dívida ───────────────────────
   function confirmarParcelas() {
-    const total = parseFloat(novaDivida.valor_total)||0;
-    const qtd   = parseInt(novaDivida.qtd_parcelas)||1;
-    const data  = novaDivida.data_primeira_parcela || novaDivida.data_vencimento;
-    if(!data) return alert("Informe a data de vencimento.");
-    const parcs = gerarParcs(total, qtd, data);
-    setNovaDivida(d=>({...d, parcelas:parcs}));
+    const total = parseFloat(nd.valor_total)||0;
+    const qtd   = parseInt(nd.qtd_parcelas)||1;
+    if(!nd.data_primeira_parcela) return alert("Informe a data da 1ª parcela.");
+    setNd(d=>({...d, parcelas: gerarParcs(total, qtd, d.data_primeira_parcela)}));
   }
 
-  // ── Editar parcela individual ────────────────────────────────
   function editParc(id, campo, val) {
-    setNovaDivida(d=>({...d, parcelas: d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})}));
+    setNd(d=>({...d, parcelas: d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})}));
   }
-  function addParc() {
-    const ultima = novaDivida.parcelas[novaDivida.parcelas.length-1];
-    const proxD  = ultima ? (()=>{const d=new Date(ultima.venc+"T12:00:00");d.setMonth(d.getMonth()+1);return d.toISOString().slice(0,10);})() : new Date().toISOString().slice(0,10);
-    setNovaDivida(d=>({...d, parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ultima?.valor||0,venc:proxD,status:"pendente",pago_em:null}]}));
-  }
-  function remParc(id) { setNovaDivida(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)})); }
 
-  // ── Salvar devedor novo ──────────────────────────────────────
+  function addParc() {
+    setNd(d=>{
+      const ultima = d.parcelas[d.parcelas.length-1];
+      const proxD = ultima ? (()=>{const dd=new Date(ultima.venc+"T12:00:00");dd.setMonth(dd.getMonth()+1);return dd.toISOString().slice(0,10);})() : new Date().toISOString().slice(0,10);
+      return {...d, parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ultima?.valor||0,venc:proxD,status:"pendente",pago_em:null}]};
+    });
+  }
+
+  function remParc(id) { setNd(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)})); }
+
   async function salvarDevedor() {
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
     try {
-      const payload = { ...form, credor_id: form.credor_id?parseInt(form.credor_id):null, dividas: JSON.stringify([]) };
-      const res  = await dbInsert("devedores", payload);
+      const payload = { ...form, credor_id:form.credor_id?parseInt(form.credor_id):null, dividas:JSON.stringify([]), valor_original:0 };
+      const res = await dbInsert("devedores", payload);
       const novo = Array.isArray(res)?res[0]:res;
-      if(novo) {
-        setDevedores(p=>[...p,{...novo,dividas:[]}]);
-        setModal(null);
-        setForm(FORM_DEV);
-      }
-    } catch(e){ alert("Erro ao salvar: "+e.message); }
+      if(novo) { setDevedores(p=>[...p,{...novo,dividas:[]}]); setModal(null); setForm(FORM_DEV); }
+    } catch(e){ alert("Erro: "+e.message); }
     setLoading(false);
   }
 
-  // ── Adicionar dívida ao devedor ──────────────────────────────
   async function adicionarDivida() {
     if(!sel) return;
-    const total = parseFloat(novaDivida.valor_total)||0;
+    const total = parseFloat(nd.valor_total)||0;
     if(!total) return alert("Informe o valor da dívida.");
-    if(novaDivida.parcelas.length===0) return alert("Gere as parcelas antes de salvar.");
-
-    const divida = {
-      id: Date.now(),
-      descricao: novaDivida.descricao || "Dívida",
-      valor_total: total,
-      data_vencimento: novaDivida.data_vencimento,
-      parcelas: novaDivida.parcelas,
-      criada_em: new Date().toISOString().slice(0,10),
-    };
-
+    if(nd.parcelas.length===0) return alert("Clique em 'Gerar Parcelas' antes de salvar.");
+    const divida = { id:Date.now(), descricao:nd.descricao||"Dívida", valor_total:total, data_vencimento:nd.data_primeira_parcela, parcelas:nd.parcelas, criada_em:new Date().toISOString().slice(0,10) };
     const dividas = [...(sel.dividas||[]), divida];
     const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
     try {
       const res = await dbUpdate("devedores", sel.id, { dividas:JSON.stringify(dividas), valor_original });
       const atu = Array.isArray(res)?res[0]:res;
-      if(atu){
-        const parsed = {...atu, dividas};
-        setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
-        setSel(parsed);
-        setNovaDivida(DIVIDA_VAZIA);
-        alert("Dívida adicionada!");
-      }
+      if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); setNd(DIVIDA_VAZIA); alert("Dívida adicionada!"); }
     } catch(e){ alert("Erro: "+e.message); }
   }
 
-  // ── Toggle parcela paga ──────────────────────────────────────
   async function toggleParcela(dividaId, parcId, novoStatus) {
     if(!sel) return;
     const dividas = (sel.dividas||[]).map(div=>{
       if(div.id!==dividaId) return div;
-      const parcelas = div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null});
-      return {...div,parcelas};
+      return {...div, parcelas: div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null})};
     });
     const todasPagas = dividas.every(div=>div.parcelas.every(p=>p.status==="pago"));
     const algumaPaga = dividas.some(div=>div.parcelas.some(p=>p.status==="pago"));
@@ -399,15 +374,10 @@ function Devedores({ devedores, setDevedores, credores }) {
     try {
       const res = await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:novoStatusDev});
       const atu = Array.isArray(res)?res[0]:res;
-      if(atu){
-        const parsed={...atu,dividas};
-        setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
-        setSel(parsed);
-      }
+      if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
     } catch(e){ console.error(e); }
   }
 
-  // ── Excluir dívida ───────────────────────────────────────────
   async function excluirDivida(dividaId) {
     if(!sel||!window.confirm("Excluir esta dívida?")) return;
     const dividas = (sel.dividas||[]).filter(d=>d.id!==dividaId);
@@ -417,7 +387,6 @@ function Devedores({ devedores, setDevedores, credores }) {
     if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
   }
 
-  // ── Excluir devedor ──────────────────────────────────────────
   async function excluirDevedor(d) {
     if(!window.confirm(`Excluir "${d.nome}"?`)) return;
     await dbDelete("devedores",d.id);
@@ -427,12 +396,12 @@ function Devedores({ devedores, setDevedores, credores }) {
 
   const WP_MSGS = d => [
     {titulo:"Notificação",msg:`Prezado(a) *${d.nome}*, consta débito em aberto.\n\nEntre em contato para regularização.\n\n*MR Cobranças* | (62) 9 9999-0000`},
-    {titulo:"Proposta de Acordo",msg:`Olá *${d.nome.split(" ")[0]}*! Temos condições especiais para quitação do seu débito.\n\nFale conosco!\n\n*MR Cobranças* | (62) 9 9999-0000`},
+    {titulo:"Proposta de Acordo",msg:`Olá *${(d.nome||"").split(" ")[0]}*! Condições especiais para quitação do débito.\n\n*MR Cobranças* | (62) 9 9999-0000`},
     {titulo:"Aviso Judicial",msg:`*AVISO — ${d.nome}*\n\nSeu débito foi encaminhado para cobrança judicial. Ainda é possível acordo.\n\n*Escritório MR Cobranças*`},
   ];
 
-  const corStatus={pago:"#16a34a",pendente:"#64748b",atrasado:"#dc2626",negociando:"#d97706"};
-  const bgStatus={pago:"#dcfce7",pendente:"#f1f5f9",atrasado:"#fee2e2",negociando:"#fef9c3"};
+  const corSt={pago:"#16a34a",pendente:"#64748b",atrasado:"#dc2626",negociando:"#d97706"};
+  const bgSt={pago:"#dcfce7",pendente:"#f1f5f9",atrasado:"#fee2e2",negociando:"#fef9c3"};
 
   return (
     <div>
@@ -446,19 +415,18 @@ function Devedores({ devedores, setDevedores, credores }) {
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ..." style={{width:"100%",padding:"10px 12px 10px 36px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
       </div>
 
-      {/* Tabela */}
       <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{background:"#f8fafc"}}>
-              {["Nome","CPF/CNPJ","Credor","Status","Total Dívidas","Dívidas","Ações"].map(h=>(
+              {["Nome","CPF/CNPJ","Credor","Status","Total","Dívidas","Ações"].map(h=>(
                 <th key={h} style={{textAlign:"left",padding:"10px 14px",color:"#64748b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
               {filtered.map(d=>{
                 const dividas = d.dividas||[];
-                const totalDiv = dividas.reduce((s,div)=>s+(div.valor_total||0),0);
+                const totalDiv = dividas.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||0;
                 const credor = credores.find(c=>c.id===d.credor_id);
                 const totalParcs = dividas.reduce((s,div)=>s+(div.parcelas||[]).length,0);
                 const pagas = dividas.reduce((s,div)=>s+(div.parcelas||[]).filter(p=>p.status==="pago").length,0);
@@ -466,25 +434,25 @@ function Devedores({ devedores, setDevedores, credores }) {
                   <tr key={d.id} style={{borderTop:"1px solid #f8fafc"}}>
                     <td style={{padding:"11px 14px",fontWeight:700,color:"#0f172a"}}>{d.nome}</td>
                     <td style={{padding:"11px 14px",color:"#64748b",fontFamily:"monospace",fontSize:11}}>{d.cpf_cnpj||"—"}</td>
-                    <td style={{padding:"11px 14px",fontSize:11,color:"#64748b"}}>{credor?credor.nome.split(" ").slice(0,2).join(" "):"—"}</td>
+                    <td style={{padding:"11px 14px",fontSize:11,color:"#64748b"}}>{credor?(credor.nome||"").split(" ").slice(0,2).join(" "):"—"}</td>
                     <td style={{padding:"11px 14px"}}><Badge s={d.status||"ativo"}/></td>
-                    <td style={{padding:"11px 14px",fontWeight:700,color:"#4f46e5"}}>{fmt(totalDiv||d.valor_original||0)}</td>
+                    <td style={{padding:"11px 14px",fontWeight:700,color:"#4f46e5"}}>{fmt(totalDiv)}</td>
                     <td style={{padding:"11px 14px"}}>
                       {dividas.length>0?(
                         <div style={{display:"flex",alignItems:"center",gap:5}}>
-                          <span style={{fontSize:12,fontWeight:700}}>{pagas}/{totalParcs}</span>
-                          <div style={{width:40,height:4,background:"#f1f5f9",borderRadius:99}}>
+                          <span style={{fontSize:11,fontWeight:700}}>{pagas}/{totalParcs}</span>
+                          <div style={{width:36,height:4,background:"#f1f5f9",borderRadius:99}}>
                             <div style={{height:4,width:`${totalParcs?pagas/totalParcs*100:0}%`,background:"#22c55e",borderRadius:99}}/>
                           </div>
-                          <span style={{fontSize:10,color:"#94a3b8"}}>{dividas.length} dív.</span>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>{dividas.length}d</span>
                         </div>
-                      ):<span style={{color:"#94a3b8",fontSize:11}}>Sem dívidas</span>}
+                      ):<span style={{color:"#94a3b8",fontSize:11}}>—</span>}
                     </td>
                     <td style={{padding:"11px 14px"}}>
                       <div style={{display:"flex",gap:4}}>
-                        <button onClick={()=>{setSel({...d,dividas:d.dividas||[]});setAba("dividas");setModal("ver");}} title="Ver" style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>👁 Ver</button>
-                        {d.telefone&&<button onClick={()=>setWp(d)} title="WhatsApp" style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
-                        <button onClick={()=>excluirDevedor(d)} title="Excluir" style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
+                        <button onClick={()=>{setSel({...d,dividas:d.dividas||[]});setAba("dividas");setNd(DIVIDA_VAZIA);setModal("ver");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>👁 Ver</button>
+                        {d.telefone&&<button onClick={()=>setWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
+                        <button onClick={()=>excluirDevedor(d)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -494,12 +462,9 @@ function Devedores({ devedores, setDevedores, credores }) {
             </tbody>
           </table>
         </div>
-        <div style={{padding:"8px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600}}>
-          {filtered.length} devedores
-        </div>
+        <div style={{padding:"8px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600}}>{filtered.length} devedores</div>
       </div>
 
-      {/* ── MODAL NOVO DEVEDOR ── */}
       {modal==="novo"&&(
         <Modal title="Novo Devedor" onClose={()=>setModal(null)}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -512,27 +477,22 @@ function Devedores({ devedores, setDevedores, credores }) {
             <Inp label="Status" value={form.status} onChange={v=>F("status",v)} options={["ativo","negociando","pago","inativo"]}/>
             <Inp label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} options={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]}/>
           </div>
-          <p style={{fontSize:11,color:"#94a3b8",marginTop:12}}>💡 As dívidas e parcelas são adicionadas depois, na ficha do devedor.</p>
+          <p style={{fontSize:11,color:"#94a3b8",marginTop:12}}>💡 Dívidas e parcelas são adicionadas na ficha do devedor.</p>
           <div style={{display:"flex",gap:10,marginTop:16}}>
-            <Btn onClick={salvarDevedor}>{loading?"Salvando...":"Cadastrar Devedor"}</Btn>
+            <Btn onClick={salvarDevedor}>{loading?"Salvando...":"Cadastrar"}</Btn>
             <Btn onClick={()=>setModal(null)} outline>Cancelar</Btn>
           </div>
         </Modal>
       )}
 
-      {/* ── MODAL VER DEVEDOR ── */}
       {modal==="ver"&&sel&&(
-        <Modal title={sel.nome} onClose={()=>{setModal(null);setSel(null);setNovaDivida(DIVIDA_VAZIA);}} wide>
-          {/* Abas */}
+        <Modal title={sel.nome} onClose={()=>{setModal(null);setSel(null);setNd(DIVIDA_VAZIA);}} wide>
           <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
-            {["dados","dividas"].map(a=>(
-              <button key={a} onClick={()=>setAba(a)} style={{padding:"8px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:aba===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>
-                {a==="dados"?"📋 Dados":"💰 Dívidas ("+(sel.dividas||[]).length+")"}
-              </button>
+            {[["dados","📋 Dados"],["dividas","💰 Dívidas ("+(sel.dividas||[]).length+")"]].map(([a,l])=>(
+              <button key={a} onClick={()=>setAba(a)} style={{padding:"8px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:aba===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
             ))}
           </div>
 
-          {/* ABA DADOS */}
           {aba==="dados"&&(
             <div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
@@ -543,64 +503,53 @@ function Devedores({ devedores, setDevedores, credores }) {
                   </div>
                 ))}
               </div>
-              <div style={{display:"flex",gap:8}}>
-                <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir Devedor</Btn>
-              </div>
+              <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir Devedor</Btn>
             </div>
           )}
 
-          {/* ABA DÍVIDAS */}
           {aba==="dividas"&&(
             <div>
-              {/* Lista de dívidas existentes */}
               {(sel.dividas||[]).length===0&&(
-                <div style={{textAlign:"center",padding:"24px",color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12,marginBottom:16}}>
-                  Nenhuma dívida cadastrada. Adicione abaixo.
-                </div>
+                <div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12,marginBottom:16}}>Nenhuma dívida cadastrada.</div>
               )}
               {(sel.dividas||[]).map((div,di)=>{
                 const pagas=div.parcelas.filter(p=>p.status==="pago").length;
                 const pct=div.parcelas.length?Math.round(pagas/div.parcelas.length*100):0;
                 return(
-                  <div key={div.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:14}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div key={div.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                       <div>
                         <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao||"Dívida "+(di+1)}</p>
-                        <p style={{fontSize:12,color:"#64748b"}}>{div.parcelas.length} parcelas · {fmtDate(div.data_vencimento)} · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b></p>
+                        <p style={{fontSize:11,color:"#64748b"}}>{div.parcelas.length} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</p>
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:12,fontWeight:700,color:"#16a34a"}}>{pct}%</span>
-                        <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
-                      </div>
+                      <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
                     </div>
-                    {/* Barra */}
-                    <div style={{height:5,background:"#f1f5f9",borderRadius:99,marginBottom:10}}>
-                      <div style={{height:5,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/>
+                    <div style={{height:4,background:"#f1f5f9",borderRadius:99,marginBottom:10}}>
+                      <div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/>
                     </div>
-                    {/* Parcelas */}
-                    <div style={{maxHeight:200,overflowY:"auto"}}>
+                    <div style={{maxHeight:180,overflowY:"auto"}}>
                       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                         <thead><tr style={{background:"#f8fafc"}}>
                           {["Nº","Valor","Vencimento","Status","Pago em",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}
                         </tr></thead>
                         <tbody>
-                          {div.parcelas.map((p,pi)=>{
-                            const atrasada=p.status==="pendente"&&new Date(p.venc+"T12:00:00")<new Date();
+                          {(div.parcelas||[]).map((p,pi)=>{
+                            const atrasada=p.status==="pendente"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date();
                             const sR=atrasada?"atrasado":p.status;
                             return(
                               <tr key={p.id} style={{borderTop:"1px solid #f8fafc",background:sR==="pago"?"#f9fffe":sR==="atrasado"?"#fff9f9":"#fff"}}>
                                 <td style={{padding:"5px 8px",fontWeight:700}}>{pi+1}</td>
                                 <td style={{padding:"5px 8px",color:"#4f46e5",fontWeight:700}}>{fmt(p.valor)}</td>
-                                <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc)}</td>
+                                <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc||p.vencimento)}</td>
                                 <td style={{padding:"5px 8px"}}>
-                                  <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bgStatus[sR]||"#f1f5f9",color:corStatus[sR]||"#64748b"}}>
+                                  <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bgSt[sR]||"#f1f5f9",color:corSt[sR]||"#64748b"}}>
                                     {sR==="pago"?"Pago":sR==="atrasado"?"Atrasado":"Pendente"}
                                   </span>
                                 </td>
                                 <td style={{padding:"5px 8px",color:"#94a3b8",fontSize:10}}>{fmtDate(p.pago_em)}</td>
                                 <td style={{padding:"5px 8px"}}>
                                   {p.status!=="pago"
-                                    ?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓ Pago</button>
+                                    ?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓</button>
                                     :<button onClick={()=>toggleParcela(div.id,p.id,"pendente")} style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10}}>↩</button>
                                   }
                                 </td>
@@ -614,58 +563,53 @@ function Devedores({ devedores, setDevedores, credores }) {
                 );
               })}
 
-              {/* ── ADICIONAR NOVA DÍVIDA ── */}
-              <div style={{background:"#f8fafc",borderRadius:14,padding:18,border:"1.5px dashed #e2e8f0",marginTop:8}}>
-                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14}}>➕ Adicionar Nova Dívida</p>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                  <Inp label="Descrição (ex: Contrato 001)" value={novaDivida.descricao} onChange={v=>ND("descricao",v)} span={2}/>
-                  <Inp label="Valor Total (R$)" value={novaDivida.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
-                  <Inp label="Data 1ª Parcela / Vencimento" value={novaDivida.data_primeira_parcela||novaDivida.data_vencimento} onChange={v=>{ND("data_primeira_parcela",v);ND("data_vencimento",v);}} type="date"/>
-                  <Inp label="Número de Parcelas" value={novaDivida.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
+              <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:4}}>
+                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>➕ Nova Dívida</p>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <Inp label="Descrição (ex: Contrato 001)" value={nd.descricao} onChange={v=>ND("descricao",v)} span={2}/>
+                  <Inp label="Valor Total (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
+                  <Inp label="Data da 1ª Parcela" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
+                  <Inp label="Nº de Parcelas" value={nd.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
                 </div>
-
-                {/* Preview da divisão */}
-                {novaDivida.valor_total&&novaDivida.qtd_parcelas&&(
-                  <div style={{background:"#ede9fe",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
-                    <b style={{color:"#4f46e5"}}>{novaDivida.qtd_parcelas}x de {fmt((parseFloat(novaDivida.valor_total)||0)/parseInt(novaDivida.qtd_parcelas||1))}</b>
-                    <span style={{color:"#6d28d9",marginLeft:8}}>= {fmt(parseFloat(novaDivida.valor_total)||0)} total</span>
+                {nd.valor_total&&nd.qtd_parcelas&&(
+                  <div style={{background:"#ede9fe",borderRadius:8,padding:"7px 12px",marginBottom:10,fontSize:12}}>
+                    <b style={{color:"#4f46e5"}}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total)||0)/parseInt(nd.qtd_parcelas||1))}</b>
+                    <span style={{color:"#6d28d9",marginLeft:8}}>= {fmt(parseFloat(nd.valor_total)||0)}</span>
                   </div>
                 )}
-
                 <Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn>
 
-                {/* Tabela de parcelas editável antes de salvar */}
-                {novaDivida.parcelas.length>0&&(
-                  <div style={{marginTop:14}}>
-                    <p style={{fontSize:12,fontWeight:700,color:"#0f172a",marginBottom:8}}>✏️ Ajuste os valores individuais de cada parcela:</p>
-                    <div style={{maxHeight:220,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                {nd.parcelas.length>0&&(
+                  <div style={{marginTop:12}}>
+                    <p style={{fontSize:11,fontWeight:700,color:"#0f172a",marginBottom:6}}>✏️ Ajuste valores individualmente:</p>
+                    <div style={{maxHeight:200,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                         <thead><tr style={{background:"#f8fafc"}}>
-                          {["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}
+                          {["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}
                         </tr></thead>
                         <tbody>
-                          {novaDivida.parcelas.map((p,i)=>(
+                          {nd.parcelas.map((p,i)=>(
                             <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
-                              <td style={{padding:"6px 10px",fontWeight:700,color:"#0f172a"}}>{i+1}</td>
-                              <td style={{padding:"6px 10px"}}>
+                              <td style={{padding:"5px 9px",fontWeight:700,color:"#0f172a"}}>{i+1}</td>
+                              <td style={{padding:"5px 9px"}}>
                                 <input type="number" value={p.valor} onChange={e=>editParc(p.id,"valor",e.target.value)}
-                                  style={{width:90,padding:"4px 7px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none"}}/>
+                                  style={{width:85,padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none"}}/>
                               </td>
-                              <td style={{padding:"6px 10px"}}>
+                              <td style={{padding:"5px 9px"}}>
                                 <input type="date" value={p.venc} onChange={e=>editParc(p.id,"venc",e.target.value)}
-                                  style={{padding:"4px 7px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none"}}/>
+                                  style={{padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none"}}/>
                               </td>
-                              <td style={{padding:"6px 10px"}}>
-                                <button onClick={()=>remParc(p.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:11}}>✕</button>
+                              <td style={{padding:"5px 9px"}}>
+                                <button onClick={()=>remParc(p.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10}}>✕</button>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
-                      <button onClick={addParc} style={{background:"#f1f5f9",color:"#475569",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Parcela</button>
-                      <span style={{fontSize:11,color:"#94a3b8"}}>Total: <b style={{color:"#4f46e5"}}>{fmt(novaDivida.parcelas.reduce((s,p)=>s+p.valor,0))}</b></span>
+                    <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
+                      <button onClick={addParc} style={{background:"#f1f5f9",color:"#475569",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>+ Parcela</button>
+                      <span style={{fontSize:11,color:"#94a3b8"}}>Total: <b style={{color:"#4f46e5"}}>{fmt(nd.parcelas.reduce((s,p)=>s+p.valor,0))}</b></span>
                       <div style={{flex:1}}/>
                       <Btn onClick={adicionarDivida} color="#059669">💾 Salvar Dívida</Btn>
                     </div>
@@ -677,7 +621,6 @@ function Devedores({ devedores, setDevedores, credores }) {
         </Modal>
       )}
 
-      {/* ── MODAL WHATSAPP ── */}
       {wp&&(
         <Modal title={`WhatsApp — ${wp.nome}`} onClose={()=>setWp(null)}>
           {WP_MSGS(wp).map((m,i)=>(
@@ -695,402 +638,7 @@ function Devedores({ devedores, setDevedores, credores }) {
     </div>
   );
 }
-  const [search, setSearch]   = useState("");
-  const [modal, setModal]     = useState(false); // false | "novo" | "editar" | "ver"
-  const [sel, setSel]         = useState(null);
-  const [wp, setWp]           = useState(null);
-  const [abaParcelas, setAba] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm]       = useState(FORM_VAZIO);
-  const F = (k,v) => setForm(f=>({...f,[k]:v}));
 
-  const filtered = devedores.filter(d =>
-    d.nome.toLowerCase().includes(search.toLowerCase()) ||
-    (d.cpf_cnpj||"").includes(search)
-  );
-
-  // ── SALVAR (novo ou editar) ──────────────────────────────────
-  async function salvar() {
-    setLoading(true);
-    const valor = parseFloat(form.valor_original)||0;
-    const parcelas = form.usar_parcelas && parseInt(form.qtd_parcelas)>0 && form.data_primeira_parcela
-      ? gerarParcelas(valor, parseInt(form.qtd_parcelas), form.data_primeira_parcela)
-      : [{id:1,numero:1,valor,vencimento:form.data_vencimento,status:"pendente",data_pagamento:null}];
-
-    const payload = {
-      nome: form.nome, cpf_cnpj: form.cpf_cnpj, tipo: form.tipo,
-      telefone: form.telefone, email: form.email, cidade: form.cidade,
-      status: form.status, valor_original: valor,
-      data_vencimento: form.data_vencimento||null,
-      credor_id: form.credor_id ? parseInt(form.credor_id) : null,
-      parcelas: JSON.stringify(parcelas),
-    };
-
-    if (modal === "editar" && sel) {
-      const res = await dbUpdate("devedores", sel.id, payload);
-      const atualizado = Array.isArray(res) ? res[0] : res;
-      if (atualizado) {
-        const parsed = { ...atualizado, parcelas: typeof atualizado.parcelas==="string" ? JSON.parse(atualizado.parcelas) : (atualizado.parcelas||[]) };
-        setDevedores(prev => prev.map(d => d.id===sel.id ? parsed : d));
-        setSel(parsed);
-      }
-    } else {
-      const res = await dbInsert("devedores", payload);
-      const novo = Array.isArray(res) ? res[0] : res;
-      if (novo) {
-        const parsed = { ...novo, parcelas: typeof novo.parcelas==="string" ? JSON.parse(novo.parcelas) : (novo.parcelas||[]) };
-        setDevedores(prev => [...prev, parsed]);
-      }
-    }
-    setLoading(false);
-    setModal(false);
-  }
-
-  // ── EXCLUIR ─────────────────────────────────────────────────
-  async function excluir(d) {
-    if (!window.confirm(`Excluir "${d.nome}"? Esta ação não pode ser desfeita.`)) return;
-    await dbDelete("devedores", d.id);
-    setDevedores(prev => prev.filter(x => x.id !== d.id));
-    if (sel?.id === d.id) { setSel(null); setModal(false); }
-  }
-
-  // ── DAR BAIXA (status pago) ──────────────────────────────────
-  async function darBaixa(d) {
-    if (!window.confirm(`Confirmar baixa total para "${d.nome}"?`)) return;
-    const parcelas = (d.parcelas||[]).map(p => ({ ...p, status:"pago", data_pagamento: new Date().toISOString().slice(0,10) }));
-    const res = await dbUpdate("devedores", d.id, { status:"pago", parcelas: JSON.stringify(parcelas) });
-    const atualizado = Array.isArray(res) ? res[0] : res;
-    if (atualizado) {
-      const parsed = { ...atualizado, parcelas: typeof atualizado.parcelas==="string" ? JSON.parse(atualizado.parcelas) : parcelas };
-      setDevedores(prev => prev.map(x => x.id===d.id ? parsed : x));
-    }
-  }
-
-  // ── PARCELA: toggle status ───────────────────────────────────
-  async function toggleParcela(devId, parcId, novoStatus) {
-    const dev = devedores.find(d=>d.id===devId);
-    if (!dev) return;
-    const parcelas = (dev.parcelas||[]).map(p =>
-      p.id!==parcId ? p : { ...p, status:novoStatus, data_pagamento: novoStatus==="pago" ? new Date().toISOString().slice(0,10) : null }
-    );
-    const pagas = parcelas.filter(p=>p.status==="pago").length;
-    const novoStatusDev = pagas===parcelas.length ? "pago" : pagas>0 ? "negociando" : "ativo";
-    const res = await dbUpdate("devedores", devId, { status:novoStatusDev, parcelas: JSON.stringify(parcelas) });
-    const atualizado = Array.isArray(res) ? res[0] : res;
-    if (atualizado) {
-      const parsed = { ...atualizado, parcelas };
-      setDevedores(prev => prev.map(d => d.id===devId ? parsed : d));
-      if (sel?.id===devId) setSel(parsed);
-    }
-  }
-
-  // ── PARCELA: editar valor/vencimento ─────────────────────────
-  function editarParcelaLocal(parcId, campo, valor) {
-    setSel(prev => {
-      if (!prev) return prev;
-      return { ...prev, parcelas: (prev.parcelas||[]).map(p => p.id!==parcId ? p : { ...p, [campo]: campo==="valor"?parseFloat(valor)||0:valor }) };
-    });
-  }
-
-  async function salvarParcelas() {
-    if (!sel) return;
-    const res = await dbUpdate("devedores", sel.id, { parcelas: JSON.stringify(sel.parcelas) });
-    const atualizado = Array.isArray(res) ? res[0] : res;
-    if (atualizado) {
-      const parsed = { ...atualizado, parcelas: sel.parcelas };
-      setDevedores(prev => prev.map(d => d.id===sel.id ? parsed : d));
-      setSel(parsed);
-    }
-    alert("Parcelas salvas!");
-  }
-
-  // ── PARCELA: adicionar/remover ───────────────────────────────
-  function adicionarParcela() {
-    setSel(prev => {
-      if (!prev) return prev;
-      const parcelas = prev.parcelas||[];
-      const ultima = parcelas[parcelas.length-1];
-      const proxVenc = ultima ? (() => { const d=new Date(ultima.vencimento+"T12:00:00"); d.setMonth(d.getMonth()+1); return d.toISOString().slice(0,10); })() : new Date().toISOString().slice(0,10);
-      return { ...prev, parcelas: [...parcelas, { id:Date.now(), numero:parcelas.length+1, valor:ultima?.valor||0, vencimento:proxVenc, status:"pendente", data_pagamento:null }] };
-    });
-  }
-
-  function removerParcela(parcId) {
-    setSel(prev => prev ? { ...prev, parcelas: (prev.parcelas||[]).filter(p=>p.id!==parcId) } : prev);
-  }
-
-  function abrirEditar(d) {
-    const parc = d.parcelas||[];
-    setForm({
-      nome:d.nome, cpf_cnpj:d.cpf_cnpj||"", tipo:d.tipo||"PJ",
-      telefone:d.telefone||"", email:d.email||"", cidade:d.cidade||"Goiânia",
-      status:d.status||"ativo", valor_original:String(d.valor_original||""),
-      data_vencimento:d.data_vencimento||"", credor_id:d.credor_id||"",
-      usar_parcelas: parc.length>1, qtd_parcelas:String(parc.length||1),
-      data_primeira_parcela: parc[0]?.vencimento||"",
-    });
-    setSel(d); setModal("editar");
-  }
-
-  const WP_MSGS = d => [
-    { titulo:"Notificação de Débito", msg:`Prezado(a) *${d.nome}*, informamos que consta débito no valor de *${fmt(d.valor_original)}* referente a contrato imobiliário.\n\nSolicitamos contato para regularização.\n\n*MR Cobranças e Soluções*\n(62) 9 9999-0000` },
-    { titulo:"Proposta de Acordo", msg:`Olá, *${d.nome.split(" ")[0]}*! Temos proposta especial para quitação do débito com condições facilitadas.\n\nEntre em contato até *${new Date(Date.now()+5*86400000).toLocaleDateString("pt-BR")}*.\n\n*MR Cobranças* | (62) 9 9999-0000` },
-    { titulo:"Aviso Judicial", msg:`*AVISO IMPORTANTE — ${d.nome}*\n\nO débito de *${fmt(d.valor_original)}* foi encaminhado para cobrança judicial.\n\nAinda é possível acordo extrajudicial.\n\n*Escritório MR Cobranças e Soluções*` },
-  ];
-
-  // ── RENDER ───────────────────────────────────────────────────
-  return (
-    <div>
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18 }}>
-        <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a" }}>Devedores</h2>
-        <Btn onClick={()=>{ setForm(FORM_VAZIO); setModal("novo"); }}>{I.plus} Novo Devedor</Btn>
-      </div>
-
-      <div style={{ position:"relative",marginBottom:14 }}>
-        <span style={{ position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8" }}>{I.search}</span>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ..." style={{ width:"100%",padding:"10px 12px 10px 36px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,fontFamily:"Mulish",outline:"none",boxSizing:"border-box" }} />
-      </div>
-
-      <div style={{ background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden" }}>
-        <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%",borderCollapse:"collapse",fontSize:13 }}>
-            <thead>
-              <tr style={{ background:"#f8fafc" }}>
-                {["Nome","CPF/CNPJ","Credor","Status","Valor Total","Parcelas","Ações"].map(h=>(
-                  <th key={h} style={{ textAlign:"left",padding:"10px 14px",color:"#64748b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:".05em" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(d => {
-                const parcelas = d.parcelas||[];
-                const pagas = parcelas.filter(p=>p.status==="pago").length;
-                const atrasadas = parcelas.filter(p=>p.status==="atrasado"||(p.status==="pendente"&&new Date(p.vencimento+"T12:00:00")<new Date())).length;
-                const credor = credores.find(c=>c.id===d.credor_id);
-                return (
-                  <tr key={d.id} style={{ borderTop:"1px solid #f8fafc" }}>
-                    <td style={{ padding:"12px 14px",fontWeight:700,color:"#0f172a" }}>{d.nome}</td>
-                    <td style={{ padding:"12px 14px",color:"#64748b",fontFamily:"monospace",fontSize:11 }}>{d.cpf_cnpj}</td>
-                    <td style={{ padding:"12px 14px",fontSize:11,color:"#64748b" }}>{credor ? credor.nome.split(" ").slice(0,2).join(" ") : "—"}</td>
-                    <td style={{ padding:"12px 14px" }}><Badge s={d.status}/></td>
-                    <td style={{ padding:"12px 14px",fontWeight:700,color:"#4f46e5" }}>{fmt(d.valor_original)}</td>
-                    <td style={{ padding:"12px 14px" }}>
-                      {parcelas.length>0 ? (
-                        <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                          <span style={{ fontSize:12,fontWeight:700 }}>{pagas}/{parcelas.length}</span>
-                          <div style={{ width:50,height:5,background:"#f1f5f9",borderRadius:99 }}>
-                            <div style={{ height:5,width:`${parcelas.length?pagas/parcelas.length*100:0}%`,background:"#22c55e",borderRadius:99 }}/>
-                          </div>
-                          {atrasadas>0 && <span style={{ fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 5px",borderRadius:99,fontWeight:700 }}>{atrasadas}!</span>}
-                        </div>
-                      ) : <span style={{ color:"#94a3b8",fontSize:11 }}>—</span>}
-                    </td>
-                    <td style={{ padding:"12px 14px" }}>
-                      <div style={{ display:"flex",gap:4 }}>
-                        <button onClick={()=>{ setSel(d); setAba(false); setModal("ver"); }} title="Ver detalhes" style={{ color:"#4f46e5",background:"#ede9fe",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700 }}>👁</button>
-                        <button onClick={()=>abrirEditar(d)} title="Editar" style={{ color:"#d97706",background:"#fef9c3",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700 }}>✏️</button>
-                        {d.telefone && <button onClick={()=>setWp(d)} title="WhatsApp" style={{ color:"#16a34a",background:"#dcfce7",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700 }}>📱</button>}
-                        {d.status!=="pago" && <button onClick={()=>darBaixa(d)} title="Dar baixa total" style={{ color:"#059669",background:"#d1fae5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700 }}>✓</button>}
-                        <button onClick={()=>excluir(d)} title="Excluir" style={{ color:"#dc2626",background:"#fee2e2",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700 }}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ padding:"10px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600 }}>
-          {filtered.length} registros · {devedores.filter(d=>d.status==="pago").length} pagos · {devedores.filter(d=>d.status==="ativo").length} ativos
-        </div>
-      </div>
-
-      {/* ── MODAL NOVO/EDITAR ── */}
-      {(modal==="novo"||modal==="editar") && (
-        <Modal title={modal==="editar"?"Editar Devedor":"Novo Devedor"} onClose={()=>setModal(false)} wide>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
-            <Inp label="Nome / Razão Social" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
-            <Inp label="CPF / CNPJ" value={form.cpf_cnpj} onChange={v=>F("cpf_cnpj",v)}/>
-            <Inp label="Tipo" value={form.tipo} onChange={v=>F("tipo",v)} options={["PF","PJ"]}/>
-            <Inp label="Telefone (WhatsApp)" value={form.telefone} onChange={v=>F("telefone",v)} placeholder="62999990000"/>
-            <Inp label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
-            <Inp label="Cidade" value={form.cidade} onChange={v=>F("cidade",v)}/>
-            <Inp label="Status" value={form.status} onChange={v=>F("status",v)} options={["ativo","negociando","pago","inativo"]}/>
-            <Inp label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} options={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]}/>
-            <Inp label="Valor Total da Dívida (R$)" value={form.valor_original} onChange={v=>F("valor_original",v)} type="number" span={2}/>
-          </div>
-
-          {/* Parcelamento */}
-          <div style={{ margin:"16px 0 12px",padding:16,background:"#f8fafc",borderRadius:12,border:"1.5px solid #e2e8f0" }}>
-            <label style={{ display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:form.usar_parcelas?14:0 }}>
-              <input type="checkbox" checked={form.usar_parcelas} onChange={e=>F("usar_parcelas",e.target.checked)} style={{ width:16,height:16,accentColor:"#4f46e5",cursor:"pointer" }}/>
-              <span style={{ fontWeight:700,fontSize:14,color:"#0f172a" }}>Parcelar a dívida</span>
-              <span style={{ fontSize:12,color:"#94a3b8" }}>gera parcelas automaticamente</span>
-            </label>
-            {form.usar_parcelas ? (
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:4 }}>
-                <Inp label="Número de Parcelas" value={form.qtd_parcelas} onChange={v=>F("qtd_parcelas",v)} type="number"/>
-                <Inp label="Data da 1ª Parcela" value={form.data_primeira_parcela} onChange={v=>F("data_primeira_parcela",v)} type="date"/>
-                {form.qtd_parcelas>0 && form.valor_original && (
-                  <div style={{ gridColumn:"1/-1",background:"#ede9fe",borderRadius:8,padding:"8px 12px",fontSize:13 }}>
-                    <b style={{ color:"#4f46e5" }}>{form.qtd_parcelas}x de {fmt((parseFloat(form.valor_original)||0)/parseInt(form.qtd_parcelas||1))}</b>
-                    <span style={{ color:"#6d28d9",marginLeft:8 }}>= {fmt(parseFloat(form.valor_original)||0)} total</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ marginTop:10 }}>
-                <Inp label="Data de Vencimento (parcela única)" value={form.data_vencimento} onChange={v=>F("data_vencimento",v)} type="date"/>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display:"flex",gap:10 }}>
-            <Btn onClick={salvar}>{loading?"Salvando...": modal==="editar"?"Salvar Alterações":"Cadastrar Devedor"}</Btn>
-            <Btn onClick={()=>setModal(false)} outline>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── MODAL VER/PARCELAS ── */}
-      {modal==="ver" && sel && (
-        <Modal title={sel.nome} onClose={()=>setModal(false)} wide>
-          <div style={{ display:"flex",gap:6,marginBottom:18,borderBottom:"2px solid #f1f5f9",paddingBottom:0 }}>
-            {["Dados","Parcelas"].map((aba,i)=>(
-              <button key={aba} onClick={()=>setAba(i===1)}
-                style={{ padding:"8px 18px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:(i===1)===abaParcelas?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${(i===1)===abaParcelas?"#4f46e5":"transparent"}`,marginBottom:-2 }}>
-                {aba}{i===1&&sel.parcelas?` (${sel.parcelas.length})`:""}
-              </button>
-            ))}
-          </div>
-
-          {!abaParcelas && (
-            <div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:13,marginBottom:16 }}>
-                {[["Nome",sel.nome],["CPF/CNPJ",sel.cpf_cnpj],["Tipo",sel.tipo],["Cidade",sel.cidade],["Telefone",sel.telefone],["E-mail",sel.email],["Credor",credores.find(c=>c.id===sel.credor_id)?.nome||"—"]].map(([k,v])=>(
-                  <div key={k} style={{ padding:"10px 14px",background:"#f8fafc",borderRadius:10 }}>
-                    <p style={{ fontSize:11,color:"#94a3b8",fontWeight:700,marginBottom:2 }}>{k}</p>
-                    <p style={{ fontWeight:600,color:"#0f172a",fontSize:12 }}>{v||"—"}</p>
-                  </div>
-                ))}
-                <div style={{ padding:"10px 14px",background:"#ede9fe",borderRadius:10 }}>
-                  <p style={{ fontSize:11,color:"#6d28d9",fontWeight:700,marginBottom:2 }}>Valor Total</p>
-                  <p style={{ fontWeight:800,color:"#4f46e5",fontSize:16 }}>{fmt(sel.valor_original)}</p>
-                </div>
-                <div style={{ padding:"10px 14px",background:"#f0fdf4",borderRadius:10 }}>
-                  <p style={{ fontSize:11,color:"#15803d",fontWeight:700,marginBottom:2 }}>Valor Pago</p>
-                  <p style={{ fontWeight:800,color:"#16a34a",fontSize:16 }}>{fmt((sel.parcelas||[]).filter(p=>p.status==="pago").reduce((s,p)=>s+p.valor,0))}</p>
-                </div>
-              </div>
-              <div style={{ display:"flex",gap:8 }}>
-                <Btn onClick={()=>abrirEditar(sel)}>✏️ Editar</Btn>
-                {sel.status!=="pago"&&<Btn onClick={()=>darBaixa(sel)} color="#059669">✓ Dar Baixa Total</Btn>}
-                <Btn onClick={()=>excluir(sel)} danger>🗑 Excluir</Btn>
-              </div>
-            </div>
-          )}
-
-          {abaParcelas && (
-            <div>
-              {/* Resumo */}
-              {(()=>{
-                const p=sel.parcelas||[];
-                const pagas=p.filter(x=>x.status==="pago").length;
-                const atrasadas=p.filter(x=>x.status==="atrasado"||(x.status==="pendente"&&new Date(x.vencimento+"T12:00:00")<new Date())).length;
-                const pct=p.length?(pagas/p.length*100).toFixed(0):0;
-                return(<>
-                  <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12 }}>
-                    {[["Total",p.length,"#4f46e5","#ede9fe"],["Pagas",pagas,"#16a34a","#f0fdf4"],["Atrasadas",atrasadas,"#dc2626","#fef2f2"],["Pendentes",p.length-pagas-atrasadas,"#d97706","#fefce8"]].map(([l,v,c,bg])=>(
-                      <div key={l} style={{ background:bg,borderRadius:10,padding:"8px 10px",textAlign:"center" }}>
-                        <p style={{ fontSize:10,color:c,fontWeight:700,marginBottom:2 }}>{l}</p>
-                        <p style={{ fontFamily:"Syne",fontWeight:800,fontSize:20,color:c }}>{v}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginBottom:14 }}>
-                    <div style={{ display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748b",marginBottom:4 }}>
-                      <span>Progresso</span><b style={{ color:"#16a34a" }}>{pct}%</b>
-                    </div>
-                    <div style={{ height:7,background:"#f1f5f9",borderRadius:99 }}>
-                      <div style={{ height:7,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99 }}/>
-                    </div>
-                  </div>
-                </>);
-              })()}
-
-              {/* Tabela de parcelas editável */}
-              <div style={{ maxHeight:300,overflowY:"auto",marginBottom:12,border:"1px solid #f1f5f9",borderRadius:12,overflow:"hidden" }}>
-                <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
-                  <thead>
-                    <tr style={{ background:"#f8fafc" }}>
-                      {["Nº","Valor (R$)","Vencimento","Status","Pago em","Ações"].map(h=>(
-                        <th key={h} style={{ padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(sel.parcelas||[]).map((p,idx)=>{
-                      const atrasada = p.status==="pendente" && new Date(p.vencimento+"T12:00:00")<new Date();
-                      const sReal = atrasada ? "atrasado" : p.status;
-                      const corStatus = { pago:"#16a34a",atrasado:"#dc2626",negociando:"#d97706",pendente:"#64748b" };
-                      const bgStatus  = { pago:"#dcfce7",atrasado:"#fee2e2",negociando:"#fef9c3",pendente:"#f1f5f9" };
-                      return(
-                        <tr key={p.id} style={{ borderTop:"1px solid #f8fafc",background:sReal==="atrasado"?"#fff9f9":sReal==="pago"?"#f9fffe":"#fff" }}>
-                          <td style={{ padding:"7px 10px",fontWeight:700,color:"#0f172a" }}>{idx+1}</td>
-                          <td style={{ padding:"7px 10px" }}>
-                            <input type="number" value={p.valor} onChange={e=>editarParcelaLocal(p.id,"valor",e.target.value)}
-                              style={{ width:85,padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none" }}/>
-                          </td>
-                          <td style={{ padding:"7px 10px" }}>
-                            <input type="date" value={p.vencimento} onChange={e=>editarParcelaLocal(p.id,"vencimento",e.target.value)}
-                              style={{ padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none" }}/>
-                          </td>
-                          <td style={{ padding:"7px 10px" }}>
-                            <span style={{ fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:bgStatus[sReal],color:corStatus[sReal] }}>
-                              {sReal==="pago"?"Pago":sReal==="atrasado"?"Atrasado":sReal==="negociando"?"Negociando":"Pendente"}
-                            </span>
-                          </td>
-                          <td style={{ padding:"7px 10px",color:"#94a3b8",fontSize:11 }}>{fmtDate(p.data_pagamento)}</td>
-                          <td style={{ padding:"7px 10px" }}>
-                            <div style={{ display:"flex",gap:3 }}>
-                              {p.status!=="pago"&&<button onClick={()=>toggleParcela(sel.id,p.id,"pago")} style={{ background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:10,fontWeight:700 }}>✓</button>}
-                              {p.status==="pago"&&<button onClick={()=>toggleParcela(sel.id,p.id,"pendente")} style={{ background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:10 }}>↩</button>}
-                              <button onClick={()=>removerParcela(p.id)} style={{ background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:11 }}>✕</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ display:"flex",gap:8 }}>
-                <Btn onClick={adicionarParcela} outline>{I.plus} Parcela</Btn>
-                <Btn onClick={salvarParcelas} color="#059669">💾 Salvar Parcelas</Btn>
-              </div>
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {/* ── MODAL WHATSAPP ── */}
-      {wp && (
-        <Modal title={`WhatsApp — ${wp.nome}`} onClose={()=>setWp(null)}>
-          {WP_MSGS(wp).map((m,i)=>(
-            <div key={i} style={{ border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10 }}>
-              <p style={{ fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8 }}>{m.titulo}</p>
-              <p style={{ fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f8fafc",padding:10,borderRadius:8,marginBottom:10 }}>{m.msg}</p>
-              <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer"
-                style={{ display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none" }}>
-                {I.wp} Abrir no WhatsApp
-              </a>
-            </div>
-          ))}
-        </Modal>
-      )}
-    </div>
-  );
-}
 // ═══════════════════════════════════════════════════════════════
 // CREDORES
 // ═══════════════════════════════════════════════════════════════
