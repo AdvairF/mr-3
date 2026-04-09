@@ -1005,7 +1005,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
     const total=parseFloat(nd.valor_total)||0;
     if(!total)return alert("Informe o valor.");
     if(!nd.parcelas.length)return alert("Gere as parcelas antes de salvar.");
-    const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,data_origem:nd.data_origem,data_vencimento:nd.data_primeira_parcela,parcelas:nd.parcelas,criada_em:new Date().toISOString().slice(0,10),indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela,despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||"",custas:nd.custas||[]};
+    const dataVenc=nd.parcelas.length>0?(nd.data_primeira_parcela||nd.data_origem):nd.data_origem;const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,data_origem:nd.data_origem,data_vencimento:dataVenc,parcelas:nd.parcelas,criada_em:new Date().toISOString().slice(0,10),indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,data_inicio_atualizacao:nd.data_inicio_atualizacao||dataVenc,despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||"",custas:nd.custas||[]};
     const dividas=[...(sel.dividas||[]),divida];
     const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
     try{
@@ -1315,7 +1315,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                   <Inp label="Descrição" value={nd.descricao} onChange={v=>ND("descricao",v)} span={2}/>
                   <Inp label="Valor Total (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
-                  <Inp label="Data de Origem" value={nd.data_origem} onChange={v=>ND("data_origem",v)} type="date"/>
+                  <Inp label="Data de Vencimento *" value={nd.data_origem} onChange={v=>ND("data_origem",v)} type="date"/>
                 </div>
                 <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:12,marginBottom:10}}>
                   <p style={{fontSize:10,fontWeight:700,color:"#4f46e5",textTransform:"uppercase",letterSpacing:".05em",marginBottom:8}}>📋 Diretrizes do Contrato</p>
@@ -1328,12 +1328,19 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                     <Inp label="Despesas (R$)" value={nd.despesas} onChange={v=>ND("despesas",v)} type="number"/>
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                  <Inp label="Data da 1ª Parcela" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
-                  <Inp label="Nº de Parcelas" value={nd.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
+                {/* Parcelamento — só se quiser parcelar */}
+                <div style={{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:10,border:"1px solid #e2e8f0"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".05em"}}>📅 Parcelamento (opcional)</p>
+                    <span style={{fontSize:10,color:"#94a3b8"}}>Deixe em branco se a dívida não for parcelada</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <Inp label="Data da 1ª Parcela" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
+                    <Inp label="Nº de Parcelas" value={nd.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
+                  </div>
+                  {nd.valor_total&&parseInt(nd.qtd_parcelas||0)>1&&<div style={{background:"#ede9fe",borderRadius:8,padding:"6px 12px",marginTop:8,fontSize:12}}><b style={{color:"#4f46e5"}}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total)||0)/parseInt(nd.qtd_parcelas||1))}</b></div>}
+                  {nd.data_primeira_parcela&&parseInt(nd.qtd_parcelas||0)>=1&&<div style={{marginTop:8}}><Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn></div>}
                 </div>
-                {nd.valor_total&&nd.qtd_parcelas&&<div style={{background:"#ede9fe",borderRadius:8,padding:"6px 12px",marginBottom:10,fontSize:12}}><b style={{color:"#4f46e5"}}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total)||0)/parseInt(nd.qtd_parcelas||1))}</b></div>}
-                <Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn>
 
                 {/* Custas Judiciais — só correção, sem juros */}
                 <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:12,marginTop:12}}>
@@ -2738,48 +2745,91 @@ function Calculadora({ devedores }) {
       doc.setDrawColor(0); doc.setLineWidth(0.3);
       doc.line(14,y,W-14,y); y+=6;
 
-      // Cabeçalho tabela
-      const cols = ["MÊS REF.","VECTO","VALOR","MULTA","CORREÇÃO","JUROS","ENCARGOS","BONIFICAÇÃO","TOTAL"];
-      const colW = [20,22,22,18,22,22,22,24,22];
+      // Cabeçalho tabela — uma linha por dívida
+      const honPdf = incluirHonorarios;
+      const cols = ["ITEM DESCRIÇÃO","VENCIMENTO","VALOR SINGELO","VALOR ATUALIZADO","JUROS MORAT.","MULTA",
+                    ...(honPdf?["HONORÁRIOS"]:[]),
+                    "TOTAL"];
+      // Larguras proporcional — total = W-28
+      const W2 = W-28;
+      const colW = honPdf
+        ? [42,22,22,26,22,18,22,22]
+        : [50,22,24,28,24,20,22];
       let x = 14;
-      doc.setFillColor(240,240,240);
-      doc.rect(14,y-4,W-28,6,"F");
-      doc.setFont("helvetica","bold"); doc.setFontSize(7);
-      cols.forEach((c,ci)=>{ doc.text(c,x+1,y); x+=colW[ci]; });
+      doc.setFillColor(220,220,240);
+      doc.rect(14,y-4,W2,7,"F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(6.5);
+      cols.forEach((c,ci)=>{
+        if(ci===0) doc.text(c, x+1, y);
+        else doc.text(c, x+colW[ci]-1, y, {align:"right"});
+        x+=colW[ci];
+      });
       y+=6;
 
-      // Linhas de dados
+      // Linhas — uma por dívida
       doc.setFont("helvetica","normal"); doc.setFontSize(7);
-      const linhas = resultado.linhasMes||[];
-      linhas.forEach((l,li)=>{
-        if(li%2===0){ doc.setFillColor(250,250,252); doc.rect(14,y-3.5,W-28,5.5,"F"); }
+      const divDetalhes = resultado.dividasDetalhe?.length>0
+        ? resultado.dividasDetalhe
+        : [{
+            descricao: nomeDevedor||"Dívida",
+            dataIni: dataVencimento,
+            valor: resultado.valorOriginal,
+            valorAtualizado: resultado.principalCorrigido,
+            principalCorrigido: resultado.principalCorrigido,
+            juros: resultado.juros,
+            multa: resultado.multa,
+            honorarios: resultado.honorarios,
+            total: resultado.total,
+          }];
+
+      divDetalhes.forEach((d,di)=>{
+        if(di%2===0){ doc.setFillColor(250,250,252); doc.rect(14,y-3.5,W2,5.5,"F"); }
         x=14;
+        // Subtotal da dívida (sem honorários) + honorários separados
+        const subDiv = d.principalCorrigido + (d.juros||0) + (d.multa||0);
+        const honDiv = honPdf?(d.honorarios||0):0;
+        const totDiv = subDiv + honDiv;
         const vals = [
-          l.mesRef, fmtDate(l.vecto),
-          fmt(l.valor), fmt(l.multa), fmt(l.correcao),
-          fmt(l.juros), fmt(l.encargos), fmt(l.bonificacao), fmt(l.total)
+          d.descricao,
+          fmtDate(d.dataIni),
+          fmt(d.valor),
+          fmt(d.principalCorrigido||d.valorAtualizado||0),
+          fmt(d.juros||0),
+          fmt(d.multa||0),
+          ...(honPdf?[fmt(honDiv)]:[]),
+          fmt(totDiv),
         ];
         vals.forEach((v,vi)=>{
-          if(vi>=2) doc.text(v,x+colW[vi]-2,y,{align:"right"});
-          else doc.text(v,x+1,y);
+          const rightAlign = vi>0;
+          const maxW = colW[vi]-2;
+          const txt = doc.splitTextToSize(String(v), maxW)[0]||"";
+          if(rightAlign) doc.text(txt, x+colW[vi]-1, y, {align:"right"});
+          else { const t=doc.splitTextToSize(v,colW[vi]-2); doc.text(t[0], x+1, y); }
           x+=colW[vi];
         });
         y+=5.5;
         if(y>185){ doc.addPage(); y=15; }
       });
 
-      // Total geral
+      // Linha de totais
       y+=2;
       doc.setDrawColor(0); doc.line(14,y,W-14,y); y+=4;
-      doc.setFillColor(220,220,255);
-      doc.rect(14,y-4,W-28,7,"F");
+      doc.setFillColor(79,70,229);
+      doc.rect(14,y-4,W2,8,"F");
       doc.setFont("helvetica","bold"); doc.setFontSize(8);
-      doc.text("TOTAL DO IMÓVEL:",14,y);
-      // Totais por coluna
-      x=14+20+22; // começa no VALOR
-      const tots=[resultado.valorOriginal,resultado.multa,resultado.correcao,resultado.juros,resultado.encargos,resultado.bonificacao,resultado.total];
-      const tw=[22,18,22,22,22,24,22];
-      tots.forEach((v,vi)=>{ doc.text(fmt(v),x+tw[vi]-2,y,{align:"right"}); x+=tw[vi]; });
+      doc.setTextColor(255,255,255);
+      doc.text("TOTAIS",15,y);
+      x=14+colW[0];
+      const totCols=[
+        fmt(divDetalhes.reduce((s,d)=>s+d.valor,0)),
+        fmt(divDetalhes.reduce((s,d)=>s+(d.principalCorrigido||d.valorAtualizado||0),0)),
+        fmt(divDetalhes.reduce((s,d)=>s+(d.juros||0),0)),
+        fmt(divDetalhes.reduce((s,d)=>s+(d.multa||0),0)),
+        ...(honPdf?[fmt(divDetalhes.reduce((s,d)=>s+(d.honorarios||0),0))]:[] ),
+        fmt(resultado.total),
+      ];
+      totCols.forEach((v,vi)=>{ doc.text(v, x+colW[vi+1]-1, y, {align:"right"}); x+=colW[vi+1]; });
+      doc.setTextColor(0,0,0);
       y+=10;
 
       // Memória de cálculo resumida
