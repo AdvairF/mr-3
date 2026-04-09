@@ -245,16 +245,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
     (d.acordos||[]).flatMap(ac=>(ac.parcelas||[]).filter(p=>p.status==="atrasado"||(p.status==="pendente"&&(p.dataVencimento||"")<=hoje)))
   ).length;
 
-  // Top devedores (maior dívida em aberto)
-  const topDevedores = [...devedores]
-    .map(d=>{
-      const div=(d.dividas||[]).reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_nominal||d.valor_original||0;
-      const rec=calcularTotaisAcordo(d.acordos||[]).recuperado;
-      return {...d, _aberto:div-rec};
-    })
-    .filter(d=>d._aberto>0)
-    .sort((a,b)=>b._aberto-a._aberto)
-    .slice(0,5);
+
 
   // Saudação por hora
   const hora = new Date().getHours();
@@ -351,8 +342,8 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
         ))}
       </div>
 
-      {/* Linha 3: gráfico de recuperação + top devedores + lembretes */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
+      {/* Linha 3: taxa de recuperação + agenda */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
 
         {/* Taxa de Recuperação visual */}
         <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
@@ -391,30 +382,6 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
               <span style={{fontSize:12,fontWeight:700,color:r.cor}}>{r.v}</span>
             </div>
           ))}
-        </div>
-
-        {/* Top devedores em aberto */}
-        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:4}}>💼 Maiores Devedores</p>
-          <p style={{fontSize:11,color:"#94a3b8",marginBottom:14}}>Por valor em aberto</p>
-          {topDevedores.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:16}}>Nenhuma dívida em aberto.</p>}
-          {topDevedores.map((d,i)=>{
-            const pct=totalCarteira>0?Math.round(d._aberto/totalCarteira*100):0;
-            return(
-              <div key={d.id} style={{marginBottom:12}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:22,height:22,borderRadius:99,background:["#fee2e2","#fef3c7","#ede9fe","#dbeafe","#dcfce7"][i],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:["#dc2626","#d97706","#7c3aed","#2563eb","#16a34a"][i]}}>{i+1}</div>
-                    <span style={{fontSize:12,fontWeight:600,color:"#0f172a"}}>{d.nome?.split(" ").slice(0,2).join(" ")}</span>
-                  </div>
-                  <span style={{fontSize:11,fontWeight:700,color:"#dc2626"}}>{fmt(d._aberto)}</span>
-                </div>
-                <div style={{height:4,background:"#f1f5f9",borderRadius:99}}>
-                  <div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#4f46e5,#7c3aed)",borderRadius:99,transition:"width .5s"}}/>
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         {/* Lembretes do dia */}
@@ -1521,7 +1488,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     const valorNominal = parseFloat(form.valor_nominal)||0;
     // Tentativas em ordem — remove colunas inexistentes progressivamente
     const tentativas=[
-      // #1 — completo (após SQL executado)
+      // #1 — completo
       {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,
        telefone:form.telefone||null,cidade:form.cidade||"Goiânia",
        credor_id:form.credor_id?parseInt(form.credor_id):null,
@@ -1530,7 +1497,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
        socio_cpf:form.socio_cpf||null,telefone2:form.telefone2||null,cep:form.cep||null,
        logradouro:form.logradouro||null,numero:form.numero||null,complemento:form.complemento||null,
        bairro:form.bairro||null,uf:form.uf||"GO",descricao_divida:form.descricao_divida||null,
-       observacoes:form.observacoes||null,contatos:JSON.stringify([]),acordos:JSON.stringify([])},
+       observacoes:form.observacoes||null,numero_processo:form.numero_processo||null,
+       contatos:JSON.stringify([]),acordos:JSON.stringify([])},
       // #2 — sem colunas extras de endereço/sócio mas COM valor_original
       {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,
        telefone:form.telefone||null,cidade:form.cidade||"Goiânia",
@@ -1567,6 +1535,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         credor_id:form.credor_id?parseInt(form.credor_id):null,
         descricao_divida:form.descricao_divida,
         observacoes:form.observacoes,
+        numero_processo:form.numero_processo||null,
         status:form.status||"novo",
       };
       setDevedores(p=>[...p,local]);
@@ -1592,7 +1561,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
     if(!formEdit.nome?.trim()) return alert("Informe o nome.");
     setLoadingEdit(true);
     try{
-      const payload={nome:formEdit.nome,cpf_cnpj:formEdit.cpf_cnpj,tipo:formEdit.tipo,email:formEdit.email||null,telefone:formEdit.telefone||null,cidade:formEdit.cidade||"Goiânia",credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,valor_original:parseFloat(formEdit.valor_nominal)||sel.valor_original||0,status:formEdit.status||"novo",rg:formEdit.rg||null,profissao:formEdit.profissao||null,socio_nome:formEdit.socio_nome||null,socio_cpf:formEdit.socio_cpf||null,telefone2:formEdit.telefone2||null,cep:formEdit.cep||null,logradouro:formEdit.logradouro||null,numero:formEdit.numero||null,complemento:formEdit.complemento||null,bairro:formEdit.bairro||null,uf:formEdit.uf||"GO",descricao_divida:formEdit.descricao_divida||null,observacoes:formEdit.observacoes||null};
+      const payload={nome:formEdit.nome,cpf_cnpj:formEdit.cpf_cnpj,tipo:formEdit.tipo,email:formEdit.email||null,telefone:formEdit.telefone||null,cidade:formEdit.cidade||"Goiânia",credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,valor_original:parseFloat(formEdit.valor_nominal)||sel.valor_original||0,status:formEdit.status||"novo",rg:formEdit.rg||null,profissao:formEdit.profissao||null,socio_nome:formEdit.socio_nome||null,socio_cpf:formEdit.socio_cpf||null,telefone2:formEdit.telefone2||null,cep:formEdit.cep||null,logradouro:formEdit.logradouro||null,numero:formEdit.numero||null,complemento:formEdit.complemento||null,bairro:formEdit.bairro||null,uf:formEdit.uf||"GO",descricao_divida:formEdit.descricao_divida||null,observacoes:formEdit.observacoes||null,numero_processo:formEdit.numero_processo||null};
       const res=await dbUpdate("devedores",sel.id,payload);
       const atu=Array.isArray(res)?res[0]:res;
       const valorEdit=parseFloat(formEdit.valor_nominal)||sel.valor_original||sel.valor_nominal||0;
@@ -1932,7 +1901,13 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
                   <INP label="Status" value={formEdit.status||"novo"} onChange={v=>FE("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))} span={2}/>
                   <INP label="Responsável" value={formEdit.responsavel||""} onChange={v=>FE("responsavel",v)} span={2}/>
-                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={4} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Nº do Processo Judicial (opcional)</label>
+                    <input value={formEdit.numero_processo||""} onChange={e=>FE("numero_processo",e.target.value)}
+                      placeholder="0000000-00.0000.8.09.0000"
+                      style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+                  </div>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
                 </div>
               )}
               <div style={{display:"flex",gap:8,marginTop:16}}>
@@ -2370,17 +2345,17 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           )}
           {secaoForm==="ctrl"&&(
             <div style={{display:"grid",gridTemplateColumns:"1fr",gap:13}}>
-              <INP label="Status" value={form.status} onChange={v=>F("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))}/>
-              <INP label="Responsável pelo Caso" value={form.responsavel} onChange={v=>F("responsavel",v)}/>
+              <INP label="Status" value={form.status||"novo"} onChange={v=>F("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))}/>
+              <INP label="Responsável pelo Caso" value={form.responsavel||""} onChange={v=>F("responsavel",v)}/>
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Nº do Processo Judicial (opcional)</label>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Nº do Processo Judicial <span style={{fontWeight:400,color:"#94a3b8"}}>(opcional)</span></label>
                 <input value={form.numero_processo||""} onChange={e=>F("numero_processo",e.target.value)}
                   placeholder="0000000-00.0000.8.09.0000"
                   style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
-                <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                <textarea value={form.observacoes||""} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
               </div>
             </div>
           )}
