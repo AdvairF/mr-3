@@ -288,401 +288,534 @@ function Dashboard({ devedores, processos, andamentos, user }) {
 }
 
 
+
 // ═══════════════════════════════════════════════════════════════
-// DEVEDORES
+// DEVEDORES — v3 completo
 // ═══════════════════════════════════════════════════════════════
-const FORM_DEV = { nome:"",cpf_cnpj:"",tipo:"PJ",telefone:"",email:"",cidade:"Goiânia",status:"ativo",credor_id:"" };
+
+const STATUS_DEV = [
+  { v:"novo",           l:"🆕 Novo",              bg:"#f1f5f9",color:"#64748b" },
+  { v:"em_localizacao", l:"🔍 Em Localização",     bg:"#dbeafe",color:"#1d4ed8" },
+  { v:"notificado",     l:"📬 Notificado",          bg:"#ede9fe",color:"#6d28d9" },
+  { v:"em_negociacao",  l:"🤝 Em Negociação",       bg:"#fef9c3",color:"#a16207" },
+  { v:"acordo_firmado", l:"✅ Acordo Firmado",      bg:"#d1fae5",color:"#065f46" },
+  { v:"pago_integral",  l:"💰 Pago Integralmente",  bg:"#dcfce7",color:"#15803d" },
+  { v:"pago_parcial",   l:"💵 Pago Parcialmente",   bg:"#ccfbf1",color:"#0f766e" },
+  { v:"irrecuperavel",  l:"❌ Irrecuperável",       bg:"#fee2e2",color:"#dc2626" },
+  { v:"ajuizado",       l:"⚖️ Ajuizado",            bg:"#ffedd5",color:"#c2410c" },
+];
+
+function BadgeDev({ status }) {
+  const s = STATUS_DEV.find(x=>x.v===status)||STATUS_DEV[0];
+  return <span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:s.bg,color:s.color,whiteSpace:"nowrap"}}>{s.l}</span>;
+}
+
+function maskCPF(v)  { return v.replace(/\D/g,"").slice(0,11).replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d{1,2})$/,"$1-$2"); }
+function maskCNPJ(v) { return v.replace(/\D/g,"").slice(0,14).replace(/^(\d{2})(\d)/,"$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/,"$1.$2.$3").replace(/\.(\d{3})(\d)/,".$1/$2").replace(/(\d{4})(\d)/,"$1-$2"); }
+function maskTel(v)  { const n=v.replace(/\D/g,"").slice(0,11); if(n.length<=10) return n.replace(/(\d{2})(\d{4})(\d{0,4})/,"($1) $2-$3"); return n.replace(/(\d{2})(\d{5})(\d{0,4})/,"($1) $2-$3"); }
+function maskCEP(v)  { return v.replace(/\D/g,"").slice(0,8).replace(/(\d{5})(\d)/,"$1-$2"); }
+
+const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+
+const FORM_DEV_VAZIO = {
+  nome:"", cpf_cnpj:"", tipo:"PJ",
+  rg:"", data_nascimento:"", profissao:"",
+  socio_nome:"", socio_cpf:"",
+  email:"", telefone:"", telefone2:"",
+  cep:"", logradouro:"", numero:"", complemento:"", bairro:"", cidade:"Goiânia", uf:"GO",
+  credor_id:"", valor_nominal:"", data_origem_divida:"", data_recebimento_carteira:"", descricao_divida:"",
+  status:"novo", responsavel:"", observacoes:"",
+};
+
 const DIVIDA_VAZIA = {
   descricao:"", valor_total:"", data_origem:"", data_primeira_parcela:"", qtd_parcelas:"1", parcelas:[],
-  // Diretrizes do contrato
   indexador:"igpm", multa_pct:"2", juros_am:"1", honorarios_pct:"20",
   data_inicio_atualizacao:"", despesas:"0", observacoes:""
 };
 
-function Devedores({ devedores, setDevedores, credores, onModalChange }) {
-  const [search, setSearch] = useState("");
-  const [modal, setModal]   = useState(null);
-  const [sel, setSel]       = useState(null);
-  const [aba, setAba]       = useState("dividas");
-  const [form, setForm]     = useState(FORM_DEV);
-  const [loading, setLoading] = useState(false);
-  const [wp, setWp]         = useState(null);
-  const [nd, setNd]         = useState(DIVIDA_VAZIA);
-  const F = (k,v) => setForm(f=>({...f,[k]:v}));
+function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
+  const [search, setSearch]           = useState("");
+  const [filtroCredor, setFiltroCredor] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [modal, setModal]             = useState(null);
+  const [secaoForm, setSecaoForm]     = useState("id");
+  const [sel, setSel]                 = useState(null);
+  const [abaFicha, setAbaFicha]       = useState("dados");
+  const [form, setForm]               = useState({...FORM_DEV_VAZIO});
+  const [loading, setLoading]         = useState(false);
+  const [buscandoCEP, setBuscandoCEP] = useState(false);
+  const [wp, setWp]                   = useState(null);
+  const [nd, setNd]                   = useState(DIVIDA_VAZIA);
+  const [novoContato, setNovoContato] = useState({ tipo:"Ligação", resultado:"Sem resposta", obs:"" });
+  const F  = (k,v) => setForm(f=>({...f,[k]:v}));
   const ND = (k,v) => setNd(d=>({...d,[k]:v}));
 
-  // Avisa o App quando modal abre/fecha para pausar o polling
   function abrirModal(tipo) { setModal(tipo); onModalChange&&onModalChange(true); }
-  function fecharModal()    { setModal(null); setSel(null); setNd(DIVIDA_VAZIA); onModalChange&&onModalChange(false); }
+  function fecharModal()    { setModal(null); setSel(null); setNd(DIVIDA_VAZIA); setSecaoForm("id"); onModalChange&&onModalChange(false); }
   function abrirWp(d)       { setWp(d); onModalChange&&onModalChange(true); }
   function fecharWp()       { setWp(null); onModalChange&&onModalChange(false); }
+  function abrirFicha(d)    { setSel({...d,dividas:d.dividas||[],contatos:d.contatos||[]}); setAbaFicha("dados"); abrirModal("ficha"); }
 
-  const filtered = devedores.filter(d =>
-    (d.nome||"").toLowerCase().includes(search.toLowerCase()) ||
-    (d.cpf_cnpj||"").includes(search)
-  );
-
-  function gerarParcs(total, qtd, dataInicio) {
-    const arr = [];
-    for(let i=0;i<qtd;i++){
-      const d = new Date(dataInicio+"T12:00:00");
-      d.setMonth(d.getMonth()+i);
-      arr.push({ id:Date.now()+i, num:i+1, valor:Math.round(total/qtd*100)/100, venc:d.toISOString().slice(0,10), status:"pendente", pago_em:null });
-    }
-    return arr;
+  async function buscarCEP() {
+    const cep = form.cep.replace(/\D/g,"");
+    if(cep.length!==8) return alert("CEP inválido.");
+    setBuscandoCEP(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if(data.erro) return alert("CEP não encontrado.");
+      F("logradouro",data.logradouro||""); F("bairro",data.bairro||"");
+      F("cidade",data.localidade||""); F("uf",data.uf||"GO");
+    } catch(e){ alert("Erro ao buscar CEP."); }
+    setBuscandoCEP(false);
   }
 
-  function confirmarParcelas() {
-    const total = parseFloat(nd.valor_total)||0;
-    const qtd   = parseInt(nd.qtd_parcelas)||1;
-    if(!nd.data_primeira_parcela) return alert("Informe a data da 1ª parcela.");
-    setNd(d=>({...d, parcelas: gerarParcs(total, qtd, d.data_primeira_parcela)}));
-  }
-
-  function editParc(id, campo, val) {
-    setNd(d=>({...d, parcelas: d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})}));
-  }
-
-  function addParc() {
-    setNd(d=>{
-      const ultima = d.parcelas[d.parcelas.length-1];
-      const proxD = ultima ? (()=>{const dd=new Date(ultima.venc+"T12:00:00");dd.setMonth(dd.getMonth()+1);return dd.toISOString().slice(0,10);})() : new Date().toISOString().slice(0,10);
-      return {...d, parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ultima?.valor||0,venc:proxD,status:"pendente",pago_em:null}]};
-    });
-  }
-
-  function remParc(id) { setNd(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)})); }
+  const filtered = devedores.filter(d => {
+    const txt = (d.nome||"").toLowerCase().includes(search.toLowerCase()) || (d.cpf_cnpj||"").includes(search);
+    const cred = !filtroCredor || String(d.credor_id)===String(filtroCredor);
+    const stat = !filtroStatus || d.status===filtroStatus;
+    return txt && cred && stat;
+  });
 
   async function salvarDevedor() {
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
     try {
-      // Tenta com coluna dividas primeiro
-      let payload = { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo, telefone:form.telefone, email:form.email, cidade:form.cidade, status:form.status, credor_id:form.credor_id?parseInt(form.credor_id):null, dividas:JSON.stringify([]), valor_original:0 };
-      let res = await dbInsert("devedores", payload);
-      // Se falhar (coluna dividas não existe), tenta sem ela
-      if(!res || (Array.isArray(res) && res.length===0) || res.code) {
-        const {dividas:_, ...semDividas} = payload;
-        res = await dbInsert("devedores", semDividas);
-      }
+      const payload = {
+        nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
+        rg:form.rg, data_nascimento:form.data_nascimento||null, profissao:form.profissao,
+        socio_nome:form.socio_nome, socio_cpf:form.socio_cpf,
+        email:form.email, telefone:form.telefone, telefone2:form.telefone2,
+        cep:form.cep, logradouro:form.logradouro, numero:form.numero,
+        complemento:form.complemento, bairro:form.bairro, cidade:form.cidade, uf:form.uf,
+        credor_id:form.credor_id?parseInt(form.credor_id):null,
+        valor_original:parseFloat(form.valor_nominal)||0,
+        data_origem_divida:form.data_origem_divida||null,
+        data_recebimento_carteira:form.data_recebimento_carteira||null,
+        descricao_divida:form.descricao_divida,
+        status:form.status, responsavel:form.responsavel||user?.nome||"",
+        observacoes:form.observacoes,
+        dividas:JSON.stringify([]), contatos:JSON.stringify([]),
+      };
+      const res = await dbInsert("devedores", payload);
       const novo = Array.isArray(res)?res[0]:res;
-      if(novo && novo.id) {
-        setDevedores(p=>[...p,{...novo,dividas:[]}]);
-        fecharModal();
-        setForm(FORM_DEV);
+      if(novo&&novo.id) {
+        setDevedores(p=>[...p,{...novo,dividas:[],contatos:[]}]);
+        fecharModal(); setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});
         alert(`Devedor "${novo.nome}" cadastrado!`);
-      } else {
-        alert("Erro ao salvar. Verifique se o SQL do Supabase foi executado.");
-      }
+      } else { alert("Erro ao salvar. Verifique se o SQL do Supabase foi executado."); }
     } catch(e){ alert("Erro: "+e.message); }
     setLoading(false);
   }
 
-  async function adicionarDivida() {
+  async function registrarContato() {
     if(!sel) return;
-    const total = parseFloat(nd.valor_total)||0;
-    if(!total) return alert("Informe o valor da dívida.");
-    if(nd.parcelas.length===0) return alert("Clique em 'Gerar Parcelas' antes de salvar.");
-    const divida = {
-      id:Date.now(),
-      descricao:nd.descricao||"Dívida",
-      valor_total:total,
-      data_origem:nd.data_origem,
-      data_vencimento:nd.data_primeira_parcela,
-      parcelas:nd.parcelas,
-      criada_em:new Date().toISOString().slice(0,10),
-      // Diretrizes do contrato
-      indexador:nd.indexador||"igpm",
-      multa_pct:parseFloat(nd.multa_pct)||2,
-      juros_am:parseFloat(nd.juros_am)||1,
-      honorarios_pct:parseFloat(nd.honorarios_pct)||20,
-      data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela,
-      despesas:parseFloat(nd.despesas)||0,
-      observacoes:nd.observacoes||"",
-    };
-    const dividas = [...(sel.dividas||[]), divida];
-    const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+    const contato = { id:Date.now(), data:new Date().toLocaleString("pt-BR"), tipo:novoContato.tipo, resultado:novoContato.resultado, responsavel:user?.nome||"Sistema", obs:novoContato.obs };
+    const contatos = [...(sel.contatos||[]), contato];
     try {
-      const res = await dbUpdate("devedores", sel.id, { dividas:JSON.stringify(dividas), valor_original });
+      const res = await dbUpdate("devedores",sel.id,{contatos:JSON.stringify(contatos)});
       const atu = Array.isArray(res)?res[0]:res;
-      if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); setNd(DIVIDA_VAZIA); alert("Dívida adicionada!"); }
+      if(atu){ const parsed={...atu,dividas:sel.dividas||[],contatos}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); setNovoContato({tipo:"Ligação",resultado:"Sem resposta",obs:""}); }
     } catch(e){ alert("Erro: "+e.message); }
   }
 
-  async function toggleParcela(dividaId, parcId, novoStatus) {
+  function gerarParcs(total,qtd,dataInicio){ const arr=[]; for(let i=0;i<qtd;i++){ const d=new Date(dataInicio+"T12:00:00"); d.setMonth(d.getMonth()+i); arr.push({id:Date.now()+i,num:i+1,valor:Math.round(total/qtd*100)/100,venc:d.toISOString().slice(0,10),status:"pendente",pago_em:null}); } return arr; }
+  function confirmarParcelas(){ const total=parseFloat(nd.valor_total)||0,qtd=parseInt(nd.qtd_parcelas)||1; if(!nd.data_primeira_parcela) return alert("Informe a data."); setNd(d=>({...d,parcelas:gerarParcs(total,qtd,d.data_primeira_parcela)})); }
+  function editParc(id,campo,val){ setNd(d=>({...d,parcelas:d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})})); }
+  function addParc(){ setNd(d=>{ const ul=d.parcelas[d.parcelas.length-1]; const pD=ul?(()=>{const dd=new Date(ul.venc+"T12:00:00");dd.setMonth(dd.getMonth()+1);return dd.toISOString().slice(0,10);})():new Date().toISOString().slice(0,10); return{...d,parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ul?.valor||0,venc:pD,status:"pendente",pago_em:null}]}; }); }
+  function remParc(id){ setNd(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)})); }
+
+  async function adicionarDivida() {
     if(!sel) return;
-    const dividas = (sel.dividas||[]).map(div=>{
-      if(div.id!==dividaId) return div;
-      return {...div, parcelas: div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null})};
-    });
-    const todasPagas = dividas.every(div=>div.parcelas.every(p=>p.status==="pago"));
-    const algumaPaga = dividas.some(div=>div.parcelas.some(p=>p.status==="pago"));
-    const novoStatusDev = todasPagas?"pago":algumaPaga?"negociando":"ativo";
+    const total=parseFloat(nd.valor_total)||0;
+    if(!total) return alert("Informe o valor.");
+    if(!nd.parcelas.length) return alert("Gere as parcelas antes de salvar.");
+    const divida={ id:Date.now(), descricao:nd.descricao||"Dívida", valor_total:total, data_origem:nd.data_origem, data_vencimento:nd.data_primeira_parcela, parcelas:nd.parcelas, criada_em:new Date().toISOString().slice(0,10), indexador:nd.indexador, multa_pct:parseFloat(nd.multa_pct)||2, juros_am:parseFloat(nd.juros_am)||1, honorarios_pct:parseFloat(nd.honorarios_pct)||20, data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela, despesas:parseFloat(nd.despesas)||0, observacoes:nd.observacoes||"" };
+    const dividas=[...(sel.dividas||[]),divida];
+    const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
     try {
-      const res = await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:novoStatusDev});
-      const atu = Array.isArray(res)?res[0]:res;
-      if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
-    } catch(e){ console.error(e); }
+      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
+      const atu=Array.isArray(res)?res[0]:res;
+      if(atu){ const parsed={...atu,dividas,contatos:sel.contatos||[]}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); setNd(DIVIDA_VAZIA); alert("Dívida adicionada!"); }
+    } catch(e){ alert("Erro: "+e.message); }
   }
 
-  async function excluirDivida(dividaId) {
-    if(!sel||!window.confirm("Excluir esta dívida?")) return;
-    const dividas = (sel.dividas||[]).filter(d=>d.id!==dividaId);
-    const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
-    const res = await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
-    const atu = Array.isArray(res)?res[0]:res;
-    if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
+  async function toggleParcela(dividaId,parcId,novoStatus) {
+    if(!sel) return;
+    const dividas=(sel.dividas||[]).map(div=>{ if(div.id!==dividaId) return div; return{...div,parcelas:div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null})}; });
+    const todasPagas=dividas.every(d=>d.parcelas.every(p=>p.status==="pago"));
+    const alguma=dividas.some(d=>d.parcelas.some(p=>p.status==="pago"));
+    const novoSt=todasPagas?"pago_integral":alguma?"pago_parcial":"novo";
+    try {
+      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:novoSt});
+      const atu=Array.isArray(res)?res[0]:res;
+      if(atu){ const parsed={...atu,dividas,contatos:sel.contatos||[]}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
+    } catch(e){ console.error(e); }
   }
 
   async function excluirDevedor(d) {
     if(!window.confirm(`Excluir "${d.nome}"?`)) return;
     await dbDelete("devedores",d.id);
     setDevedores(prev=>prev.filter(x=>x.id!==d.id));
-    if(sel?.id===d.id){ fecharModal(); }
+    if(sel?.id===d.id) fecharModal();
   }
 
   const WP_MSGS = d => [
     {titulo:"Notificação",msg:`Prezado(a) *${d.nome}*, consta débito em aberto.\n\nEntre em contato para regularização.\n\n*MR Cobranças* | (62) 9 9999-0000`},
-    {titulo:"Proposta de Acordo",msg:`Olá *${(d.nome||"").split(" ")[0]}*! Condições especiais para quitação do débito.\n\n*MR Cobranças* | (62) 9 9999-0000`},
-    {titulo:"Aviso Judicial",msg:`*AVISO — ${d.nome}*\n\nSeu débito foi encaminhado para cobrança judicial. Ainda é possível acordo.\n\n*Escritório MR Cobranças*`},
+    {titulo:"Proposta de Acordo",msg:`Olá *${(d.nome||"").split(" ")[0]}*! Condições especiais para quitação.\n\n*MR Cobranças* | (62) 9 9999-0000`},
+    {titulo:"Aviso Judicial",msg:`*AVISO — ${d.nome}*\nSeu débito foi encaminhado para cobrança judicial.\n\n*Escritório MR Cobranças*`},
   ];
 
-  const corSt={pago:"#16a34a",pendente:"#64748b",atrasado:"#dc2626",negociando:"#d97706"};
-  const bgSt={pago:"#dcfce7",pendente:"#f1f5f9",atrasado:"#fee2e2",negociando:"#fef9c3"};
+  const INP = ({label,value,onChange,type="text",opts,span,placeholder=""}) => (
+    <div style={{gridColumn:span===2?"1/-1":"auto"}}>
+      <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>{label}</label>
+      {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>{opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}</select>
+      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>}
+    </div>
+  );
+
+  const SECOES=[["id","👤 Identificação"],["end","📍 Endereço"],["divida","💰 Dívida"],["ctrl","⚙️ Controle"]];
 
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
-        <Btn onClick={()=>{setForm(FORM_DEV);abrirModal("novo")}}>{I.plus} Novo Devedor</Btn>
-      </div>
-
-      <div style={{position:"relative",marginBottom:14}}>
-        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8"}}>{I.search}</span>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ..." style={{width:"100%",padding:"10px 12px 10px 36px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
-      </div>
-
-      <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{background:"#f8fafc"}}>
-              {["Nome","CPF/CNPJ","Credor","Status","Total","Dívidas","Ações"].map(h=>(
-                <th key={h} style={{textAlign:"left",padding:"10px 14px",color:"#64748b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {filtered.map(d=>{
-                const dividas = d.dividas||[];
-                const totalDiv = dividas.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||0;
-                const credor = credores.find(c=>c.id===d.credor_id);
-                const totalParcs = dividas.reduce((s,div)=>s+(div.parcelas||[]).length,0);
-                const pagas = dividas.reduce((s,div)=>s+(div.parcelas||[]).filter(p=>p.status==="pago").length,0);
-                return(
-                  <tr key={d.id} style={{borderTop:"1px solid #f8fafc"}}>
-                    <td style={{padding:"11px 14px",fontWeight:700,color:"#0f172a"}}>{d.nome}</td>
-                    <td style={{padding:"11px 14px",color:"#64748b",fontFamily:"monospace",fontSize:11}}>{d.cpf_cnpj||"—"}</td>
-                    <td style={{padding:"11px 14px",fontSize:11,color:"#64748b"}}>{credor?(credor.nome||"").split(" ").slice(0,2).join(" "):"—"}</td>
-                    <td style={{padding:"11px 14px"}}><Badge s={d.status||"ativo"}/></td>
-                    <td style={{padding:"11px 14px",fontWeight:700,color:"#4f46e5"}}>{fmt(totalDiv)}</td>
-                    <td style={{padding:"11px 14px"}}>
-                      {dividas.length>0?(
-                        <div style={{display:"flex",alignItems:"center",gap:5}}>
-                          <span style={{fontSize:11,fontWeight:700}}>{pagas}/{totalParcs}</span>
-                          <div style={{width:36,height:4,background:"#f1f5f9",borderRadius:99}}>
-                            <div style={{height:4,width:`${totalParcs?pagas/totalParcs*100:0}%`,background:"#22c55e",borderRadius:99}}/>
-                          </div>
-                          <span style={{fontSize:10,color:"#94a3b8"}}>{dividas.length}d</span>
-                        </div>
-                      ):<span style={{color:"#94a3b8",fontSize:11}}>—</span>}
-                    </td>
-                    <td style={{padding:"11px 14px"}}>
-                      <div style={{display:"flex",gap:4}}>
-                        <button onClick={()=>{setSel({...d,dividas:d.dividas||[]});setAba("dividas");setNd(DIVIDA_VAZIA);abrirModal("ver");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>👁 Ver</button>
-                        {d.telefone&&<button onClick={()=>abrirWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
-                        <button onClick={()=>excluirDevedor(d)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length===0&&<tr><td colSpan={7} style={{padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>Nenhum devedor encontrado</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <div style={{padding:"8px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600}}>{filtered.length} devedores</div>
-      </div>
-
-      {modal==="novo"&&(
-        <Modal title="Novo Devedor" onClose={fecharModal}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-            <Inp label="Nome / Razão Social" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
-            <Inp label="CPF / CNPJ" value={form.cpf_cnpj} onChange={v=>F("cpf_cnpj",v)}/>
-            <Inp label="Tipo" value={form.tipo} onChange={v=>F("tipo",v)} options={["PF","PJ"]}/>
-            <Inp label="Telefone (WhatsApp)" value={form.telefone} onChange={v=>F("telefone",v)} placeholder="62999990000"/>
-            <Inp label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
-            <Inp label="Cidade" value={form.cidade} onChange={v=>F("cidade",v)}/>
-            <Inp label="Status" value={form.status} onChange={v=>F("status",v)} options={["ativo","negociando","pago","inativo"]}/>
-            <Inp label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} options={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]}/>
+      {/* ── LISTAGEM ── */}
+      {modal!=="ficha"&&(
+        <>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
+            <Btn onClick={()=>{setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});setSecaoForm("id");abrirModal("novo")}}>{I.plus} Novo Devedor</Btn>
           </div>
-          <p style={{fontSize:11,color:"#94a3b8",marginTop:12}}>💡 Dívidas e parcelas são adicionadas na ficha do devedor.</p>
-          <div style={{display:"flex",gap:10,marginTop:16}}>
-            <Btn onClick={salvarDevedor}>{loading?"Salvando...":"Cadastrar"}</Btn>
-            <Btn onClick={fecharModal} outline>Cancelar</Btn>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:10,marginBottom:14}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:3,textTransform:"uppercase"}}>Credor</label>
+              <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                <option value="">Todos os credores</option>
+                {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:3,textTransform:"uppercase"}}>Status</label>
+              <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                <option value="">Todos os status</option>
+                {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:3,textTransform:"uppercase"}}>Buscar</label>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8"}}>{I.search}</span>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome ou CPF/CNPJ..." style={{width:"100%",padding:"8px 10px 8px 32px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              </div>
+            </div>
+          </div>
+
+          <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead><tr style={{background:"#f8fafc"}}>
+                  {["Nome","CPF/CNPJ","Credor","Status","Valor Dívida","Ações"].map(h=>(
+                    <th key={h} style={{textAlign:"left",padding:"10px 14px",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {filtered.map(d=>{
+                    const dividas=d.dividas||[];
+                    const totalDiv=dividas.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||0;
+                    const credor=credores.find(c=>c.id===d.credor_id);
+                    return(
+                      <tr key={d.id} style={{borderTop:"1px solid #f8fafc",cursor:"pointer"}} onClick={()=>abrirFicha(d)}>
+                        <td style={{padding:"11px 14px",fontWeight:700,color:"#4f46e5",textDecoration:"underline"}}>{d.nome}</td>
+                        <td style={{padding:"11px 14px",color:"#64748b",fontFamily:"monospace",fontSize:11}}>{d.cpf_cnpj||"—"}</td>
+                        <td style={{padding:"11px 14px",fontSize:11,color:"#64748b"}}>{(credor?.nome||"—").split(" ").slice(0,2).join(" ")}</td>
+                        <td style={{padding:"11px 14px"}}><BadgeDev status={d.status||"novo"}/></td>
+                        <td style={{padding:"11px 14px",fontWeight:700,color:"#0f172a"}}>{fmt(totalDiv)}</td>
+                        <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}>
+                          <div style={{display:"flex",gap:4}}>
+                            {d.telefone&&<button onClick={()=>abrirWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
+                            <button onClick={()=>excluirDevedor(d)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filtered.length===0&&<tr><td colSpan={6} style={{padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>Nenhum devedor encontrado</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div style={{padding:"8px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600}}>{filtered.length} de {devedores.length} devedores</div>
+          </div>
+        </>
+      )}
+
+      {/* ── MODAL NOVO DEVEDOR ── */}
+      {modal==="novo"&&(
+        <Modal title="Novo Devedor" onClose={fecharModal} wide>
+          <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
+            {SECOES.map(([id,label])=>(
+              <button key={id} onClick={()=>setSecaoForm(id)}
+                style={{padding:"7px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-2}}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {secaoForm==="id"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <INP label="Nome / Razão Social *" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Tipo</label>
+                <div style={{display:"flex",gap:8}}>
+                  {["PF","PJ"].map(t=><button key={t} onClick={()=>F("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${form.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.tipo===t?"#4f46e5":"#fff",color:form.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}
+                </div>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CPF / CNPJ *</label>
+                <input value={form.cpf_cnpj} onChange={e=>F("cpf_cnpj",form.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} placeholder={form.tipo==="PF"?"000.000.000-00":"00.000.000/0000-00"} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+              </div>
+              {form.tipo==="PF"?(<>
+                <INP label="RG" value={form.rg} onChange={v=>F("rg",v)}/>
+                <INP label="Data de Nascimento" value={form.data_nascimento} onChange={v=>F("data_nascimento",v)} type="date"/>
+                <INP label="Profissão" value={form.profissao} onChange={v=>F("profissao",v)} span={2}/>
+              </>):(<>
+                <INP label="Nome do Sócio / Responsável" value={form.socio_nome} onChange={v=>F("socio_nome",v)} span={2}/>
+                <INP label="CPF do Sócio" value={form.socio_cpf} onChange={v=>F("socio_cpf",maskCPF(v))}/>
+              </>)}
+              <INP label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Principal (WhatsApp)</label>
+                <input value={form.telefone} onChange={e=>F("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Secundário</label>
+                <input value={form.telefone2} onChange={e=>F("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              </div>
+            </div>
+          )}
+
+          {secaoForm==="end"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CEP</label>
+                <div style={{display:"flex",gap:8}}>
+                  <input value={form.cep} onChange={e=>F("cep",maskCEP(e.target.value))} placeholder="00000-000" style={{flex:1,padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"monospace"}}/>
+                  <button onClick={buscarCEP} disabled={buscandoCEP} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{buscandoCEP?"⏳":"🔍 Buscar"}</button>
+                </div>
+              </div>
+              <INP label="UF" value={form.uf} onChange={v=>F("uf",v)} opts={UFS.map(u=>({v:u,l:u}))}/>
+              <INP label="Logradouro" value={form.logradouro} onChange={v=>F("logradouro",v)} span={2}/>
+              <INP label="Número" value={form.numero} onChange={v=>F("numero",v)}/>
+              <INP label="Complemento" value={form.complemento} onChange={v=>F("complemento",v)}/>
+              <INP label="Bairro" value={form.bairro} onChange={v=>F("bairro",v)}/>
+              <INP label="Cidade" value={form.cidade} onChange={v=>F("cidade",v)}/>
+            </div>
+          )}
+
+          {secaoForm==="divida"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <INP label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} opts={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]} span={2}/>
+              <INP label="Valor Nominal (R$)" value={form.valor_nominal} onChange={v=>F("valor_nominal",v)} type="number"/>
+              <INP label="Data de Origem da Dívida" value={form.data_origem_divida} onChange={v=>F("data_origem_divida",v)} type="date"/>
+              <INP label="Data de Recebimento da Carteira" value={form.data_recebimento_carteira} onChange={v=>F("data_recebimento_carteira",v)} type="date" span={2}/>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Descrição / Origem da Dívida</label>
+                <textarea value={form.descricao_divida} onChange={e=>F("descricao_divida",e.target.value)} placeholder="Ex.: Contrato de Compra e Venda nº 001/2023..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+
+          {secaoForm==="ctrl"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <INP label="Status" value={form.status} onChange={v=>F("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))} span={2}/>
+              <INP label="Responsável pelo caso" value={form.responsavel} onChange={v=>F("responsavel",v)} span={2}/>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Observações</label>
+                <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)} rows={4} placeholder="Informações adicionais..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:20,paddingTop:16,borderTop:"1px solid #f1f5f9"}}>
+            <div>{secaoForm!=="id"&&<Btn onClick={()=>setSecaoForm(SECOES[SECOES.findIndex(s=>s[0]===secaoForm)-1][0])} outline>← Anterior</Btn>}</div>
+            <div style={{display:"flex",gap:8}}>
+              {secaoForm!=="ctrl"?<Btn onClick={()=>setSecaoForm(SECOES[SECOES.findIndex(s=>s[0]===secaoForm)+1][0])}>Próximo →</Btn>:<Btn onClick={salvarDevedor}>{loading?"Salvando...":"💾 Cadastrar"}</Btn>}
+              <Btn onClick={fecharModal} outline>Cancelar</Btn>
+            </div>
           </div>
         </Modal>
       )}
 
-      {modal==="ver"&&sel&&(
-        <Modal title={sel.nome} onClose={fecharModal} wide>
+      {/* ── FICHA INDIVIDUAL ── */}
+      {modal==="ficha"&&sel&&(
+        <div>
+          <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",borderRadius:18,padding:"20px 24px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <button onClick={fecharModal} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,marginBottom:8,fontFamily:"Mulish"}}>← Voltar à listagem</button>
+              <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#fff",marginBottom:6}}>{sel.nome}</h2>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <BadgeDev status={sel.status||"novo"}/>
+                <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>{credores.find(c=>c.id===sel.credor_id)?.nome||"Sem credor"}</span>
+                {sel.cpf_cnpj&&<span style={{fontSize:11,color:"rgba(255,255,255,.4)",fontFamily:"monospace"}}>{sel.cpf_cnpj}</span>}
+              </div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <p style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>Total das Dívidas</p>
+              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:"#a5f3fc"}}>{fmt((sel.dividas||[]).reduce((s,d)=>s+(d.valor_total||0),0)||sel.valor_original||0)}</p>
+            </div>
+          </div>
+
           <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
-            {[["dados","📋 Dados"],["dividas","💰 Dívidas ("+(sel.dividas||[]).length+")"]].map(([a,l])=>(
-              <button key={a} onClick={()=>setAba(a)} style={{padding:"8px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:aba===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
+            {[["dados","📋 Dados"],["contatos","📞 Contatos ("+(sel.contatos||[]).length+")"],["dividas","💰 Dívidas ("+(sel.dividas||[]).length+")"],["processos","⚖️ Processos"]].map(([a,l])=>(
+              <button key={a} onClick={()=>setAbaFicha(a)} style={{padding:"8px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
             ))}
           </div>
 
-          {aba==="dados"&&(
+          {abaFicha==="dados"&&(
             <div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-                {[["Nome",sel.nome],["CPF/CNPJ",sel.cpf_cnpj],["Tipo",sel.tipo],["Cidade",sel.cidade],["Telefone",sel.telefone],["E-mail",sel.email],["Credor",credores.find(c=>c.id===sel.credor_id)?.nome||"—"],["Status",sel.status]].map(([k,v])=>(
+                {[
+                  ["Nome",sel.nome],["CPF/CNPJ",sel.cpf_cnpj],["Tipo",sel.tipo],
+                  sel.tipo==="PF"?["RG",sel.rg]:["Sócio",sel.socio_nome],
+                  sel.tipo==="PF"?["Nascimento",fmtDate(sel.data_nascimento)]:["CPF Sócio",sel.socio_cpf],
+                  sel.tipo==="PF"&&["Profissão",sel.profissao],
+                  ["E-mail",sel.email],["Telefone",sel.telefone],["Tel. 2",sel.telefone2],
+                  ["Endereço",`${sel.logradouro||""}${sel.numero?", "+sel.numero:""} ${sel.complemento||""} — ${sel.bairro||""} — ${sel.cidade||""}/${sel.uf||""} — CEP ${sel.cep||""}`],
+                  ["Responsável",sel.responsavel],["Status",(STATUS_DEV.find(s=>s.v===sel.status)||STATUS_DEV[0]).l],
+                  sel.observacoes&&["Observações",sel.observacoes],
+                  sel.descricao_divida&&["Descrição da Dívida",sel.descricao_divida],
+                  sel.data_origem_divida&&["Data Origem",fmtDate(sel.data_origem_divida)],
+                  sel.data_recebimento_carteira&&["Recebimento Carteira",fmtDate(sel.data_recebimento_carteira)],
+                ].filter(Boolean).map(([k,v])=>(
                   <div key={k} style={{padding:"10px 14px",background:"#f8fafc",borderRadius:10}}>
                     <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>{k}</p>
                     <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{v||"—"}</p>
                   </div>
                 ))}
               </div>
-              <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir Devedor</Btn>
+              <div style={{display:"flex",gap:8}}>
+                {sel.telefone&&<Btn onClick={()=>abrirWp(sel)}>📱 WhatsApp</Btn>}
+                <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir</Btn>
+              </div>
             </div>
           )}
 
-          {aba==="dividas"&&(
+          {abaFicha==="contatos"&&(
             <div>
-              {(sel.dividas||[]).length===0&&(
-                <div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12,marginBottom:16}}>Nenhuma dívida cadastrada.</div>
-              )}
+              <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px solid #e2e8f0",marginBottom:18}}>
+                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>+ Registrar Contato</p>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo de Contato</label>
+                    <select value={novoContato.tipo} onChange={e=>setNovoContato(c=>({...c,tipo:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                      {["Ligação","WhatsApp","E-mail","Carta","Visita","Outro"].map(t=><option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Resultado</label>
+                    <select value={novoContato.resultado} onChange={e=>setNovoContato(c=>({...c,resultado:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                      {["Sem resposta","Número inválido","Contato estabelecido","Recusou negociar","Demonstrou interesse","Acordo verbal","Outro"].map(r=><option key={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
+                    <textarea value={novoContato.obs} onChange={e=>setNovoContato(c=>({...c,obs:e.target.value}))} rows={2} placeholder="Detalhes do contato..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                  </div>
+                </div>
+                <Btn onClick={registrarContato} color="#4f46e5">💬 Registrar Contato</Btn>
+              </div>
+              {(sel.contatos||[]).length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24}}>Nenhum contato registrado.</p>}
+              {[...(sel.contatos||[])].reverse().map(c=>{
+                const cores={"Contato estabelecido":"#059669","Acordo verbal":"#059669","Demonstrou interesse":"#d97706","Recusou negociar":"#dc2626","Sem resposta":"#64748b","Número inválido":"#dc2626"};
+                return(
+                  <div key={c.id} style={{border:"1px solid #f1f5f9",borderRadius:12,padding:14,marginBottom:10,borderLeft:`4px solid ${cores[c.resultado]||"#e2e8f0"}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span style={{fontSize:11,fontWeight:700,background:"#ede9fe",color:"#6d28d9",padding:"2px 8px",borderRadius:99}}>{c.tipo}</span>
+                        <span style={{fontSize:11,fontWeight:700,color:cores[c.resultado]||"#64748b"}}>{c.resultado}</span>
+                      </div>
+                      <span style={{fontSize:10,color:"#94a3b8"}}>{c.data} · {c.responsavel}</span>
+                    </div>
+                    {c.obs&&<p style={{fontSize:12,color:"#475569",lineHeight:1.5}}>{c.obs}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {abaFicha==="dividas"&&(
+            <div>
+              {(sel.dividas||[]).length===0&&<div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12,marginBottom:16}}>Nenhuma dívida cadastrada.</div>}
               {(sel.dividas||[]).map((div,di)=>{
                 const pagas=div.parcelas.filter(p=>p.status==="pago").length;
                 const pct=div.parcelas.length?Math.round(pagas/div.parcelas.length*100):0;
                 return(
                   <div key={div.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                      <div>
-                        <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao||"Dívida "+(di+1)}</p>
-                        <p style={{fontSize:11,color:"#64748b"}}>{div.parcelas.length} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</p>
-                      </div>
-                      <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
+                    <div style={{marginBottom:8}}>
+                      <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao}</p>
+                      <p style={{fontSize:11,color:"#64748b"}}>{div.parcelas.length} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</p>
+                      {div.indexador&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Índice: {div.indexador?.toUpperCase()} · Juros: {div.juros_am}%am · Multa: {div.multa_pct}% · Honorários: {div.honorarios_pct}%</p>}
                     </div>
-                    <div style={{height:4,background:"#f1f5f9",borderRadius:99,marginBottom:10}}>
-                      <div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/>
-                    </div>
-                    <div style={{maxHeight:180,overflowY:"auto"}}>
+                    <div style={{height:4,background:"#f1f5f9",borderRadius:99,marginBottom:10}}><div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/></div>
+                    <div style={{maxHeight:160,overflowY:"auto"}}>
                       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                        <thead><tr style={{background:"#f8fafc"}}>
-                          {["Nº","Valor","Vencimento","Status","Pago em",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}
-                        </tr></thead>
-                        <tbody>
-                          {(div.parcelas||[]).map((p,pi)=>{
-                            const atrasada=p.status==="pendente"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date();
-                            const sR=atrasada?"atrasado":p.status;
-                            return(
-                              <tr key={p.id} style={{borderTop:"1px solid #f8fafc",background:sR==="pago"?"#f9fffe":sR==="atrasado"?"#fff9f9":"#fff"}}>
-                                <td style={{padding:"5px 8px",fontWeight:700}}>{pi+1}</td>
-                                <td style={{padding:"5px 8px",color:"#4f46e5",fontWeight:700}}>{fmt(p.valor)}</td>
-                                <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc||p.vencimento)}</td>
-                                <td style={{padding:"5px 8px"}}>
-                                  <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bgSt[sR]||"#f1f5f9",color:corSt[sR]||"#64748b"}}>
-                                    {sR==="pago"?"Pago":sR==="atrasado"?"Atrasado":"Pendente"}
-                                  </span>
-                                </td>
-                                <td style={{padding:"5px 8px",color:"#94a3b8",fontSize:10}}>{fmtDate(p.pago_em)}</td>
-                                <td style={{padding:"5px 8px"}}>
-                                  {p.status!=="pago"
-                                    ?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓</button>
-                                    :<button onClick={()=>toggleParcela(div.id,p.id,"pendente")} style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10}}>↩</button>
-                                  }
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
+                        <thead><tr style={{background:"#f8fafc"}}>{["Nº","Valor","Vencimento","Status",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
+                        <tbody>{(div.parcelas||[]).map((p,pi)=>{
+                          const atr=p.status==="pendente"&&new Date((p.venc||p.vencimento)+"T12:00:00")<new Date();
+                          const sR=atr?"atrasado":p.status;
+                          const cS={pago:"#16a34a",atrasado:"#dc2626",pendente:"#64748b"};
+                          const bS={pago:"#dcfce7",atrasado:"#fee2e2",pendente:"#f1f5f9"};
+                          return(
+                            <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
+                              <td style={{padding:"5px 8px",fontWeight:700}}>{pi+1}</td>
+                              <td style={{padding:"5px 8px",color:"#4f46e5",fontWeight:700}}>{fmt(p.valor)}</td>
+                              <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc||p.vencimento)}</td>
+                              <td style={{padding:"5px 8px"}}><span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bS[sR]||"#f1f5f9",color:cS[sR]||"#64748b"}}>{sR==="pago"?"Pago":sR==="atrasado"?"Atrasado":"Pendente"}</span></td>
+                              <td style={{padding:"5px 8px"}}>{p.status!=="pago"?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓</button>:<button onClick={()=>toggleParcela(div.id,p.id,"pendente")} style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10}}>↩</button>}</td>
+                            </tr>
+                          );
+                        })}</tbody>
                       </table>
                     </div>
                   </div>
                 );
               })}
-
-              <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:4}}>
+              <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:8}}>
                 <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>➕ Nova Dívida</p>
-
-                {/* Identificação */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                  <Inp label="Descrição (ex: Contrato 001)" value={nd.descricao} onChange={v=>ND("descricao",v)} span={2}/>
-                  <Inp label="Valor Nominal (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
-                  <Inp label="Data de Origem da Dívida" value={nd.data_origem} onChange={v=>ND("data_origem",v)} type="date"/>
-                </div>
-
-                {/* Diretrizes do contrato */}
-                <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:12,marginBottom:12}}>
-                  <p style={{fontSize:11,fontWeight:700,color:"#4f46e5",textTransform:"uppercase",letterSpacing:".05em",marginBottom:10}}>📋 Diretrizes do Contrato</p>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                    <Inp label="Índice de Correção" value={nd.indexador} onChange={v=>ND("indexador",v)} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC/CDI"},{v:"inpc",l:"INPC"},{v:"nenhum",l:"Sem correção"}]}/>
-                    <Inp label="Data Início Atualização" value={nd.data_inicio_atualizacao} onChange={v=>ND("data_inicio_atualizacao",v)} type="date"/>
-                    <Inp label="Multa Contratual (%)" value={nd.multa_pct} onChange={v=>ND("multa_pct",v)} type="number"/>
-                    <Inp label="Juros (% ao mês)" value={nd.juros_am} onChange={v=>ND("juros_am",v)} type="number"/>
-                    <Inp label="Honorários do Escritório (%)" value={nd.honorarios_pct} onChange={v=>ND("honorarios_pct",v)} type="number"/>
-                    <Inp label="Despesas Iniciais (R$)" value={nd.despesas} onChange={v=>ND("despesas",v)} type="number"/>
-                    <Inp label="Observações / Cláusulas" value={nd.observacoes} onChange={v=>ND("observacoes",v)} span={2}/>
-                  </div>
-                  {nd.valor_total&&(
-                    <div style={{marginTop:10,padding:"8px 12px",background:"#f0fdf4",borderRadius:8,fontSize:12}}>
-                      <b style={{color:"#059669"}}>Estimativa:</b>
-                      <span style={{color:"#475569",marginLeft:6}}>
-                        Honorários: <b style={{color:"#4f46e5"}}>{fmt((parseFloat(nd.valor_total)||0)*(parseFloat(nd.honorarios_pct)||0)/100)}</b>
-                        {" · "}Multa: <b style={{color:"#dc2626"}}>{fmt((parseFloat(nd.valor_total)||0)*(parseFloat(nd.multa_pct)||0)/100)}</b>
-                        {" · "}Despesas: <b style={{color:"#d97706"}}>{fmt(parseFloat(nd.despesas)||0)}</b>
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Parcelamento */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                  <Inp label="Data da 1ª Parcela / Vencimento" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
+                  <Inp label="Descrição" value={nd.descricao} onChange={v=>ND("descricao",v)} span={2}/>
+                  <Inp label="Valor Total (R$)" value={nd.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
+                  <Inp label="Data de Origem" value={nd.data_origem} onChange={v=>ND("data_origem",v)} type="date"/>
+                </div>
+                <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:12,marginBottom:10}}>
+                  <p style={{fontSize:10,fontWeight:700,color:"#4f46e5",textTransform:"uppercase",letterSpacing:".05em",marginBottom:8}}>📋 Diretrizes do Contrato</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <Inp label="Índice" value={nd.indexador} onChange={v=>ND("indexador",v)} options={[{v:"igpm",l:"IGP-M"},{v:"ipca",l:"IPCA"},{v:"selic",l:"SELIC"},{v:"inpc",l:"INPC"},{v:"nenhum",l:"Sem correção"}]}/>
+                    <Inp label="Data Início Atualização" value={nd.data_inicio_atualizacao} onChange={v=>ND("data_inicio_atualizacao",v)} type="date"/>
+                    <Inp label="Multa (%)" value={nd.multa_pct} onChange={v=>ND("multa_pct",v)} type="number"/>
+                    <Inp label="Juros (%am)" value={nd.juros_am} onChange={v=>ND("juros_am",v)} type="number"/>
+                    <Inp label="Honorários (%)" value={nd.honorarios_pct} onChange={v=>ND("honorarios_pct",v)} type="number"/>
+                    <Inp label="Despesas (R$)" value={nd.despesas} onChange={v=>ND("despesas",v)} type="number"/>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <Inp label="Data da 1ª Parcela" value={nd.data_primeira_parcela} onChange={v=>ND("data_primeira_parcela",v)} type="date"/>
                   <Inp label="Nº de Parcelas" value={nd.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
                 </div>
-                {nd.valor_total&&nd.qtd_parcelas&&(
-                  <div style={{background:"#ede9fe",borderRadius:8,padding:"7px 12px",marginBottom:10,fontSize:12}}>
-                    <b style={{color:"#4f46e5"}}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total)||0)/parseInt(nd.qtd_parcelas||1))}</b>
-                    <span style={{color:"#6d28d9",marginLeft:8}}>= {fmt(parseFloat(nd.valor_total)||0)}</span>
-                  </div>
-                )}
+                {nd.valor_total&&nd.qtd_parcelas&&<div style={{background:"#ede9fe",borderRadius:8,padding:"6px 12px",marginBottom:10,fontSize:12}}><b style={{color:"#4f46e5"}}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total)||0)/parseInt(nd.qtd_parcelas||1))}</b></div>}
                 <Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn>
-
                 {nd.parcelas.length>0&&(
                   <div style={{marginTop:12}}>
-                    <p style={{fontSize:11,fontWeight:700,color:"#0f172a",marginBottom:6}}>✏️ Ajuste valores individualmente:</p>
-                    <div style={{maxHeight:200,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
+                    <div style={{maxHeight:180,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
                       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                        <thead><tr style={{background:"#f8fafc"}}>
-                          {["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}
-                        </tr></thead>
-                        <tbody>
-                          {nd.parcelas.map((p,i)=>(
-                            <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
-                              <td style={{padding:"5px 9px",fontWeight:700,color:"#0f172a"}}>{i+1}</td>
-                              <td style={{padding:"5px 9px"}}>
-                                <input type="number" value={p.valor} onChange={e=>editParc(p.id,"valor",e.target.value)}
-                                  style={{width:85,padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none"}}/>
-                              </td>
-                              <td style={{padding:"5px 9px"}}>
-                                <input type="date" value={p.venc} onChange={e=>editParc(p.id,"venc",e.target.value)}
-                                  style={{padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none"}}/>
-                              </td>
-                              <td style={{padding:"5px 9px"}}>
-                                <button onClick={()=>remParc(p.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10}}>✕</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
+                        <thead><tr style={{background:"#f8fafc"}}>{["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"6px 9px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10}}>{h}</th>)}</tr></thead>
+                        <tbody>{nd.parcelas.map((p,i)=>(
+                          <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
+                            <td style={{padding:"5px 9px",fontWeight:700}}>{i+1}</td>
+                            <td style={{padding:"5px 9px"}}><input type="number" value={p.valor} onChange={e=>editParc(p.id,"valor",e.target.value)} style={{width:85,padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none"}}/></td>
+                            <td style={{padding:"5px 9px"}}><input type="date" value={p.venc} onChange={e=>editParc(p.id,"venc",e.target.value)} style={{padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none"}}/></td>
+                            <td style={{padding:"5px 9px"}}><button onClick={()=>remParc(p.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10}}>✕</button></td>
+                          </tr>
+                        ))}</tbody>
                       </table>
                     </div>
                     <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
@@ -696,7 +829,15 @@ function Devedores({ devedores, setDevedores, credores, onModalChange }) {
               </div>
             </div>
           )}
-        </Modal>
+
+          {abaFicha==="processos"&&(
+            <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12}}>
+              <div style={{fontSize:32,marginBottom:8}}>⚖️</div>
+              <p>Os processos deste devedor são gerenciados no módulo <b style={{color:"#4f46e5"}}>Processos</b>.</p>
+              <p style={{marginTop:4,fontSize:11}}>Clique em "Processos" no menu lateral para consultar e vincular processos.</p>
+            </div>
+          )}
+        </div>
       )}
 
       {wp&&(
@@ -705,10 +846,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange }) {
             <div key={i} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10}}>
               <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8}}>{m.titulo}</p>
               <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f8fafc",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
-              <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer"
-                style={{display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
-                {I.wp} Abrir no WhatsApp
-              </a>
+              <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>{I.wp} Abrir no WhatsApp</a>
             </div>
           ))}
         </Modal>
@@ -1886,7 +2024,7 @@ export default function App() {
 
   const PAGE = {
     dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user}/>,
-    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto}/>,
+    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user}/>,
     credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
     processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos}/>,
     regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
