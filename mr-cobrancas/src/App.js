@@ -205,118 +205,278 @@ function Login({ onLogin }) {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
+// DASHBOARD — Foco em Cobrança
+// ═══════════════════════════════════════════════════════════════
 function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
+  const hoje = new Date().toISOString().slice(0,10);
+
+  // ── Métricas de cobrança ──────────────────────────────────────
   const totalCarteira = devedores.reduce((s,d)=>{
-    const dividas = d.dividas||[];
-    const valorDividas = dividas.reduce((ss,div)=>ss+(div.valor_total||0),0);
-    // Usar valor das dívidas se existir, senão valor_nominal ou valor_original (qualquer um que tiver)
-    const valorBase = valorDividas || d.valor_nominal || d.valor_original || 0;
-    return s + valorBase;
+    const dividas=d.dividas||[];
+    return s+(dividas.reduce((ss,div)=>ss+(div.valor_total||0),0)||d.valor_nominal||d.valor_original||0);
   },0);
+
   const totalRecuperado = devedores.reduce((s,d)=>{
-    // Parcelas de dívidas avulsas
-    const parcsDividas = (d.dividas||[]).flatMap(div=>div.parcelas||[]);
-    const recDividas = parcsDividas.filter(p=>p.status==="pago").reduce((ss,p)=>ss+(p.valor||0),0);
-    // Parcelas de acordos
-    const recAcordos = calcularTotaisAcordo(d.acordos||[]).recuperado;
-    return s + recDividas + recAcordos;
+    const parcsDividas=(d.dividas||[]).flatMap(div=>div.parcelas||[]);
+    const recDividas=parcsDividas.filter(p=>p.status==="pago").reduce((ss,p)=>ss+(p.valor||0),0);
+    const recAcordos=calcularTotaisAcordo(d.acordos||[]).recuperado;
+    return s+recDividas+recAcordos;
   },0);
-  const totalAcordos = devedores.reduce((s,d)=>s+(d.acordos||[]).length,0);
+
+  const taxaRecuperacao = totalCarteira>0?(totalRecuperado/totalCarteira*100):0;
+  const emAberto = totalCarteira - totalRecuperado;
+
+  // Por status
+  const porStatus = {};
+  devedores.forEach(d=>{ porStatus[d.status]=(porStatus[d.status]||0)+1; });
+
+  // Acordos ativos
   const acordosAtivos = devedores.reduce((s,d)=>s+(d.acordos||[]).filter(a=>a.status==="ativo").length,0);
-  const ativos = processos.filter(p => p.status==="em_andamento").length;
-  const prazos7 = andamentos.filter(a => { if(!a.prazo) return false; const d=(new Date(a.prazo)-new Date())/86400000; return d>=0&&d<=7; }).length;
+  const acordosTotal  = devedores.reduce((s,d)=>s+(d.acordos||[]).length,0);
 
-  const kpis = [
-    { l:"Carteira Total", v: fmt(totalCarteira), sub:`${devedores.length} devedores`, g:"linear-gradient(135deg,#4f46e5,#6d28d9)" },
-    { l:"Valor Recuperado", v: fmt(totalRecuperado), sub:`${totalCarteira?(totalRecuperado/totalCarteira*100).toFixed(1):0}% da carteira`, g:"linear-gradient(135deg,#059669,#065f46)" },
-    { l:"Prazos Críticos", v: prazos7, sub:"próximos 7 dias", g:"linear-gradient(135deg,#dc2626,#9f1239)" },
-    { l:"Processos Ativos", v: ativos, sub:`${processos.length} total`, g:"linear-gradient(135deg,#d97706,#b45309)" },
-  ];
+  // Lembretes urgentes
+  const lemsUrgentes = lembretes.filter(l=>l.status==="pendente"&&l.data_prometida<=hoje);
+  const lemsHoje     = lembretes.filter(l=>l.status==="pendente"&&l.data_prometida===hoje);
+  const lemsVencidos = lembretes.filter(l=>l.status==="pendente"&&l.data_prometida<hoje);
+  const lemsProx7    = lembretes.filter(l=>l.status==="pendente"&&l.data_prometida>hoje);
 
-  const fases = {}; processos.forEach(p => fases[p.fase]=(fases[p.fase]||0)+1);
-  const proxPrazos = andamentos.filter(a=>a.prazo&&new Date(a.prazo)>=new Date()).sort((a,b)=>new Date(a.prazo)-new Date(b.prazo)).slice(0,4);
+  // Parcelas atrasadas (acordos)
+  const parcsAtrasadas = devedores.flatMap(d=>
+    (d.acordos||[]).flatMap(ac=>(ac.parcelas||[]).filter(p=>p.status==="atrasado"||(p.status==="pendente"&&(p.dataVencimento||"")<=hoje)))
+  ).length;
+
+  // Top devedores (maior dívida em aberto)
+  const topDevedores = [...devedores]
+    .map(d=>{
+      const div=(d.dividas||[]).reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_nominal||d.valor_original||0;
+      const rec=calcularTotaisAcordo(d.acordos||[]).recuperado;
+      return {...d, _aberto:div-rec};
+    })
+    .filter(d=>d._aberto>0)
+    .sort((a,b)=>b._aberto-a._aberto)
+    .slice(0,5);
+
+  // Saudação por hora
+  const hora = new Date().getHours();
+  const saud = hora<12?"Bom dia":"hora<18"?"Boa tarde":"Boa noite";
+  const saudacao = hora<12?"Bom dia ☀️":hora<18?"Boa tarde 🌤":"Boa noite 🌙";
 
   return (
-    <div>
-      <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:24,color:"#0f172a",marginBottom:20 }}>
-        Bom dia, {user.nome.split(" ")[0]}! 👋
-      </h2>
+    <div style={{maxWidth:1200}}>
+      {/* Header */}
+      <div style={{marginBottom:24}}>
+        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:"#0f172a",marginBottom:4}}>
+          {saudacao}, {user.nome.split(" ")[0]}!
+        </h2>
+        <p style={{fontSize:13,color:"#64748b"}}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p>
+      </div>
 
-      {/* Alerta de lembretes vencidos/hoje — dados do Supabase via prop */}
-      {(()=>{
-        const hoje2 = new Date().toISOString().slice(0,10);
-        if(!lembretes||!lembretes.length) return null;
-        const urgentes = lembretes.filter(l=>l.status==="pendente"&&l.data_prometida<=hoje2);
-        if(!urgentes.length) return null;
-        return(
-          <div style={{background:"#fee2e2",border:"1.5px solid #fca5a5",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
-            <div style={{display:"flex",gap:10,alignItems:"center"}}>
-              <span style={{fontSize:24}}>🔔</span>
-              <div>
-                <p style={{fontWeight:800,color:"#dc2626",fontSize:14}}>{urgentes.length} lembrete{urgentes.length>1?"s":""} vencido{urgentes.length>1?"s":""} ou para hoje!</p>
-                <p style={{fontSize:12,color:"#b91c1c",marginTop:2}}>
-                  {urgentes.slice(0,2).map(l=>{
-                    const dev = devedores.find(d=>String(d.id)===String(l.devedor_id));
-                    return `${dev?.nome?.split(" ")[0]||"?"} (${l.data_prometida===hoje2?"hoje":l.data_prometida})`;
-                  }).join(" · ")}
-                  {urgentes.length>2&&` · +${urgentes.length-2} mais`}
-                </p>
-              </div>
+      {/* Alerta lembretes urgentes */}
+      {lemsUrgentes.length>0&&(
+        <div style={{background:"linear-gradient(135deg,#dc2626,#b91c1c)",borderRadius:16,padding:"16px 20px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12,boxShadow:"0 4px 24px rgba(220,38,38,.25)"}}>
+          <div style={{display:"flex",gap:12,alignItems:"center"}}>
+            <div style={{width:44,height:44,borderRadius:12,background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>🔔</div>
+            <div>
+              <p style={{fontWeight:800,color:"#fff",fontSize:15}}>
+                {lemsVencidos.length>0&&`${lemsVencidos.length} vencido${lemsVencidos.length>1?"s":""}`}
+                {lemsVencidos.length>0&&lemsHoje.length>0&&" · "}
+                {lemsHoje.length>0&&`${lemsHoje.length} para hoje`}
+              </p>
+              <p style={{fontSize:12,color:"rgba(255,255,255,.8)",marginTop:2}}>
+                {lemsUrgentes.slice(0,3).map(l=>{
+                  const dev=devedores.find(d=>String(d.id)===String(l.devedor_id));
+                  return dev?.nome?.split(" ").slice(0,2).join(" ")||"?";
+                }).join(" · ")}
+                {lemsUrgentes.length>3&&` · +${lemsUrgentes.length-3} mais`}
+              </p>
             </div>
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
-              style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>
-              Ver Lembretes →
-            </button>
           </div>
-        );
-      })()}
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
+            style={{background:"rgba(255,255,255,.2)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:10,padding:"9px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish",whiteSpace:"nowrap"}}>
+            Ver lembretes →
+          </button>
+        </div>
+      )}
 
-      {/* KPIs */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:24 }}>
-        {kpis.map((k,i) => (
-          <div key={i} style={{ background:k.g,borderRadius:18,padding:"20px 22px",color:"#fff" }}>
-            <p style={{ fontSize:12,opacity:.8,fontWeight:600,marginBottom:8 }}>{k.l}</p>
-            <p style={{ fontSize:26,fontFamily:"Syne",fontWeight:800 }}>{k.v}</p>
-            <p style={{ fontSize:11,opacity:.65,marginTop:4 }}>{k.sub}</p>
+      {/* KPIs Principais */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
+        {[
+          {
+            l:"Carteira Total", v:fmt(totalCarteira),
+            sub:`${devedores.length} devedor${devedores.length!==1?"es":""}`,
+            ic:"💼", g:"linear-gradient(135deg,#4f46e5,#6d28d9)",
+          },
+          {
+            l:"Recuperado", v:fmt(totalRecuperado),
+            sub:`${taxaRecuperacao.toFixed(1)}% da carteira`,
+            ic:"✅", g:"linear-gradient(135deg,#059669,#065f46)",
+          },
+          {
+            l:"Em Aberto", v:fmt(emAberto),
+            sub:`${(100-taxaRecuperacao).toFixed(1)}% pendente`,
+            ic:"⏳", g:"linear-gradient(135deg,#dc2626,#9f1239)",
+          },
+          {
+            l:"Acordos Ativos", v:acordosAtivos,
+            sub:`${acordosTotal} acordo${acordosTotal!==1?"s":""} total`,
+            ic:"🤝", g:"linear-gradient(135deg,#d97706,#b45309)",
+          },
+        ].map((k,i)=>(
+          <div key={i} style={{background:k.g,borderRadius:18,padding:"20px 22px",color:"#fff",position:"relative",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,.12)"}}>
+            <div style={{position:"absolute",right:16,top:16,fontSize:28,opacity:.2}}>{k.ic}</div>
+            <p style={{fontSize:11,opacity:.85,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:".06em"}}>{k.l}</p>
+            <p style={{fontSize:24,fontFamily:"Syne",fontWeight:800,marginBottom:4}}>{k.v}</p>
+            <p style={{fontSize:11,opacity:.7}}>{k.sub}</p>
           </div>
         ))}
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:20 }}>
-        {/* Fases */}
-        <div style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9" }}>
-          <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:15,color:"#0f172a",marginBottom:16 }}>Processos por Fase</p>
-          {Object.entries(fases).map(([fase,qtd]) => {
-            const pct = Math.round(qtd/processos.length*100);
-            return (
-              <div key={fase} style={{ marginBottom:12 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",fontSize:13,color:"#475569",marginBottom:5 }}>
-                  <span>{fase}</span><strong style={{ color:"#0f172a" }}>{qtd}</strong>
+      {/* Segunda linha: métricas de cobrança */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:24}}>
+        {[
+          {l:"🆕 Novos",           v:porStatus.novo||0,           cor:"#64748b",bg:"#f1f5f9"},
+          {l:"🔍 Em Localização",  v:porStatus.em_localizacao||0, cor:"#2563eb",bg:"#dbeafe"},
+          {l:"🤝 Em Negociação",   v:porStatus.em_negociacao||0,  cor:"#d97706",bg:"#fef3c7"},
+          {l:"⚖️ Ajuizados",        v:porStatus.ajuizado||0,       cor:"#c2410c",bg:"#ffedd5"},
+        ].map(k=>(
+          <div key={k.l} style={{background:k.bg,borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
+              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:k.cor}}>{k.v}</p>
+            </div>
+            <div style={{width:48,height:48,borderRadius:99,background:`${k.cor}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>
+              {k.v>0?k.v:"—"}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Linha 3: gráfico de recuperação + top devedores + lembretes */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
+
+        {/* Taxa de Recuperação visual */}
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:4}}>📊 Taxa de Recuperação</p>
+          <p style={{fontSize:11,color:"#94a3b8",marginBottom:18}}>Progresso da carteira</p>
+          {/* Donut visual com CSS */}
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:16}}>
+            <div style={{position:"relative",width:120,height:120,marginBottom:12}}>
+              <svg viewBox="0 0 36 36" style={{width:120,height:120,transform:"rotate(-90deg)"}}>
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f1f5f9" strokeWidth="3.5"/>
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="url(#grad)" strokeWidth="3.5"
+                  strokeDasharray={`${taxaRecuperacao} ${100-taxaRecuperacao}`} strokeLinecap="round"/>
+                <defs>
+                  <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#059669"/>
+                    <stop offset="100%" stopColor="#4f46e5"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                <p style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a",lineHeight:1}}>{taxaRecuperacao.toFixed(0)}%</p>
+                <p style={{fontSize:9,color:"#94a3b8",marginTop:2}}>recuperado</p>
+              </div>
+            </div>
+          </div>
+          {[
+            {l:"Recuperado",cor:"#059669",v:fmt(totalRecuperado)},
+            {l:"Em aberto", cor:"#dc2626",v:fmt(emAberto)},
+            {l:"Total",     cor:"#4f46e5",v:fmt(totalCarteira)},
+          ].map(r=>(
+            <div key={r.l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #f8fafc"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:8,height:8,borderRadius:99,background:r.cor}}/>
+                <span style={{fontSize:12,color:"#475569"}}>{r.l}</span>
+              </div>
+              <span style={{fontSize:12,fontWeight:700,color:r.cor}}>{r.v}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Top devedores em aberto */}
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+          <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:4}}>💼 Maiores Devedores</p>
+          <p style={{fontSize:11,color:"#94a3b8",marginBottom:14}}>Por valor em aberto</p>
+          {topDevedores.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:16}}>Nenhuma dívida em aberto.</p>}
+          {topDevedores.map((d,i)=>{
+            const pct=totalCarteira>0?Math.round(d._aberto/totalCarteira*100):0;
+            return(
+              <div key={d.id} style={{marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:99,background:["#fee2e2","#fef3c7","#ede9fe","#dbeafe","#dcfce7"][i],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:["#dc2626","#d97706","#7c3aed","#2563eb","#16a34a"][i]}}>{i+1}</div>
+                    <span style={{fontSize:12,fontWeight:600,color:"#0f172a"}}>{d.nome?.split(" ").slice(0,2).join(" ")}</span>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:700,color:"#dc2626"}}>{fmt(d._aberto)}</span>
                 </div>
-                <div style={{ height:6,background:"#f1f5f9",borderRadius:99 }}>
-                  <div style={{ height:6,width:`${pct}%`,background:"linear-gradient(90deg,#4f46e5,#7c3aed)",borderRadius:99 }} />
+                <div style={{height:4,background:"#f1f5f9",borderRadius:99}}>
+                  <div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#4f46e5,#7c3aed)",borderRadius:99,transition:"width .5s"}}/>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Prazos */}
-        <div style={{ background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9" }}>
-          <p style={{ fontFamily:"Syne",fontWeight:700,fontSize:15,color:"#0f172a",marginBottom:16,display:"flex",alignItems:"center",gap:6 }}>
-            <span style={{ color:"#dc2626" }}>{I.alert}</span> Prazos Iminentes
-          </p>
-          {proxPrazos.length===0 && <p style={{ color:"#94a3b8",fontSize:13 }}>Nenhum prazo nos próximos dias.</p>}
-          {proxPrazos.map(a => {
-            const proc = processos.find(p=>p.id===a.processo_id);
-            const diff = Math.ceil((new Date(a.prazo)-new Date())/86400000);
-            return (
-              <div key={a.id} style={{ display:"flex",gap:10,padding:"10px 12px",background:diff<=2?"#fef2f2":"#fafafa",borderRadius:12,marginBottom:8,borderLeft:`3px solid ${diff<=2?"#dc2626":"#f59e0b"}` }}>
-                <div style={{ flex:1 }}>
-                  <p style={{ fontSize:13,fontWeight:600,color:"#0f172a",marginBottom:2 }}>{a.descricao.slice(0,45)}...</p>
-                  <p style={{ fontSize:11,color:"#94a3b8" }}>{proc?.numero?.slice(0,20)}... · {fmtDate(a.prazo)}</p>
+        {/* Lembretes do dia */}
+        <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a"}}>🔔 Agenda de Cobrança</p>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
+              style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish"}}>Ver tudo</button>
+          </div>
+          <p style={{fontSize:11,color:"#94a3b8",marginBottom:14}}>Próximos contatos e promessas</p>
+          {lemsUrgentes.length===0&&lemsProx7.length===0&&(
+            <div style={{textAlign:"center",padding:16}}>
+              <div style={{fontSize:32,marginBottom:8}}>✅</div>
+              <p style={{color:"#16a34a",fontSize:13,fontWeight:600}}>Agenda em dia!</p>
+              <p style={{color:"#94a3b8",fontSize:11,marginTop:4}}>Nenhum lembrete pendente.</p>
+            </div>
+          )}
+          {[...lemsUrgentes,...lemsProx7].slice(0,4).map(l=>{
+            const dev=devedores.find(d=>String(d.id)===String(l.devedor_id));
+            const vencido=l.data_prometida<hoje;
+            const ehHoje=l.data_prometida===hoje;
+            return(
+              <div key={l.id} style={{display:"flex",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:6,background:vencido?"#fef2f2":ehHoje?"#fffbeb":"#f8fafc",borderLeft:`3px solid ${vencido?"#dc2626":ehHoje?"#d97706":"#94a3b8"}`}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontSize:12,fontWeight:700,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dev?.nome?.split(" ").slice(0,2).join(" ")||"?"}</p>
+                  <p style={{fontSize:11,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.descricao}</p>
                 </div>
-                <span style={{ fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:99,background:diff<=2?"#fee2e2":"#fef3c7",color:diff<=2?"#dc2626":"#b45309",alignSelf:"center" }}>{diff}d</span>
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:vencido?"#fee2e2":ehHoje?"#fef3c7":"#f1f5f9",color:vencido?"#dc2626":ehHoje?"#d97706":"#64748b",alignSelf:"center",flexShrink:0}}>
+                  {vencido?"VENC.":ehHoje?"HOJE":fmtDate(l.data_prometida)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Linha 4: Status por funil */}
+      <div style={{background:"#fff",borderRadius:18,padding:22,border:"1px solid #f1f5f9",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+        <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:16}}>📈 Funil de Cobrança</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:8}}>
+          {[
+            {v:"novo",           l:"Novo",           cor:"#64748b",bg:"#f1f5f9"},
+            {v:"em_localizacao", l:"Localização",    cor:"#2563eb",bg:"#dbeafe"},
+            {v:"notificado",     l:"Notificado",     cor:"#7c3aed",bg:"#ede9fe"},
+            {v:"em_negociacao",  l:"Negociação",     cor:"#d97706",bg:"#fef3c7"},
+            {v:"acordo_firmado", l:"Acordo",         cor:"#16a34a",bg:"#dcfce7"},
+            {v:"pago_parcial",   l:"Pago Parcial",   cor:"#0f766e",bg:"#ccfbf1"},
+            {v:"pago_integral",  l:"Pago Total",     cor:"#065f46",bg:"#d1fae5"},
+            {v:"irrecuperavel",  l:"Irrecuperável",  cor:"#dc2626",bg:"#fee2e2"},
+            {v:"ajuizado",       l:"Ajuizado",       cor:"#c2410c",bg:"#ffedd5"},
+          ].map(s=>{
+            const qtd=porStatus[s.v]||0;
+            const maxQtd=Math.max(...Object.values(porStatus),1);
+            const pct=Math.round(qtd/maxQtd*100);
+            return(
+              <div key={s.v} style={{textAlign:"center"}}>
+                <div style={{height:80,display:"flex",alignItems:"flex-end",justifyContent:"center",marginBottom:6}}>
+                  <div style={{width:"100%",maxWidth:32,borderRadius:"6px 6px 0 0",background:qtd>0?s.cor:s.bg,height:`${Math.max(pct,qtd>0?8:4)}%`,transition:"height .5s",position:"relative"}}>
+                    {qtd>0&&<span style={{position:"absolute",top:-18,left:"50%",transform:"translateX(-50%)",fontSize:11,fontWeight:800,color:s.cor}}>{qtd}</span>}
+                  </div>
+                </div>
+                <p style={{fontSize:9,color:"#64748b",fontWeight:600,lineHeight:1.2}}>{s.l}</p>
               </div>
             );
           })}
@@ -835,7 +995,7 @@ const FORM_DEV_VAZIO = {
   socio_nome:"", socio_cpf:"", email:"", telefone:"", telefone2:"",
   cep:"", logradouro:"", numero:"", complemento:"", bairro:"", cidade:"Goiânia", uf:"GO",
   credor_id:"", valor_nominal:"", data_origem_divida:"", data_recebimento_carteira:"", descricao_divida:"",
-  status:"novo", responsavel:"", observacoes:"",
+  status:"novo", responsavel:"", observacoes:"", numero_processo:"",
 };
 const DIVIDA_VAZIA={descricao:"",valor_total:"",data_origem:"",data_primeira_parcela:"",qtd_parcelas:"1",parcelas:[],indexador:"igpm",multa_pct:"2",juros_am:"1",honorarios_pct:"20",data_inicio_atualizacao:"",despesas:"0",observacoes:"",custas:[]};
 const SECOES=[["id","👤 Identificação"],["end","📍 Endereço"],["divida","💰 Dívida"],["ctrl","⚙️ Controle"]];
@@ -2213,8 +2373,14 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               <INP label="Status" value={form.status} onChange={v=>F("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))}/>
               <INP label="Responsável pelo Caso" value={form.responsavel} onChange={v=>F("responsavel",v)}/>
               <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Nº do Processo Judicial (opcional)</label>
+                <input value={form.numero_processo||""} onChange={e=>F("numero_processo",e.target.value)}
+                  placeholder="0000000-00.0000.8.09.0000"
+                  style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+              </div>
+              <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
-                <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={4} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
               </div>
             </div>
           )}
@@ -4497,8 +4663,6 @@ export default function App() {
     { id:"dashboard",  label:"Dashboard",  icon: I.dash  },
     { id:"devedores",  label:"Devedores",  icon: I.dev   },
     { id:"credores",   label:"Credores",   icon: I.cred  },
-    { id:"processos",  label:"Processos",  icon: I.proc  },
-    { id:"regua",      label:"Régua",      icon: I.regua },
     { id:"calculadora",label:"Calculadora",icon: I.calc  },
     { id:"relatorios", label:"Relatórios", icon: I.rel   },
     { id:"lembretes",  label:"Lembretes",  icon: I.bell  },
@@ -4508,8 +4672,6 @@ export default function App() {
     dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList}/>,
     devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab}/>,
     credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
-    processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos} user={user}/>,
-    regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
     calculadora: <Calculadora devedores={devedores}/>,
     relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>,
     lembretes:   <Lembretes   devedores={devedores} credores={credores} user={user}/>,
