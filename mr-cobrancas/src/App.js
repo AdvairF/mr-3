@@ -287,7 +287,7 @@ function Dashboard({ devedores, processos, andamentos, user }) {
 const FORM_DEV = { nome:"",cpf_cnpj:"",tipo:"PJ",telefone:"",email:"",cidade:"Goiânia",status:"ativo",credor_id:"" };
 const DIVIDA_VAZIA = { descricao:"", valor_total:"", data_primeira_parcela:"", qtd_parcelas:"1", parcelas:[] };
 
-function Devedores({ devedores, setDevedores, credores }) {
+function Devedores({ devedores, setDevedores, credores, onModalChange }) {
   const [search, setSearch] = useState("");
   const [modal, setModal]   = useState(null);
   const [sel, setSel]       = useState(null);
@@ -298,6 +298,12 @@ function Devedores({ devedores, setDevedores, credores }) {
   const [nd, setNd]         = useState(DIVIDA_VAZIA);
   const F = (k,v) => setForm(f=>({...f,[k]:v}));
   const ND = (k,v) => setNd(d=>({...d,[k]:v}));
+
+  // Avisa o App quando modal abre/fecha para pausar o polling
+  function abrirModal(tipo) { setModal(tipo); onModalChange&&onModalChange(true); }
+  function fecharModal()    { setModal(null); setSel(null); setNd(DIVIDA_VAZIA); onModalChange&&onModalChange(false); }
+  function abrirWp(d)       { setWp(d); onModalChange&&onModalChange(true); }
+  function fecharWp()       { setWp(null); onModalChange&&onModalChange(false); }
 
   const filtered = devedores.filter(d =>
     (d.nome||"").toLowerCase().includes(search.toLowerCase()) ||
@@ -342,7 +348,7 @@ function Devedores({ devedores, setDevedores, credores }) {
       const payload = { ...form, credor_id:form.credor_id?parseInt(form.credor_id):null, dividas:JSON.stringify([]), valor_original:0 };
       const res = await dbInsert("devedores", payload);
       const novo = Array.isArray(res)?res[0]:res;
-      if(novo) { setDevedores(p=>[...p,{...novo,dividas:[]}]); setModal(null); setForm(FORM_DEV); }
+      if(novo) { setDevedores(p=>[...p,{...novo,dividas:[]}]); fecharModal(); setForm(FORM_DEV); }
     } catch(e){ alert("Erro: "+e.message); }
     setLoading(false);
   }
@@ -391,7 +397,7 @@ function Devedores({ devedores, setDevedores, credores }) {
     if(!window.confirm(`Excluir "${d.nome}"?`)) return;
     await dbDelete("devedores",d.id);
     setDevedores(prev=>prev.filter(x=>x.id!==d.id));
-    if(sel?.id===d.id){setSel(null);setModal(null);}
+    if(sel?.id===d.id){ fecharModal(); }
   }
 
   const WP_MSGS = d => [
@@ -407,7 +413,7 @@ function Devedores({ devedores, setDevedores, credores }) {
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
         <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
-        <Btn onClick={()=>{setForm(FORM_DEV);setModal("novo")}}>{I.plus} Novo Devedor</Btn>
+        <Btn onClick={()=>{setForm(FORM_DEV);abrirModal("novo")}}>{I.plus} Novo Devedor</Btn>
       </div>
 
       <div style={{position:"relative",marginBottom:14}}>
@@ -450,8 +456,8 @@ function Devedores({ devedores, setDevedores, credores }) {
                     </td>
                     <td style={{padding:"11px 14px"}}>
                       <div style={{display:"flex",gap:4}}>
-                        <button onClick={()=>{setSel({...d,dividas:d.dividas||[]});setAba("dividas");setNd(DIVIDA_VAZIA);setModal("ver");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>👁 Ver</button>
-                        {d.telefone&&<button onClick={()=>setWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
+                        <button onClick={()=>{setSel({...d,dividas:d.dividas||[]});setAba("dividas");setNd(DIVIDA_VAZIA);abrirModal("ver");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>👁 Ver</button>
+                        {d.telefone&&<button onClick={()=>abrirWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
                         <button onClick={()=>excluirDevedor(d)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
                       </div>
                     </td>
@@ -466,7 +472,7 @@ function Devedores({ devedores, setDevedores, credores }) {
       </div>
 
       {modal==="novo"&&(
-        <Modal title="Novo Devedor" onClose={()=>setModal(null)}>
+        <Modal title="Novo Devedor" onClose={fecharModal}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
             <Inp label="Nome / Razão Social" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
             <Inp label="CPF / CNPJ" value={form.cpf_cnpj} onChange={v=>F("cpf_cnpj",v)}/>
@@ -480,13 +486,13 @@ function Devedores({ devedores, setDevedores, credores }) {
           <p style={{fontSize:11,color:"#94a3b8",marginTop:12}}>💡 Dívidas e parcelas são adicionadas na ficha do devedor.</p>
           <div style={{display:"flex",gap:10,marginTop:16}}>
             <Btn onClick={salvarDevedor}>{loading?"Salvando...":"Cadastrar"}</Btn>
-            <Btn onClick={()=>setModal(null)} outline>Cancelar</Btn>
+            <Btn onClick={fecharModal} outline>Cancelar</Btn>
           </div>
         </Modal>
       )}
 
       {modal==="ver"&&sel&&(
-        <Modal title={sel.nome} onClose={()=>{setModal(null);setSel(null);setNd(DIVIDA_VAZIA);}} wide>
+        <Modal title={sel.nome} onClose={fecharModal} wide>
           <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
             {[["dados","📋 Dados"],["dividas","💰 Dívidas ("+(sel.dividas||[]).length+")"]].map(([a,l])=>(
               <button key={a} onClick={()=>setAba(a)} style={{padding:"8px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:aba===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
@@ -622,7 +628,7 @@ function Devedores({ devedores, setDevedores, credores }) {
       )}
 
       {wp&&(
-        <Modal title={`WhatsApp — ${wp.nome}`} onClose={()=>setWp(null)}>
+        <Modal title={`WhatsApp — ${wp.nome}`} onClose={fecharWp}>
           {WP_MSGS(wp).map((m,i)=>(
             <div key={i} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10}}>
               <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8}}>{m.titulo}</p>
@@ -1278,6 +1284,7 @@ export default function App() {
   const [tab, setTab]               = useState("dashboard");
   const [sideOpen, setSideOpen]     = useState(false);
   const [carregando, setCarregando] = useState(true);
+  const [modalAberto, setModalAberto] = useState(false); // controla se tem modal aberto em qualquer módulo
 
   const [devedores,  setDevedores]  = useState([]);
   const [credores,   setCredores]   = useState([]);
@@ -1285,8 +1292,8 @@ export default function App() {
   const [andamentos, setAndamentos] = useState([]);
   const [regua,      setRegua]      = useState([]);
 
-  const carregarTudo = useCallback(async () => {
-    setCarregando(true);
+  const carregarTudo = useCallback(async (silencioso=false) => {
+    if(!silencioso) setCarregando(true);
     try {
       const [devs, creds, procs, ands, reg] = await Promise.all([
         dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"), dbGet("regua"),
@@ -1300,15 +1307,19 @@ export default function App() {
       setAndamentos(ands||[]);
       setRegua(reg||[]);
     } catch(e) { console.error(e); }
-    setCarregando(false);
+    if(!silencioso) setCarregando(false);
   }, []);
 
   useEffect(() => { if(user) carregarTudo(); }, [user, carregarTudo]);
+
+  // Polling a cada 60s — mas PAUSA se houver modal aberto
   useEffect(() => {
     if(!user) return;
-    const iv = setInterval(carregarTudo, 30000);
+    const iv = setInterval(() => {
+      if(!modalAberto) carregarTudo(true); // silencioso = não mostra spinner
+    }, 60000);
     return () => clearInterval(iv);
-  }, [user, carregarTudo]);
+  }, [user, carregarTudo, modalAberto]);
 
   if(!user) return <Login onLogin={setUser}/>;
 
@@ -1324,7 +1335,7 @@ export default function App() {
 
   const PAGE = {
     dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user}/>,
-    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores}/>,
+    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto}/>,
     credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
     processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos}/>,
     regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
