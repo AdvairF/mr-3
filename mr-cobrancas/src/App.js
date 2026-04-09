@@ -1387,6 +1387,350 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// IMPRIMIR FICHA DO DEVEDOR EM PDF
+// ═══════════════════════════════════════════════════════════════
+async function imprimirFicha(sel, credores, fmt, fmtDate) {
+  // Carregar jsPDF
+  let jsPDF;
+  if(window.jspdf?.jsPDF) {
+    jsPDF = window.jspdf.jsPDF;
+  } else {
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
+    jsPDF = window.jspdf?.jsPDF;
+  }
+  if(!jsPDF){ alert("Não foi possível carregar o gerador de PDF."); return; }
+
+  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const W = 210; // largura A4
+  const ML = 14; // margem esquerda
+  const MR = W - 14; // margem direita
+  let y = 0;
+
+  // ── Cores ────────────────────────────────────────────────────
+  const azul    = [79,70,229];
+  const escuro  = [15,23,42];
+  const cinza   = [100,116,139];
+  const branco  = [255,255,255];
+  const verde   = [5,150,105];
+  const vermelho= [220,38,38];
+
+  // ── Helpers ──────────────────────────────────────────────────
+  function cabecalhoSecao(titulo, yPos) {
+    doc.setFillColor(...azul);
+    doc.rect(ML, yPos, MR-ML, 7, "F");
+    doc.setTextColor(...branco);
+    doc.setFont("helvetica","bold"); doc.setFontSize(9);
+    doc.text(titulo, ML+3, yPos+4.8);
+    doc.setTextColor(...escuro);
+    return yPos + 10;
+  }
+  function linha(label, value, xL, xV, yPos, largLabel=40) {
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...cinza);
+    doc.text(String(label||""), xL, yPos);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
+    const val = String(value||"—");
+    const maxW = (xV===xL+largLabel) ? (MR-xV-2) : 60;
+    const linhas = doc.splitTextToSize(val, maxW);
+    doc.text(linhas, xV, yPos);
+    return yPos + (linhas.length > 1 ? linhas.length*4.5 : 5.5);
+  }
+  function checkPage(yPos, needed=20) {
+    if(yPos + needed > 280) { doc.addPage(); return 15; }
+    return yPos;
+  }
+  function hrLine(yPos) {
+    doc.setDrawColor(226,232,240); doc.setLineWidth(0.3);
+    doc.line(ML, yPos, MR, yPos);
+    return yPos + 4;
+  }
+
+  // ── CABEÇALHO DA FICHA ───────────────────────────────────────
+  doc.setFillColor(15,23,42);
+  doc.rect(0, 0, W, 36, "F");
+  doc.setFillColor(...azul);
+  doc.rect(0, 33, W, 2, "F");
+
+  doc.setTextColor(...branco);
+  doc.setFont("helvetica","bold"); doc.setFontSize(18);
+  doc.text("MR Cobranças", ML, 14);
+  doc.setFontSize(9); doc.setFont("helvetica","normal");
+  doc.setTextColor(165,243,252);
+  doc.text("CRM Jurídico — Ficha do Devedor", ML, 20);
+
+  // Data de emissão
+  doc.setTextColor(148,163,184); doc.setFontSize(8);
+  doc.text("Emitido em: "+new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}), MR-60, 14);
+  doc.text("Por: "+(sel.responsavel||"Sistema"), MR-60, 19);
+
+  y = 42;
+
+  // Nome do devedor
+  doc.setTextColor(...escuro);
+  doc.setFont("helvetica","bold"); doc.setFontSize(16);
+  doc.text(sel.nome||"—", ML, y);
+  y += 7;
+
+  // Status badge + tipo
+  const stMap = {novo:"Novo",em_localizacao:"Em Localização",notificado:"Notificado",em_negociacao:"Em Negociação",acordo_firmado:"Acordo Firmado",pago_integral:"Pago Integralmente",pago_parcial:"Pago Parcial",irrecuperavel:"Irrecuperável",ajuizado:"Ajuizado"};
+  doc.setFontSize(9); doc.setFont("helvetica","bold");
+  doc.setTextColor(...azul);
+  doc.text("Status: "+(stMap[sel.status]||sel.status||"—"), ML, y);
+  doc.setTextColor(...cinza); doc.setFont("helvetica","normal");
+  doc.text("  ·  Tipo: "+( sel.tipo==="PF"?"Pessoa Física":"Pessoa Jurídica"), ML+40, y);
+  const credor = (credores||[]).find(c=>String(c.id)===String(sel.credor_id));
+  if(credor) doc.text("  ·  Credor: "+credor.nome?.slice(0,30), ML+80, y);
+  y += 8;
+
+  // Linha divisória
+  y = hrLine(y);
+
+  // ── 1. IDENTIFICAÇÃO ─────────────────────────────────────────
+  y = cabecalhoSecao("1. IDENTIFICAÇÃO", y);
+  const col1x = ML, col1v = ML+38, col2x = W/2+4, col2v = W/2+42;
+
+  const id1 = [
+    ["CPF/CNPJ:", sel.cpf_cnpj],
+    ["RG:", sel.rg],
+    ["Nascimento:", fmtDate(sel.data_nascimento)],
+    ["Profissão:", sel.profissao],
+  ];
+  const id2 = [
+    ["Sócio/Resp.:", sel.socio_nome],
+    ["CPF Sócio:", sel.socio_cpf],
+    ["E-mail:", sel.email],
+    ["Responsável:", sel.responsavel],
+  ];
+  const maxI = Math.max(id1.length, id2.length);
+  for(let i=0;i<maxI;i++){
+    y = checkPage(y, 8);
+    const yL = y;
+    if(id1[i]) linha(id1[i][0], id1[i][1], col1x, col1v, yL);
+    if(id2[i]) linha(id2[i][0], id2[i][1], col2x, col2v, yL);
+    y = yL + 6;
+  }
+
+  // Telefones
+  y = checkPage(y, 8);
+  linha("Telefone 1:", sel.telefone, col1x, col1v, y);
+  linha("Telefone 2:", sel.telefone2, col2x, col2v, y);
+  y += 6;
+
+  // Nº processo
+  if(sel.numero_processo) {
+    y = checkPage(y, 8);
+    linha("Nº Processo:", sel.numero_processo, col1x, col1v, y);
+    y += 6;
+  }
+
+  y = hrLine(y);
+
+  // ── 2. ENDEREÇO ──────────────────────────────────────────────
+  if(sel.logradouro||sel.cidade) {
+    y = checkPage(y, 20);
+    y = cabecalhoSecao("2. ENDEREÇO", y);
+    const endereco = [sel.logradouro, sel.numero, sel.complemento].filter(Boolean).join(", ");
+    const cidadeUF = [sel.bairro, sel.cidade, sel.uf].filter(Boolean).join(" — ");
+    if(endereco) { linha("Logradouro:", endereco, col1x, col1v, y); y+=6; }
+    if(cidadeUF) { linha("Cidade/UF:", cidadeUF, col1x, col1v, y); y+=6; }
+    if(sel.cep)  { linha("CEP:", sel.cep, col1x, col1v, y); y+=6; }
+    y = hrLine(y);
+  }
+
+  // ── 3. DÍVIDAS ───────────────────────────────────────────────
+  const dividas = sel.dividas||[];
+  if(dividas.length>0) {
+    y = checkPage(y, 25);
+    y = cabecalhoSecao("3. DÍVIDAS", y);
+    const idxMap = {igpm:"IGP-M",ipca:"IPCA",selic:"SELIC",inpc:"INPC",nenhum:"Sem correção"};
+    dividas.forEach((div,di)=>{
+      y = checkPage(y, 22);
+      // Linha título da dívida
+      doc.setFillColor(248,250,252);
+      doc.rect(ML, y-3, MR-ML, 7, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
+      doc.text(`${di+1}. ${div.descricao||"Dívida"}`, ML+2, y+1.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...azul);
+      doc.text(fmt(div.valor_total||0), MR-2, y+1.5, {align:"right"});
+      y += 9;
+
+      // Detalhes
+      doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      const det = [
+        `Vencimento: ${fmtDate(div.data_vencimento||div.data_origem)}`,
+        `Índice: ${idxMap[div.indexador]||div.indexador||"—"}`,
+        `Juros: ${div.juros_am||0}% a.m.`,
+        `Multa: ${div.multa_pct||0}%`,
+        div.parcelas?.length>0?`Parcelas: ${div.parcelas.length}x de ${fmt((div.valor_total||0)/(div.parcelas.length||1))}`:"À vista",
+      ].join("   ·   ");
+      doc.text(det, ML+2, y);
+      y += 5;
+
+      // Parcelas (máx 5 por dívida no PDF para não explodir)
+      const parcs = div.parcelas||[];
+      if(parcs.length>0) {
+        y = checkPage(y, 8);
+        doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(...cinza);
+        doc.text("Nº", ML+2, y); doc.text("Vencimento", ML+12, y); doc.text("Valor", ML+42, y); doc.text("Status", ML+64, y);
+        y += 4;
+        doc.setFont("helvetica","normal");
+        parcs.slice(0,10).forEach((p,pi)=>{
+          y = checkPage(y, 6);
+          const stP = p.status==="pago"?"Pago":p.status==="atrasado"?"Atrasado":"Pendente";
+          const corP = p.status==="pago"?verde:p.status==="atrasado"?vermelho:cinza;
+          doc.setTextColor(...cinza);
+          doc.text(String(pi+1), ML+2, y);
+          doc.text(fmtDate(p.venc||p.vencimento), ML+12, y);
+          doc.text(fmt(p.valor||0), ML+42, y);
+          doc.setTextColor(...corP); doc.setFont("helvetica","bold");
+          doc.text(stP, ML+64, y);
+          doc.setFont("helvetica","normal"); doc.setTextColor(...cinza);
+          y += 4.5;
+        });
+        if(parcs.length>10) {
+          doc.setTextColor(...cinza);
+          doc.text(`... e mais ${parcs.length-10} parcela(s)`, ML+2, y);
+          y += 5;
+        }
+      }
+
+      // Custas da dívida
+      const custas = div.custas||[];
+      if(custas.length>0) {
+        y = checkPage(y, 8);
+        doc.setFillColor(255,247,237);
+        doc.rect(ML, y-2, MR-ML, 6+custas.length*5, "F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(194,65,12);
+        doc.text("Custas Judiciais:", ML+2, y+1.5); y+=6;
+        custas.forEach(c=>{
+          doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+          doc.text(`${c.descricao||"—"} — ${fmtDate(c.data)} — ${fmt(parseFloat(c.valor)||0)}`, ML+4, y);
+          y += 5;
+        });
+      }
+      y += 4;
+    });
+    y = hrLine(y);
+  }
+
+  // ── 4. ACORDOS ───────────────────────────────────────────────
+  const acordos = sel.acordos||[];
+  if(acordos.length>0) {
+    y = checkPage(y, 20);
+    y = cabecalhoSecao("4. ACORDOS", y);
+    acordos.forEach((ac,ai)=>{
+      y = checkPage(y, 16);
+      const totAc = calcularTotaisAcordo([ac]);
+      doc.setFillColor(248,250,252); doc.rect(ML, y-3, MR-ML, 7, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
+      doc.text(`Acordo ${ai+1} — ${fmtDate(ac.dataAcordo||ac.criado_em)}`, ML+2, y+1.5);
+      doc.setTextColor(...verde);
+      doc.text(`Recuperado: ${fmt(totAc.recuperado)} / ${fmt(ac.valorNegociado||0)}`, MR-2, y+1.5, {align:"right"});
+      y += 9;
+      doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      doc.text(`Status: ${ac.status||"—"}   ·   Parcelas: ${(ac.parcelas||[]).length}   ·   Desconto: ${fmt((ac.valorOriginal||0)-(ac.valorNegociado||0))}`, ML+2, y);
+      y += 7;
+    });
+    y = hrLine(y);
+  }
+
+  // ── 5. HISTÓRICO DE CONTATOS ─────────────────────────────────
+  const contatos = [...(sel.contatos||[])].reverse();
+  if(contatos.length>0) {
+    y = checkPage(y, 20);
+    y = cabecalhoSecao("5. HISTÓRICO DE CONTATOS", y);
+    const cTipo = {ligacao:"Ligação",whatsapp:"WhatsApp",email:"E-mail",carta:"Carta",visita:"Visita",outro:"Outro"};
+    const cRes  = {sem_resposta:"Sem resposta",numero_invalido:"Nº inválido",contato_estabelecido:"Contato feito",recusou_negociar:"Recusou",demonstrou_interesse:"Interessado",acordo_verbal:"Acordo verbal",outro:"Outro"};
+    contatos.forEach((c,ci)=>{
+      y = checkPage(y, 14);
+      if(ci%2===0){ doc.setFillColor(250,250,252); doc.rect(ML,y-2,MR-ML,12,"F"); }
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...escuro);
+      doc.text(`${fmtDate(c.data)}  ·  ${cTipo[c.tipo]||c.tipo||"—"}  ·  ${cRes[c.resultado]||c.resultado||"—"}`, ML+2, y+1.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      doc.text("Por: "+(c.responsavel||"—"), MR-2, y+1.5, {align:"right"});
+      y += 6;
+      if(c.obs) {
+        const linhasObs = doc.splitTextToSize(c.obs, MR-ML-4);
+        doc.text(linhasObs, ML+2, y);
+        y += linhasObs.length*4+2;
+      } else {
+        y += 3;
+      }
+    });
+    y = hrLine(y);
+  }
+
+  // ── 6. OBSERVAÇÕES ───────────────────────────────────────────
+  if(sel.observacoes) {
+    y = checkPage(y, 20);
+    y = cabecalhoSecao("6. OBSERVAÇÕES", y);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
+    const linhasObs = doc.splitTextToSize(sel.observacoes, MR-ML-4);
+    doc.text(linhasObs, ML, y);
+    y += linhasObs.length*5+6;
+  }
+
+  // ── 7. REGISTROS DE CONTATO (localStorage) ───────────────────
+  let registros = [];
+  try { registros = JSON.parse(localStorage.getItem(`mr_registros_${sel.id}`)||"[]"); } catch(e){}
+  if(registros.length>0) {
+    y = checkPage(y, 20);
+    y = cabecalhoSecao("7. REGISTROS DE CONTATO DETALHADOS", y);
+    const rTipo = {ligacao:"Ligação",whatsapp:"WhatsApp",email:"E-mail",carta:"Carta",visita:"Visita",outro:"Outro"};
+    const rRes  = {sem_resposta:"Sem resposta",numero_invalido:"Nº inválido",contato_estabelecido:"Contato feito",recusou_negociar:"Recusou",demonstrou_interesse:"Interessado",acordo_verbal:"Acordo verbal",outro:"Outro"};
+    registros.forEach((r,ri)=>{
+      y = checkPage(y, 20);
+      // Cabeçalho do registro
+      doc.setFillColor(248,250,252); doc.rect(ML, y-3, MR-ML, 7, "F");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
+      doc.text(`${ri+1}. ${fmtDate(r.data)} ${r.hora||""}  —  ${rTipo[r.tipo]||r.tipo}  —  ${rRes[r.resultado]||r.resultado}`, ML+2, y+1.5);
+      doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      doc.text("Por: "+(r.criado_por||"—"), MR-2, y+1.5, {align:"right"});
+      y += 9;
+      // Relatório
+      if(r.relatorio) {
+        doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+        doc.text("Relatório:", ML+2, y); y+=5;
+        doc.setFont("helvetica","normal"); doc.setTextColor(...escuro);
+        const lRel = doc.splitTextToSize(r.relatorio, MR-ML-6);
+        lRel.forEach(l=>{ y=checkPage(y,6); doc.text(l, ML+4, y); y+=4.5; });
+        y+=2;
+      }
+      // Mensagem
+      if(r.mensagem) {
+        y = checkPage(y, 10);
+        doc.setFillColor(240,253,244); doc.rect(ML+2, y-2, MR-ML-4, 6, "F");
+        doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(5,150,105);
+        doc.text("Mensagem enviada:", ML+4, y+1.5); y+=6;
+        doc.setFont("helvetica","normal"); doc.setTextColor(22,101,52);
+        const lMsg = doc.splitTextToSize(r.mensagem, MR-ML-8);
+        lMsg.forEach(l=>{ y=checkPage(y,5); doc.text(l, ML+4, y); y+=4.5; });
+        y+=3;
+      }
+      y+=4;
+    });
+  }
+
+  // ── RODAPÉ EM TODAS AS PÁGINAS ───────────────────────────────
+  const totalPages = doc.internal.getNumberOfPages();
+  for(let p=1;p<=totalPages;p++){
+    doc.setPage(p);
+    doc.setFillColor(15,23,42);
+    doc.rect(0, 290, W, 7, "F");
+    doc.setTextColor(148,163,184); doc.setFont("helvetica","normal"); doc.setFontSize(7);
+    doc.text("MR Cobranças — CRM Jurídico | Documento confidencial", ML, 294.5);
+    doc.text(`Página ${p} de ${totalPages}`, MR, 294.5, {align:"right"});
+  }
+
+  doc.save(`ficha_${(sel.nome||"devedor").replace(/\s+/g,"_").toLowerCase()}.pdf`);
+}
+
 function CustasAvulsasForm({ onSalvar }) {
   const [custas, setCustas] = useState([]);
   function addCusta(){ setCustas(r=>[...r,{id:Date.now(),descricao:"",valor:"",data:""}]); }
@@ -1810,6 +2154,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               </select>
             </div>
             {sel.telefone&&<button onClick={()=>abrirWp(sel)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>📱 WhatsApp</button>}
+            <button onClick={()=>imprimirFicha(sel,credores,fmt,fmtDate)} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🖨️ Imprimir PDF</button>
             <button onClick={()=>excluirDevedor(sel)} style={{background:"rgba(220,38,38,.3)",color:"#fca5a5",border:"1px solid rgba(220,38,38,.4)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🗑 Excluir</button>
           </div>
         </div>
