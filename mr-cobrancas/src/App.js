@@ -1260,7 +1260,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
 
         {/* Abas */}
         <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid #f1f5f9",overflowX:"auto"}}>
-          {[["dados","📋 Dados"],["contatos","📞 Contatos"],["dividas","💳 Dívidas"],["acordos","🤝 Acordos"],["processos","⚖️ Processos"]].map(([id,label])=>(
+          {[["dados","📋 Dados"],["contatos","📞 Contatos"],["dividas","💳 Dívidas"],["acordos","🤝 Acordos"],["processos","⚖️ Processos"],["relatorio","📊 Relatório"]].map(([id,label])=>(
             <button key={id} onClick={()=>setAbaFicha(id)}
               style={{padding:"9px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2,whiteSpace:"nowrap"}}>
               {label}
@@ -1619,6 +1619,177 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               )}
             </div>
           )}
+
+          {/* ABA RELATÓRIO — Timeline + Lembrete rápido */}
+          {abaFicha==="relatorio"&&(()=>{
+            const hoje2 = new Date().toISOString().slice(0,10);
+            // Lembretes deste devedor
+            let lemsDevedor = [];
+            try { lemsDevedor = JSON.parse(localStorage.getItem("mr_lembretes")||"[]").filter(l=>String(l.devedor_id)===String(sel.id)); } catch(e){}
+            const lemPendentes = lemsDevedor.filter(l=>l.status==="pendente");
+            // Todos os eventos do devedor em ordem cronológica decrescente
+            const contatos = [...(sel.contatos||[])].map(c=>({...c,_tipo:"contato",_data:c.data}));
+            const lemsAll  = lemsDevedor.map(l=>({...l,_tipo:"lembrete",_data:l.data_prometida}));
+            const eventos  = [...contatos,...lemsAll].sort((a,b)=>b._data.localeCompare(a._data));
+            // Form lembrete rápido
+            const [formLem, setFormLem] = useState({tipo:"promessa_pagamento",descricao:"",data_prometida:"",hora:"08:00",prioridade:"normal",observacoes:""});
+            const [showFormLem, setShowFormLem] = useState(false);
+            function salvarLemRapido(){
+              if(!formLem.data_prometida) return alert("Informe a data.");
+              if(!formLem.descricao.trim()) return alert("Informe a descrição.");
+              const novo={...formLem,id:Date.now(),devedor_id:sel.id,status:"pendente",criado_em:new Date().toISOString(),criado_por:user?.nome||"Sistema"};
+              try{
+                const atual=JSON.parse(localStorage.getItem("mr_lembretes")||"[]");
+                localStorage.setItem("mr_lembretes",JSON.stringify([novo,...atual]));
+              }catch(e){}
+              setShowFormLem(false);
+              setFormLem({tipo:"promessa_pagamento",descricao:"",data_prometida:"",hora:"08:00",prioridade:"normal",observacoes:""});
+              alert("✅ Lembrete criado! Acesse o módulo Lembretes para ver.");
+            }
+            const tipoMap2 = Object.fromEntries(TIPOS_LEM.map(t=>[t.v,t]));
+            const contatoMap = {ligacao:"📞 Ligação",whatsapp:"📱 WhatsApp",email:"📧 E-mail",carta:"✉️ Carta",visita:"🚗 Visita",outro:"🔹 Outro"};
+            const resultMap  = {sem_resposta:"Sem resposta",numero_invalido:"Número inválido",contato_estabelecido:"Contato estabelecido",recusou_negociar:"Recusou negociar",demonstrou_interesse:"Demonstrou interesse",acordo_verbal:"Acordo verbal",outro:"Outro"};
+            return(
+              <div>
+                {/* KPIs rápidos */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+                  {[
+                    {l:"Total de Contatos", v:contatos.length, cor:"#4f46e5", bg:"#ede9fe", ic:"📞"},
+                    {l:"Lembretes Ativos",  v:lemPendentes.length, cor:"#d97706", bg:"#fef3c7", ic:"🔔"},
+                    {l:"Último Contato",    v:contatos.length>0?fmtDate(contatos.sort((a,b)=>b._data.localeCompare(a._data))[0]._data):"—", cor:"#0f766e", bg:"#ccfbf1", ic:"📅"},
+                  ].map(k=>(
+                    <div key={k.l} style={{background:k.bg,borderRadius:12,padding:"12px 14px"}}>
+                      <p style={{fontSize:10,fontWeight:700,color:k.cor,textTransform:"uppercase",marginBottom:4}}>{k.ic} {k.l}</p>
+                      <p style={{fontFamily:"Syne",fontWeight:800,fontSize:20,color:k.cor}}>{k.v}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Botão criar lembrete rápido */}
+                <div style={{marginBottom:16}}>
+                  {!showFormLem?(
+                    <button onClick={()=>setShowFormLem(true)}
+                      style={{width:"100%",padding:"12px",background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"Mulish",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                      🔔 Criar Lembrete de Cobrança para {sel.nome.split(" ")[0]}
+                    </button>
+                  ):(
+                    <div style={{background:"#fff",borderRadius:14,padding:16,border:"2px solid #4f46e5"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                        <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#4f46e5"}}>🔔 Novo Lembrete — {sel.nome.split(" ")[0]}</p>
+                        <button onClick={()=>setShowFormLem(false)} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:18}}>✕</button>
+                      </div>
+                      {/* Tipo rápido */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:12}}>
+                        {TIPOS_LEM.map(t=>(
+                          <button key={t.v} onClick={()=>setFormLem(f=>({...f,tipo:t.v}))}
+                            style={{padding:"7px 8px",border:`1.5px solid ${formLem.tipo===t.v?t.cor:"#e2e8f0"}`,borderRadius:9,background:formLem.tipo===t.v?t.bg:"#fff",color:formLem.tipo===t.v?t.cor:"#64748b",fontWeight:700,fontSize:10,cursor:"pointer",fontFamily:"Mulish",textAlign:"left"}}>
+                            {t.l}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                        <div style={{gridColumn:"1/-1"}}>
+                          <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Descrição *</label>
+                          <input value={formLem.descricao} onChange={e=>setFormLem(f=>({...f,descricao:e.target.value}))}
+                            placeholder="Ex: Cliente prometeu pagar R$ 500,00"
+                            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Data Prometida *</label>
+                          <input type="date" value={formLem.data_prometida} onChange={e=>setFormLem(f=>({...f,data_prometida:e.target.value}))}
+                            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #4f46e5",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Hora</label>
+                          <input type="time" value={formLem.hora} onChange={e=>setFormLem(f=>({...f,hora:e.target.value}))}
+                            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Prioridade</label>
+                          <select value={formLem.prioridade} onChange={e=>setFormLem(f=>({...f,prioridade:e.target.value}))}
+                            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+                            {PRIOR.map(p=><option key={p.v} value={p.v}>{p.l}</option>)}
+                          </select>
+                        </div>
+                        <div style={{gridColumn:"1/-1"}}>
+                          <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:3,textTransform:"uppercase"}}>Observações</label>
+                          <textarea value={formLem.observacoes} onChange={e=>setFormLem(f=>({...f,observacoes:e.target.value}))} rows={2}
+                            placeholder="Detalhes da promessa ou combinado..."
+                            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                        </div>
+                      </div>
+                      {sel.telefone&&(
+                        <div style={{background:"#dcfce7",borderRadius:9,padding:"8px 12px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:11,color:"#15803d"}}>📱 Avisar por WhatsApp também?</span>
+                          <a href={`https://wa.me/55${sel.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(`Olá ${sel.nome.split(" ")[0]}, conforme combinado, passando para confirmar: ${formLem.descricao}`)}`}
+                            target="_blank" rel="noreferrer"
+                            style={{background:"#16a34a",color:"#fff",borderRadius:7,padding:"4px 12px",fontSize:11,fontWeight:700,textDecoration:"none"}}>
+                            Abrir WhatsApp
+                          </a>
+                        </div>
+                      )}
+                      <div style={{display:"flex",gap:8}}>
+                        <Btn onClick={salvarLemRapido} color="#4f46e5">🔔 Salvar Lembrete</Btn>
+                        <Btn onClick={()=>setShowFormLem(false)} outline color="#64748b">Cancelar</Btn>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Timeline de eventos */}
+                <div>
+                  <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>📋 Histórico Completo</p>
+                  {eventos.length===0&&(
+                    <p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24,background:"#f8fafc",borderRadius:12}}>Nenhum contato ou lembrete registrado ainda.</p>
+                  )}
+                  <div style={{position:"relative"}}>
+                    {eventos.map((ev,i)=>{
+                      const isLem = ev._tipo==="lembrete";
+                      const tipo2 = isLem ? (tipoMap2[ev.tipo]||tipoMap2.outro) : null;
+                      const vencido = isLem&&ev.data_prometida<hoje2&&ev.status==="pendente";
+                      const corLinha = isLem
+                        ? (ev.status==="concluido"?"#22c55e":vencido?"#dc2626":"#4f46e5")
+                        : "#94a3b8";
+                      return(
+                        <div key={ev.id} style={{display:"flex",gap:12,marginBottom:14,position:"relative"}}>
+                          {/* Linha vertical */}
+                          {i<eventos.length-1&&<div style={{position:"absolute",left:15,top:28,bottom:-14,width:2,background:"#f1f5f9"}}/>}
+                          {/* Ícone */}
+                          <div style={{width:30,height:30,borderRadius:99,background:isLem?(ev.status==="concluido"?"#dcfce7":vencido?"#fee2e2":"#ede9fe"):"#f1f5f9",border:`2px solid ${corLinha}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:13,zIndex:1}}>
+                            {isLem?(ev.status==="concluido"?"✅":vencido?"⚠️":"🔔"):"📞"}
+                          </div>
+                          {/* Conteúdo */}
+                          <div style={{flex:1,background:"#fff",borderRadius:12,padding:"10px 14px",border:`1px solid ${isLem&&vencido?"#fca5a5":isLem?"#e9d5ff":"#f1f5f9"}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:4,marginBottom:4}}>
+                              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                                {isLem?(
+                                  <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:tipo2?.bg,color:tipo2?.cor}}>{tipo2?.l}</span>
+                                ):(
+                                  <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:"#f1f5f9",color:"#64748b"}}>{contatoMap[ev.tipo]||ev.tipo}</span>
+                                )}
+                                {isLem&&ev.status==="concluido"&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:"#dcfce7",color:"#15803d"}}>✅ Concluído</span>}
+                                {isLem&&vencido&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:"#fee2e2",color:"#dc2626"}}>⚠️ Vencido</span>}
+                                {!isLem&&ev.resultado&&<span style={{fontSize:10,color:"#475569",fontWeight:600}}>{resultMap[ev.resultado]||ev.resultado}</span>}
+                              </div>
+                              <span style={{fontSize:10,color:"#94a3b8",flexShrink:0}}>
+                                {isLem
+                                  ? (ev.hora?`${fmtDate(ev.data_prometida)} ${ev.hora}`:fmtDate(ev.data_prometida))
+                                  : (ev.data||"").replace("T"," ").slice(0,16)
+                                }
+                              </span>
+                            </div>
+                            <p style={{fontSize:12,color:"#0f172a",fontWeight:isLem?600:400}}>{isLem?ev.descricao:ev.obs||"—"}</p>
+                            {ev.observacoes&&<p style={{fontSize:11,color:"#94a3b8",marginTop:3,fontStyle:"italic"}}>{ev.observacoes}</p>}
+                            <p style={{fontSize:10,color:"#94a3b8",marginTop:4}}>por {isLem?ev.criado_por:ev.responsavel}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* WhatsApp Modal */}
