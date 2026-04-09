@@ -333,7 +333,7 @@ const DIVIDA_VAZIA = {
   data_inicio_atualizacao:"", despesas:"0", observacoes:""
 };
 
-function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
+function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos=[], setTab }) {
   const [search, setSearch]           = useState("");
   const [filtroCredor, setFiltroCredor] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
@@ -341,20 +341,87 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
   const [secaoForm, setSecaoForm]     = useState("id");
   const [sel, setSel]                 = useState(null);
   const [abaFicha, setAbaFicha]       = useState("dados");
+  const [editando, setEditando]       = useState(false);
+  const [formEdit, setFormEdit]       = useState({});
   const [form, setForm]               = useState({...FORM_DEV_VAZIO});
   const [loading, setLoading]         = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(false);
   const [buscandoCEP, setBuscandoCEP] = useState(false);
+  const [buscandoCEPEdit, setBuscandoCEPEdit] = useState(false);
   const [wp, setWp]                   = useState(null);
   const [nd, setNd]                   = useState(DIVIDA_VAZIA);
   const [novoContato, setNovoContato] = useState({ tipo:"Ligação", resultado:"Sem resposta", obs:"" });
   const F  = (k,v) => setForm(f=>({...f,[k]:v}));
+  const FE = (k,v) => setFormEdit(f=>({...f,[k]:v}));
   const ND = (k,v) => setNd(d=>({...d,[k]:v}));
 
   function abrirModal(tipo) { setModal(tipo); onModalChange&&onModalChange(true); }
-  function fecharModal()    { setModal(null); setSel(null); setNd(DIVIDA_VAZIA); setSecaoForm("id"); onModalChange&&onModalChange(false); }
+  function fecharModal()    { setModal(null); setSel(null); setNd(DIVIDA_VAZIA); setSecaoForm("id"); setEditando(false); onModalChange&&onModalChange(false); }
   function abrirWp(d)       { setWp(d); onModalChange&&onModalChange(true); }
   function fecharWp()       { setWp(null); onModalChange&&onModalChange(false); }
-  function abrirFicha(d)    { setSel({...d,dividas:d.dividas||[],contatos:d.contatos||[]}); setAbaFicha("dados"); abrirModal("ficha"); }
+  function abrirFicha(d)    { setSel({...d,dividas:d.dividas||[],contatos:d.contatos||[]}); setAbaFicha("dados"); setEditando(false); abrirModal("ficha"); }
+
+  function iniciarEdicao() {
+    if(!sel) return;
+    setFormEdit({
+      nome:sel.nome||"", cpf_cnpj:sel.cpf_cnpj||"", tipo:sel.tipo||"PJ",
+      rg:sel.rg||"", data_nascimento:sel.data_nascimento||"", profissao:sel.profissao||"",
+      socio_nome:sel.socio_nome||"", socio_cpf:sel.socio_cpf||"",
+      email:sel.email||"", telefone:sel.telefone||"", telefone2:sel.telefone2||"",
+      cep:sel.cep||"", logradouro:sel.logradouro||"", numero:sel.numero||"",
+      complemento:sel.complemento||"", bairro:sel.bairro||"", cidade:sel.cidade||"", uf:sel.uf||"GO",
+      credor_id:sel.credor_id||"", valor_nominal:String(sel.valor_original||""),
+      data_origem_divida:sel.data_origem_divida||"", data_recebimento_carteira:sel.data_recebimento_carteira||"",
+      descricao_divida:sel.descricao_divida||"",
+      status:sel.status||"novo", responsavel:sel.responsavel||"", observacoes:sel.observacoes||"",
+    });
+    setEditando(true);
+  }
+
+  async function salvarEdicao() {
+    if(!formEdit.nome?.trim()) return alert("Informe o nome.");
+    setLoadingEdit(true);
+    try {
+      const payload = {
+        nome:formEdit.nome, cpf_cnpj:formEdit.cpf_cnpj, tipo:formEdit.tipo,
+        rg:formEdit.rg, data_nascimento:formEdit.data_nascimento||null, profissao:formEdit.profissao,
+        socio_nome:formEdit.socio_nome, socio_cpf:formEdit.socio_cpf,
+        email:formEdit.email, telefone:formEdit.telefone, telefone2:formEdit.telefone2,
+        cep:formEdit.cep, logradouro:formEdit.logradouro, numero:formEdit.numero,
+        complemento:formEdit.complemento, bairro:formEdit.bairro, cidade:formEdit.cidade, uf:formEdit.uf,
+        credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,
+        valor_original:parseFloat(formEdit.valor_nominal)||sel.valor_original||0,
+        data_origem_divida:formEdit.data_origem_divida||null,
+        data_recebimento_carteira:formEdit.data_recebimento_carteira||null,
+        descricao_divida:formEdit.descricao_divida,
+        status:formEdit.status, responsavel:formEdit.responsavel, observacoes:formEdit.observacoes,
+      };
+      const res = await dbUpdate("devedores", sel.id, payload);
+      const atu = Array.isArray(res)?res[0]:res;
+      if(atu) {
+        const atualizado = {...atu, dividas:sel.dividas||[], contatos:sel.contatos||[]};
+        setDevedores(prev=>prev.map(d=>d.id===sel.id?atualizado:d));
+        setSel(atualizado);
+        setEditando(false);
+        alert("Cadastro atualizado com sucesso!");
+      } else { alert("Erro ao salvar. Tente novamente."); }
+    } catch(e){ alert("Erro: "+e.message); }
+    setLoadingEdit(false);
+  }
+
+  async function buscarCEPEdit() {
+    const cep = formEdit.cep.replace(/\D/g,"");
+    if(cep.length!==8) return alert("CEP inválido.");
+    setBuscandoCEPEdit(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if(data.erro) return alert("CEP não encontrado.");
+      FE("logradouro",data.logradouro||""); FE("bairro",data.bairro||"");
+      FE("cidade",data.localidade||""); FE("uf",data.uf||"GO");
+    } catch(e){ alert("Erro ao buscar CEP."); }
+    setBuscandoCEPEdit(false);
+  }
 
   async function buscarCEP() {
     const cep = form.cep.replace(/\D/g,"");
@@ -381,32 +448,69 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
     if(!form.nome.trim()) return alert("Informe o nome.");
     setLoading(true);
     try {
-      const payload = {
+      // Tenta primeiro com todas as colunas novas
+      const payloadFull = {
         nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
-        rg:form.rg, data_nascimento:form.data_nascimento||null, profissao:form.profissao,
-        socio_nome:form.socio_nome, socio_cpf:form.socio_cpf,
-        email:form.email, telefone:form.telefone, telefone2:form.telefone2,
-        cep:form.cep, logradouro:form.logradouro, numero:form.numero,
-        complemento:form.complemento, bairro:form.bairro, cidade:form.cidade, uf:form.uf,
+        rg:form.rg||null, data_nascimento:form.data_nascimento||null,
+        profissao:form.profissao||null, socio_nome:form.socio_nome||null,
+        socio_cpf:form.socio_cpf||null, email:form.email||null,
+        telefone:form.telefone||null, telefone2:form.telefone2||null,
+        cep:form.cep||null, logradouro:form.logradouro||null,
+        numero:form.numero||null, complemento:form.complemento||null,
+        bairro:form.bairro||null, cidade:form.cidade||"Goiânia", uf:form.uf||"GO",
         credor_id:form.credor_id?parseInt(form.credor_id):null,
         valor_original:parseFloat(form.valor_nominal)||0,
         data_origem_divida:form.data_origem_divida||null,
         data_recebimento_carteira:form.data_recebimento_carteira||null,
-        descricao_divida:form.descricao_divida,
-        status:form.status, responsavel:form.responsavel||user?.nome||"",
-        observacoes:form.observacoes,
-        dividas:JSON.stringify([]), contatos:JSON.stringify([]),
+        descricao_divida:form.descricao_divida||null,
+        status:form.status||"novo",
+        responsavel:form.responsavel||user?.nome||"",
+        observacoes:form.observacoes||null,
+        dividas:JSON.stringify([]),
+        contatos:JSON.stringify([]),
       };
-      const res = await dbInsert("devedores", payload);
-      const novo = Array.isArray(res)?res[0]:res;
+
+      let res = await dbInsert("devedores", payloadFull);
+      let novo = Array.isArray(res)?res[0]:res;
+
+      // Se falhou (colunas não existem no banco), tenta versão mínima
+      if(!novo?.id) {
+        const payloadMin = {
+          nome:payloadFull.nome, cpf_cnpj:payloadFull.cpf_cnpj,
+          tipo:payloadFull.tipo, email:payloadFull.email,
+          telefone:payloadFull.telefone, cidade:payloadFull.cidade,
+          credor_id:payloadFull.credor_id,
+          valor_original:payloadFull.valor_original,
+          status:payloadFull.status,
+          responsavel:payloadFull.responsavel,
+          dividas:JSON.stringify([]),
+        };
+        res = await dbInsert("devedores", payloadMin);
+        novo = Array.isArray(res)?res[0]:res;
+      }
+
       if(novo&&novo.id) {
-        setDevedores(p=>[...p,{...novo,dividas:[],contatos:[]}]);
-        fecharModal(); setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});
-        alert(`Devedor "${novo.nome}" cadastrado!`);
-      } else { alert("Erro ao salvar. Verifique se o SQL do Supabase foi executado."); }
+        // Mantém campos extras na memória local até SQL ser executado
+        const local = {
+          ...novo, dividas:[], contatos:[],
+          rg:form.rg, profissao:form.profissao, socio_nome:form.socio_nome,
+          socio_cpf:form.socio_cpf, telefone2:form.telefone2,
+          cep:form.cep, logradouro:form.logradouro, numero:form.numero,
+          complemento:form.complemento, bairro:form.bairro, uf:form.uf,
+          descricao_divida:form.descricao_divida, observacoes:form.observacoes,
+        };
+        setDevedores(p=>[...p, local]);
+        fecharModal();
+        setForm({...FORM_DEV_VAZIO, responsavel:user?.nome||""});
+        alert(`✅ Devedor "${novo.nome}" cadastrado com sucesso!`);
+      } else {
+        // Exibe erro detalhado para debug
+        alert("Erro ao salvar:\n"+JSON.stringify(res, null, 2).slice(0,300));
+      }
     } catch(e){ alert("Erro: "+e.message); }
     setLoading(false);
   }
+
 
   async function registrarContato() {
     if(!sel) return;
@@ -659,18 +763,26 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
               </div>
             </div>
             <div style={{textAlign:"right"}}>
-              <p style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>Total das Dívidas</p>
-              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:"#a5f3fc"}}>{fmt((sel.dividas||[]).reduce((s,d)=>s+(d.valor_total||0),0)||sel.valor_original||0)}</p>
+              <p style={{fontSize:11,color:"rgba(255,255,255,.5)",marginBottom:4}}>Total das Dívidas</p>
+              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:"#a5f3fc",marginBottom:10}}>{fmt((sel.dividas||[]).reduce((s,d)=>s+(d.valor_total||0),0)||sel.valor_original||0)}</p>
+              {!editando ? (
+                <button onClick={iniciarEdicao} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>✏️ Editar</button>
+              ) : (
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button onClick={salvarEdicao} disabled={loadingEdit} style={{background:"#22c55e",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>{loadingEdit?"Salvando...":"💾 Salvar"}</button>
+                  <button onClick={()=>setEditando(false)} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontFamily:"Mulish"}}>✕ Cancelar</button>
+                </div>
+              )}
             </div>
           </div>
 
           <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
             {[["dados","📋 Dados"],["contatos","📞 Contatos ("+(sel.contatos||[]).length+")"],["dividas","💰 Dívidas ("+(sel.dividas||[]).length+")"],["processos","⚖️ Processos"]].map(([a,l])=>(
-              <button key={a} onClick={()=>setAbaFicha(a)} style={{padding:"8px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
+              <button key={a} onClick={()=>{setAbaFicha(a);setEditando(false);}} style={{padding:"8px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
             ))}
           </div>
 
-          {abaFicha==="dados"&&(
+          {abaFicha==="dados"&&!editando&&(
             <div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
                 {[
@@ -696,6 +808,93 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
                 {sel.telefone&&<Btn onClick={()=>abrirWp(sel)}>📱 WhatsApp</Btn>}
                 <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir</Btn>
               </div>
+            </div>
+          )}
+
+          {/* MODO EDIÇÃO — Dados Cadastrais */}
+          {abaFicha==="dados"&&editando&&(
+            <div style={{background:"#f8fafc",borderRadius:16,padding:20,border:"2px solid #4f46e5"}}>
+              <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#4f46e5",marginBottom:16}}>✏️ Editando Cadastro</p>
+              <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid #e2e8f0"}}>
+                {SECOES.map(([id,label])=>(
+                  <button key={id} onClick={()=>setSecaoForm(id)}
+                    style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:11,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-1}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {secaoForm==="id"&&(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                  <INP label="Nome / Razão Social *" value={formEdit.nome||""} onChange={v=>FE("nome",v)} span={2}/>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Tipo</label>
+                    <div style={{display:"flex",gap:8}}>
+                      {["PF","PJ"].map(t=><button key={t} onClick={()=>FE("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${formEdit.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:formEdit.tipo===t?"#4f46e5":"#fff",color:formEdit.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CPF / CNPJ</label>
+                    <input value={formEdit.cpf_cnpj||""} onChange={e=>FE("cpf_cnpj",formEdit.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} placeholder={formEdit.tipo==="PF"?"000.000.000-00":"00.000.000/0000-00"} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+                  </div>
+                  {formEdit.tipo==="PF"?(<>
+                    <INP label="RG" value={formEdit.rg||""} onChange={v=>FE("rg",v)}/>
+                    <INP label="Data de Nascimento" value={formEdit.data_nascimento||""} onChange={v=>FE("data_nascimento",v)} type="date"/>
+                    <INP label="Profissão" value={formEdit.profissao||""} onChange={v=>FE("profissao",v)} span={2}/>
+                  </>):(<>
+                    <INP label="Sócio / Responsável" value={formEdit.socio_nome||""} onChange={v=>FE("socio_nome",v)} span={2}/>
+                    <INP label="CPF do Sócio" value={formEdit.socio_cpf||""} onChange={v=>FE("socio_cpf",maskCPF(v))}/>
+                  </>)}
+                  <INP label="E-mail" value={formEdit.email||""} onChange={v=>FE("email",v)} type="email"/>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Principal</label>
+                    <input value={formEdit.telefone||""} onChange={e=>FE("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Secundário</label>
+                    <input value={formEdit.telefone2||""} onChange={e=>FE("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+                  </div>
+                </div>
+              )}
+              {secaoForm==="end"&&(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CEP</label>
+                    <div style={{display:"flex",gap:8}}>
+                      <input value={formEdit.cep||""} onChange={e=>FE("cep",maskCEP(e.target.value))} placeholder="00000-000" style={{flex:1,padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"monospace"}}/>
+                      <button onClick={buscarCEPEdit} disabled={buscandoCEPEdit} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{buscandoCEPEdit?"⏳":"🔍 Buscar"}</button>
+                    </div>
+                  </div>
+                  <INP label="UF" value={formEdit.uf||"GO"} onChange={v=>FE("uf",v)} opts={UFS.map(u=>({v:u,l:u}))}/>
+                  <INP label="Logradouro" value={formEdit.logradouro||""} onChange={v=>FE("logradouro",v)} span={2}/>
+                  <INP label="Número" value={formEdit.numero||""} onChange={v=>FE("numero",v)}/>
+                  <INP label="Complemento" value={formEdit.complemento||""} onChange={v=>FE("complemento",v)}/>
+                  <INP label="Bairro" value={formEdit.bairro||""} onChange={v=>FE("bairro",v)}/>
+                  <INP label="Cidade" value={formEdit.cidade||""} onChange={v=>FE("cidade",v)}/>
+                </div>
+              )}
+              {secaoForm==="divida"&&(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                  <INP label="Credor Vinculado" value={formEdit.credor_id||""} onChange={v=>FE("credor_id",v)} opts={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]} span={2}/>
+                  <INP label="Valor Nominal (R$)" value={formEdit.valor_nominal||""} onChange={v=>FE("valor_nominal",v)} type="number"/>
+                  <INP label="Data de Origem" value={formEdit.data_origem_divida||""} onChange={v=>FE("data_origem_divida",v)} type="date"/>
+                  <INP label="Recebimento da Carteira" value={formEdit.data_recebimento_carteira||""} onChange={v=>FE("data_recebimento_carteira",v)} type="date" span={2}/>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Descrição / Origem</label>
+                    <textarea value={formEdit.descricao_divida||""} onChange={e=>FE("descricao_divida",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                  </div>
+                </div>
+              )}
+              {secaoForm==="ctrl"&&(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                  <INP label="Status" value={formEdit.status||"novo"} onChange={v=>FE("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))} span={2}/>
+                  <INP label="Responsável" value={formEdit.responsavel||""} onChange={v=>FE("responsavel",v)} span={2}/>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Observações</label>
+                    <textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={4} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -831,10 +1030,42 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user }) {
           )}
 
           {abaFicha==="processos"&&(
-            <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12}}>
-              <div style={{fontSize:32,marginBottom:8}}>⚖️</div>
-              <p>Os processos deste devedor são gerenciados no módulo <b style={{color:"#4f46e5"}}>Processos</b>.</p>
-              <p style={{marginTop:4,fontSize:11}}>Clique em "Processos" no menu lateral para consultar e vincular processos.</p>
+            <div>
+              {(()=>{
+                const procsDevedor = processos.filter(p=>p.devedor_id===sel.id||String(p.devedor_id)===String(sel.id));
+                if(!procsDevedor.length) return (
+                  <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12}}>
+                    <div style={{fontSize:32,marginBottom:8}}>⚖️</div>
+                    <p>Nenhum processo vinculado a este devedor.</p>
+                    <button onClick={()=>{ fecharModal(); setTab&&setTab("processos"); }} style={{marginTop:14,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>+ Cadastrar Processo</button>
+                  </div>
+                );
+                return (
+                  <div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                      <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>{procsDevedor.length} processo{procsDevedor.length>1?"s":""} vinculado{procsDevedor.length>1?"s":""}</p>
+                      <button onClick={()=>{ fecharModal(); setTab&&setTab("processos"); }} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish"}}>+ Novo Processo</button>
+                    </div>
+                    {procsDevedor.map(p=>(
+                      <div key={p.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:10,background:"#fff"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                          <div>
+                            <p style={{fontFamily:"monospace",fontSize:12,color:"#4f46e5",fontWeight:700,marginBottom:2}}>{p.numero}</p>
+                            <p style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{p.tipo||"Execução"}</p>
+                          </div>
+                          <span style={{fontSize:13,fontWeight:800,color:"#4f46e5"}}>{fmt(p.valor)}</span>
+                        </div>
+                        <div style={{display:"flex",gap:16,fontSize:11,color:"#64748b",flexWrap:"wrap"}}>
+                          {p.vara&&<span>🏛 {p.vara}</span>}
+                          {p.fase&&<span>📌 Fase: {p.fase}</span>}
+                          {p.data_distribuicao&&<span>📅 {fmtDate(p.data_distribuicao)}</span>}
+                        </div>
+                        {p.observacoes&&<p style={{fontSize:12,color:"#94a3b8",marginTop:6,fontStyle:"italic"}}>{p.observacoes}</p>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -1989,7 +2220,8 @@ export default function App() {
       ]);
       setDevedores((devs||[]).map(d=>({ ...d,
         dividas: typeof d.dividas==="string"?JSON.parse(d.dividas||"[]"):(d.dividas||[]),
-        parcelas: typeof d.parcelas==="string"?JSON.parse(d.parcelas||"[]"):(d.parcelas||[])
+        parcelas: typeof d.parcelas==="string"?JSON.parse(d.parcelas||"[]"):(d.parcelas||[]),
+        contatos: typeof d.contatos==="string"?JSON.parse(d.contatos||"[]"):(d.contatos||[]),
       })));
       setCredores(creds||[]);
       setProcessos(procs||[]);
@@ -2024,7 +2256,7 @@ export default function App() {
 
   const PAGE = {
     dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user}/>,
-    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user}/>,
+    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab}/>,
     credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
     processos:   <Processos   processos={processos} setProcessos={setProcessos} devedores={devedores} credores={credores} andamentos={andamentos} setAndamentos={setAndamentos}/>,
     regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
