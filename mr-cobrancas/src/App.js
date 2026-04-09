@@ -64,13 +64,18 @@ function calcCorrecao({ valorOriginal, dataVencimento, indexador, jurosAM, multa
 
 // ─── ICONS ──────────────────────────────────────────────────
 const I = {
-  dash: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
-  dev: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-  cred: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-  proc: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  regua: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
-  calc: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="10" x2="8" y2="10"/><line x1="16" y1="14" x2="8" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>,
-  rel: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  // Dashboard — grade moderna com cantos arredondados
+  dash: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>,
+  // Devedores — pessoa com cifrão
+  dev: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M19 8v6M16 11h6"/></svg>,
+  // Credores — banco/instituição
+  cred: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22h18"/><path d="M6 22V11"/><path d="M10 22V11"/><path d="M14 22V11"/><path d="M18 22V11"/><path d="M2 11l10-8 10 8"/></svg>,
+  proc: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  regua: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+  // Calculadora — moderna com display
+  calc: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="3"/><rect x="7" y="5" width="10" height="4" rx="1"/><circle cx="8" cy="14" r="1" fill="currentColor"/><circle cx="12" cy="14" r="1" fill="currentColor"/><circle cx="16" cy="14" r="1" fill="currentColor"/><circle cx="8" cy="18" r="1" fill="currentColor"/><circle cx="12" cy="18" r="1" fill="currentColor"/><circle cx="16" cy="18" r="1" fill="currentColor"/></svg>,
+  // Relatórios — gráfico de tendência
+  rel: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/><path d="M5 20H2v-3"/><path d="M19 4h3v3"/></svg>,
   wp: <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
   plus: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
   search: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
@@ -81,7 +86,10 @@ const I = {
   logout: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
   menu: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
   alert: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
-  bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  // Bell moderno com ponto de notificação
+  bell: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>,
+  // Plus moderno
+  plus2: <svg style={{width:18,height:18}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
 };
 
 // ─── BADGE ───────────────────────────────────────────────────
@@ -290,7 +298,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
       )}
 
       {/* KPIs Principais */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20" className="mr-grid-4}}>
         {[
           { l:"Carteira Total",  v:fmt(totalCarteira),  sub:`${devedores.length} devedor${devedores.length!==1?"es":""}`, ic:"💼", g:"linear-gradient(135deg,#6366f1,#8b5cf6)", glow:"rgba(99,102,241,.35)" },
           { l:"Recuperado",      v:fmt(totalRecuperado), sub:`${taxaRecuperacao.toFixed(1)}% da carteira`,                ic:"✅", g:"linear-gradient(135deg,#10b981,#059669)", glow:"rgba(16,185,129,.35)" },
@@ -4994,12 +5002,12 @@ export default function App() {
   if(!user) return <Login onLogin={setUser}/>;
 
   const NAV = [
-    { id:"dashboard",  label:"Dashboard",  icon: I.dash  },
-    { id:"devedores",  label:"Devedores",  icon: I.dev   },
-    { id:"credores",   label:"Credores",   icon: I.cred  },
-    { id:"calculadora",label:"Calculadora",icon: I.calc  },
-    { id:"relatorios", label:"Relatórios", icon: I.rel   },
-    { id:"lembretes",  label:"Lembretes",  icon: I.bell  },
+    { id:"dashboard",  label:"Dashboard",   icon: I.dash, color:"#6366f1", bg:"rgba(99,102,241,.18)"  },
+    { id:"devedores",  label:"Devedores",   icon: I.dev,  color:"#ec4899", bg:"rgba(236,72,153,.18)"  },
+    { id:"credores",   label:"Credores",    icon: I.cred, color:"#14b8a6", bg:"rgba(20,184,166,.18)"  },
+    { id:"calculadora",label:"Calculadora", icon: I.calc, color:"#f59e0b", bg:"rgba(245,158,11,.18)"  },
+    { id:"relatorios", label:"Relatórios",  icon: I.rel,  color:"#10b981", bg:"rgba(16,185,129,.18)"  },
+    { id:"lembretes",  label:"Lembretes",   icon: I.bell, color:"#ef4444", bg:"rgba(239,68,68,.18)"   },
   ];
 
   const PAGE = {
@@ -5015,20 +5023,66 @@ export default function App() {
     <div style={{ minHeight:"100vh",display:"flex",fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#f1f5f9" }}>
       <FontLink/>
       <style>{`
-        *{box-sizing:border-box}
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
         .nav-btn{transition:all .18s cubic-bezier(.4,0,.2,1)!important}
-        .nav-btn:hover:not(.active){background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.85)!important;transform:translateX(3px)}
-        .nav-btn.active{background:linear-gradient(135deg,#6366f1,#8b5cf6)!important;color:#fff!important;box-shadow:0 4px 15px rgba(99,102,241,.35)!important}
+        .nav-btn:hover:not(.active){background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.85)!important}
         .mr-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
         .mr-btn:active{transform:scale(.97)}
-        @keyframes fadeInUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes pulse2{0%,100%{opacity:1}50%{opacity:.5}}
-        .page-content{animation:fadeInUp .22s ease}
+        @keyframes fadeInUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse2{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+        .page-content{animation:fadeInUp .2s ease}
         .sync-dot{animation:pulse2 1.2s infinite}
-        @media(max-width:768px){.mr-aside{transform:translateX(-100%)!important}.mr-aside.open{transform:translateX(0)!important}.mr-main{margin-left:0!important}}
+        .mr-aside{transform:translateX(0)}
+        .mr-main{margin-left:248px}
+
+        /* ── MOBILE ── */
+        @media(max-width:768px){
+          .mr-aside{transform:translateX(-100%)!important;z-index:50!important}
+          .mr-aside.open{transform:translateX(0)!important;animation:slideInLeft .22s ease}
+          .mr-main{margin-left:0!important;padding-bottom:72px!important}
+          .mr-header-date{display:none!important}
+          .mr-bottomnav{display:flex!important}
+          .mr-page{padding:16px!important}
+        }
+        @media(min-width:769px){
+          .mr-bottomnav{display:none!important}
+        }
+
+        /* Bottom nav mobile */
+        .mr-bottomnav{
+          position:fixed;bottom:0;left:0;right:0;
+          background:rgba(255,255,255,.95);
+          backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+          border-top:1px solid #e2e8f0;
+          height:66px;z-index:40;
+          align-items:center;justify-content:space-around;
+          box-shadow:0 -4px 20px rgba(0,0,0,.08);
+          padding-bottom:env(safe-area-inset-bottom);
+        }
+        .mr-bottomnav button{
+          display:flex;flex-direction:column;align-items:center;gap:3px;
+          background:none;border:none;cursor:pointer;padding:6px 8px;
+          border-radius:12px;transition:all .15s;flex:1;max-width:70px;
+          color:#94a3b8;font-family:'Plus Jakarta Sans',sans-serif;font-size:9px;font-weight:600;
+        }
+        .mr-bottomnav button.active{color:#6366f1}
+        .mr-bottomnav button.active .bn-icon{background:#ede9fe;transform:scale(1.1)}
+        .bn-icon{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent}
+
+        /* Touch improvements */
+        button{-webkit-appearance:none;touch-action:manipulation}
+        input,select,textarea{font-size:16px!important} /* Previne zoom no iOS */
+
+        /* Cards responsivos */
+        @media(max-width:640px){
+          .mr-grid-4{grid-template-columns:1fr 1fr!important}
+          .mr-grid-2{grid-template-columns:1fr!important}
+          .mr-kpi-v{font-size:20px!important}
+        }
       `}</style>
 
       {sideOpen && <div onClick={()=>setSideOpen(false)} style={{ position:"fixed",inset:0,background:"rgba(15,12,41,.55)",zIndex:30,backdropFilter:"blur(3px)" }}/>}
@@ -5057,10 +5111,13 @@ export default function App() {
           {NAV.map(n=>(
             <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); }}
               className={`nav-btn${tab===n.id?" active":""}`}
-              style={{ display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:12,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:600,background:"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.4)",width:"100%",position:"relative",outline:"none" }}>
-              <span style={{ fontSize:17,flexShrink:0,lineHeight:1 }}>{n.icon}</span>
-              <span style={{ flex:1 }}>{n.label}</span>
-              {tab===n.id&&<div style={{ width:3,height:18,background:"#a5b4fc",borderRadius:"3px 0 0 3px",position:"absolute",right:0,top:"50%",transform:"translateY(-50%)" }}/>}
+              style={{ display:"flex",alignItems:"center",gap:12,padding:"9px 12px",borderRadius:13,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:600,background:tab===n.id?"rgba(255,255,255,.12)":"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.5)",width:"100%",position:"relative",outline:"none" }}>
+              {/* Ícone com fundo colorido */}
+              <div style={{ width:34,height:34,borderRadius:10,background:tab===n.id?n.color:n.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s",color:tab===n.id?"#fff":n.color,boxShadow:tab===n.id?`0 4px 12px ${n.color}60`:"none" }}>
+                {n.icon}
+              </div>
+              <span style={{ flex:1,letterSpacing:"-.1px" }}>{n.label}</span>
+              {tab===n.id&&<div style={{ width:3,height:20,background:n.color,borderRadius:"3px 0 0 3px",position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",boxShadow:`0 0 8px ${n.color}` }}/>}
             </button>
           ))}
         </nav>
@@ -5107,7 +5164,7 @@ export default function App() {
           )}
 
           <div style={{ marginLeft:"auto",display:"flex",alignItems:"center",gap:10 }}>
-            <p style={{ fontSize:12,color:"#94a3b8",fontWeight:500 }}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
+            <p className="mr-header-date" style={{ fontSize:12,color:"#94a3b8",fontWeight:500 }}>{new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
             {lembretesList.filter(l=>l.status==="pendente"&&l.data_prometida<=new Date().toISOString().slice(0,10)).length>0&&(
               <button onClick={()=>setTab("lembretes")} style={{ position:"relative",background:"linear-gradient(135deg,#fef2f2,#fee2e2)",border:"1px solid #fecaca",borderRadius:10,padding:"6px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .15s",boxShadow:"0 1px 4px rgba(220,38,38,.15)" }}
                 onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 12px rgba(220,38,38,.25)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 4px rgba(220,38,38,.15)"}>
@@ -5119,7 +5176,7 @@ export default function App() {
         </header>
 
         {/* Page content */}
-        <div style={{ flex:1,padding:"26px 30px",overflowY:"auto" }}>
+        <div className="mr-page" style={{ flex:1,padding:"26px 30px",overflowY:"auto" }}>
           {carregando && devedores.length===0 ? (
             <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",flexDirection:"column",gap:16 }}>
               <div style={{ width:60,height:60,borderRadius:20,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,boxShadow:"0 8px 32px rgba(99,102,241,.4)" }}>⏳</div>
@@ -5129,6 +5186,21 @@ export default function App() {
           ) : <div className="page-content">{PAGE[tab]}</div>}
         </div>
       </main>
+
+      {/* ── BOTTOM NAV MOBILE ── */}
+      <nav className="mr-bottomnav">
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); }}
+            className={tab===n.id?"active":""}>
+            <div className="bn-icon" style={{ color:tab===n.id?n.color:"#94a3b8" }}>
+              {n.icon}
+            </div>
+            <span style={{ fontSize:9,fontWeight:tab===n.id?700:500,color:tab===n.id?n.color:"#94a3b8",letterSpacing:"-.2px" }}>
+              {n.label.length>8?n.label.slice(0,8)+"…":n.label}
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
