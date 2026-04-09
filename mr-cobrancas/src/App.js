@@ -281,21 +281,420 @@ function Dashboard({ devedores, processos, andamentos, user }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DEVEDORES — CRUD completo + parcelas + vínculo credor
+// DEVEDORES
 // ═══════════════════════════════════════════════════════════════
-function gerarParcelas(valorTotal, qtd, dataInicio) {
-  const parcelas = [];
-  for (let i = 0; i < qtd; i++) {
-    const d = new Date(dataInicio + "T12:00:00");
-    d.setMonth(d.getMonth() + i);
-    parcelas.push({ id: i+1, numero: i+1, valor: Math.round(valorTotal/qtd*100)/100, vencimento: d.toISOString().slice(0,10), status:"pendente", data_pagamento:null });
-  }
-  return parcelas;
-}
-
-const FORM_VAZIO = { nome:"",cpf_cnpj:"",tipo:"PJ",telefone:"",email:"",cidade:"Goiânia",status:"ativo",valor_original:"",data_vencimento:"",credor_id:"",usar_parcelas:false,qtd_parcelas:"12",data_primeira_parcela:"" };
+const FORM_DEV = { nome:"",cpf_cnpj:"",tipo:"PJ",telefone:"",email:"",cidade:"Goiânia",status:"ativo",credor_id:"" };
 
 function Devedores({ devedores, setDevedores, credores }) {
+  const [search, setSearch] = useState("");
+  const [modal, setModal]   = useState(null); // null | "novo" | "ver"
+  const [sel, setSel]       = useState(null);
+  const [aba, setAba]       = useState("dividas"); // "dados" | "dividas"
+  const [form, setForm]     = useState(FORM_DEV);
+  const [loading, setLoading] = useState(false);
+  const [wp, setWp]         = useState(null);
+  const F = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  // ── Estado da nova dívida ────────────────────────────────────
+  const DIVIDA_VAZIA = { descricao:"", valor_total:"", data_vencimento:"", usar_parcelas:false, qtd_parcelas:"1", data_primeira_parcela:"", parcelas:[] };
+  const [novaDivida, setNovaDivida] = useState(DIVIDA_VAZIA);
+  const ND = (k,v) => setNovaDivida(d=>({...d,[k]:v}));
+
+  const filtered = devedores.filter(d =>
+    (d.nome||"").toLowerCase().includes(search.toLowerCase()) ||
+    (d.cpf_cnpj||"").includes(search)
+  );
+
+  // ── Gerar parcelas iguais ────────────────────────────────────
+  function gerarParcs(total, qtd, dataInicio) {
+    const arr = [];
+    for(let i=0;i<qtd;i++){
+      const d = new Date(dataInicio+"T12:00:00");
+      d.setMonth(d.getMonth()+i);
+      arr.push({ id:Date.now()+i, num:i+1, valor:Math.round(total/qtd*100)/100, venc:d.toISOString().slice(0,10), status:"pendente", pago_em:null });
+    }
+    return arr;
+  }
+
+  // ── Confirmar parcelas da nova dívida ───────────────────────
+  function confirmarParcelas() {
+    const total = parseFloat(novaDivida.valor_total)||0;
+    const qtd   = parseInt(novaDivida.qtd_parcelas)||1;
+    const data  = novaDivida.data_primeira_parcela || novaDivida.data_vencimento;
+    if(!data) return alert("Informe a data de vencimento.");
+    const parcs = gerarParcs(total, qtd, data);
+    setNovaDivida(d=>({...d, parcelas:parcs}));
+  }
+
+  // ── Editar parcela individual ────────────────────────────────
+  function editParc(id, campo, val) {
+    setNovaDivida(d=>({...d, parcelas: d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})}));
+  }
+  function addParc() {
+    const ultima = novaDivida.parcelas[novaDivida.parcelas.length-1];
+    const proxD  = ultima ? (()=>{const d=new Date(ultima.venc+"T12:00:00");d.setMonth(d.getMonth()+1);return d.toISOString().slice(0,10);})() : new Date().toISOString().slice(0,10);
+    setNovaDivida(d=>({...d, parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ultima?.valor||0,venc:proxD,status:"pendente",pago_em:null}]}));
+  }
+  function remParc(id) { setNovaDivida(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)})); }
+
+  // ── Salvar devedor novo ──────────────────────────────────────
+  async function salvarDevedor() {
+    if(!form.nome.trim()) return alert("Informe o nome.");
+    setLoading(true);
+    try {
+      const payload = { ...form, credor_id: form.credor_id?parseInt(form.credor_id):null, dividas: JSON.stringify([]) };
+      const res  = await dbInsert("devedores", payload);
+      const novo = Array.isArray(res)?res[0]:res;
+      if(novo) {
+        setDevedores(p=>[...p,{...novo,dividas:[]}]);
+        setModal(null);
+        setForm(FORM_DEV);
+      }
+    } catch(e){ alert("Erro ao salvar: "+e.message); }
+    setLoading(false);
+  }
+
+  // ── Adicionar dívida ao devedor ──────────────────────────────
+  async function adicionarDivida() {
+    if(!sel) return;
+    const total = parseFloat(novaDivida.valor_total)||0;
+    if(!total) return alert("Informe o valor da dívida.");
+    if(novaDivida.parcelas.length===0) return alert("Gere as parcelas antes de salvar.");
+
+    const divida = {
+      id: Date.now(),
+      descricao: novaDivida.descricao || "Dívida",
+      valor_total: total,
+      data_vencimento: novaDivida.data_vencimento,
+      parcelas: novaDivida.parcelas,
+      criada_em: new Date().toISOString().slice(0,10),
+    };
+
+    const dividas = [...(sel.dividas||[]), divida];
+    const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+    try {
+      const res = await dbUpdate("devedores", sel.id, { dividas:JSON.stringify(dividas), valor_original });
+      const atu = Array.isArray(res)?res[0]:res;
+      if(atu){
+        const parsed = {...atu, dividas};
+        setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
+        setSel(parsed);
+        setNovaDivida(DIVIDA_VAZIA);
+        alert("Dívida adicionada!");
+      }
+    } catch(e){ alert("Erro: "+e.message); }
+  }
+
+  // ── Toggle parcela paga ──────────────────────────────────────
+  async function toggleParcela(dividaId, parcId, novoStatus) {
+    if(!sel) return;
+    const dividas = (sel.dividas||[]).map(div=>{
+      if(div.id!==dividaId) return div;
+      const parcelas = div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null});
+      return {...div,parcelas};
+    });
+    const todasPagas = dividas.every(div=>div.parcelas.every(p=>p.status==="pago"));
+    const algumaPaga = dividas.some(div=>div.parcelas.some(p=>p.status==="pago"));
+    const novoStatusDev = todasPagas?"pago":algumaPaga?"negociando":"ativo";
+    try {
+      const res = await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:novoStatusDev});
+      const atu = Array.isArray(res)?res[0]:res;
+      if(atu){
+        const parsed={...atu,dividas};
+        setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));
+        setSel(parsed);
+      }
+    } catch(e){ console.error(e); }
+  }
+
+  // ── Excluir dívida ───────────────────────────────────────────
+  async function excluirDivida(dividaId) {
+    if(!sel||!window.confirm("Excluir esta dívida?")) return;
+    const dividas = (sel.dividas||[]).filter(d=>d.id!==dividaId);
+    const valor_original = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+    const res = await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
+    const atu = Array.isArray(res)?res[0]:res;
+    if(atu){ const parsed={...atu,dividas}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
+  }
+
+  // ── Excluir devedor ──────────────────────────────────────────
+  async function excluirDevedor(d) {
+    if(!window.confirm(`Excluir "${d.nome}"?`)) return;
+    await dbDelete("devedores",d.id);
+    setDevedores(prev=>prev.filter(x=>x.id!==d.id));
+    if(sel?.id===d.id){setSel(null);setModal(null);}
+  }
+
+  const WP_MSGS = d => [
+    {titulo:"Notificação",msg:`Prezado(a) *${d.nome}*, consta débito em aberto.\n\nEntre em contato para regularização.\n\n*MR Cobranças* | (62) 9 9999-0000`},
+    {titulo:"Proposta de Acordo",msg:`Olá *${d.nome.split(" ")[0]}*! Temos condições especiais para quitação do seu débito.\n\nFale conosco!\n\n*MR Cobranças* | (62) 9 9999-0000`},
+    {titulo:"Aviso Judicial",msg:`*AVISO — ${d.nome}*\n\nSeu débito foi encaminhado para cobrança judicial. Ainda é possível acordo.\n\n*Escritório MR Cobranças*`},
+  ];
+
+  const corStatus={pago:"#16a34a",pendente:"#64748b",atrasado:"#dc2626",negociando:"#d97706"};
+  const bgStatus={pago:"#dcfce7",pendente:"#f1f5f9",atrasado:"#fee2e2",negociando:"#fef9c3"};
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
+        <Btn onClick={()=>{setForm(FORM_DEV);setModal("novo")}}>{I.plus} Novo Devedor</Btn>
+      </div>
+
+      <div style={{position:"relative",marginBottom:14}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8"}}>{I.search}</span>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar nome ou CPF/CNPJ..." style={{width:"100%",padding:"10px 12px 10px 36px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+      </div>
+
+      {/* Tabela */}
+      <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead><tr style={{background:"#f8fafc"}}>
+              {["Nome","CPF/CNPJ","Credor","Status","Total Dívidas","Dívidas","Ações"].map(h=>(
+                <th key={h} style={{textAlign:"left",padding:"10px 14px",color:"#64748b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {filtered.map(d=>{
+                const dividas = d.dividas||[];
+                const totalDiv = dividas.reduce((s,div)=>s+(div.valor_total||0),0);
+                const credor = credores.find(c=>c.id===d.credor_id);
+                const totalParcs = dividas.reduce((s,div)=>s+(div.parcelas||[]).length,0);
+                const pagas = dividas.reduce((s,div)=>s+(div.parcelas||[]).filter(p=>p.status==="pago").length,0);
+                return(
+                  <tr key={d.id} style={{borderTop:"1px solid #f8fafc"}}>
+                    <td style={{padding:"11px 14px",fontWeight:700,color:"#0f172a"}}>{d.nome}</td>
+                    <td style={{padding:"11px 14px",color:"#64748b",fontFamily:"monospace",fontSize:11}}>{d.cpf_cnpj||"—"}</td>
+                    <td style={{padding:"11px 14px",fontSize:11,color:"#64748b"}}>{credor?credor.nome.split(" ").slice(0,2).join(" "):"—"}</td>
+                    <td style={{padding:"11px 14px"}}><Badge s={d.status||"ativo"}/></td>
+                    <td style={{padding:"11px 14px",fontWeight:700,color:"#4f46e5"}}>{fmt(totalDiv||d.valor_original||0)}</td>
+                    <td style={{padding:"11px 14px"}}>
+                      {dividas.length>0?(
+                        <div style={{display:"flex",alignItems:"center",gap:5}}>
+                          <span style={{fontSize:12,fontWeight:700}}>{pagas}/{totalParcs}</span>
+                          <div style={{width:40,height:4,background:"#f1f5f9",borderRadius:99}}>
+                            <div style={{height:4,width:`${totalParcs?pagas/totalParcs*100:0}%`,background:"#22c55e",borderRadius:99}}/>
+                          </div>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>{dividas.length} dív.</span>
+                        </div>
+                      ):<span style={{color:"#94a3b8",fontSize:11}}>Sem dívidas</span>}
+                    </td>
+                    <td style={{padding:"11px 14px"}}>
+                      <div style={{display:"flex",gap:4}}>
+                        <button onClick={()=>{setSel({...d,dividas:d.dividas||[]});setAba("dividas");setModal("ver");}} title="Ver" style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>👁 Ver</button>
+                        {d.telefone&&<button onClick={()=>setWp(d)} title="WhatsApp" style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
+                        <button onClick={()=>excluirDevedor(d)} title="Excluir" style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length===0&&<tr><td colSpan={7} style={{padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>Nenhum devedor encontrado</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div style={{padding:"8px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600}}>
+          {filtered.length} devedores
+        </div>
+      </div>
+
+      {/* ── MODAL NOVO DEVEDOR ── */}
+      {modal==="novo"&&(
+        <Modal title="Novo Devedor" onClose={()=>setModal(null)}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <Inp label="Nome / Razão Social" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
+            <Inp label="CPF / CNPJ" value={form.cpf_cnpj} onChange={v=>F("cpf_cnpj",v)}/>
+            <Inp label="Tipo" value={form.tipo} onChange={v=>F("tipo",v)} options={["PF","PJ"]}/>
+            <Inp label="Telefone (WhatsApp)" value={form.telefone} onChange={v=>F("telefone",v)} placeholder="62999990000"/>
+            <Inp label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
+            <Inp label="Cidade" value={form.cidade} onChange={v=>F("cidade",v)}/>
+            <Inp label="Status" value={form.status} onChange={v=>F("status",v)} options={["ativo","negociando","pago","inativo"]}/>
+            <Inp label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} options={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]}/>
+          </div>
+          <p style={{fontSize:11,color:"#94a3b8",marginTop:12}}>💡 As dívidas e parcelas são adicionadas depois, na ficha do devedor.</p>
+          <div style={{display:"flex",gap:10,marginTop:16}}>
+            <Btn onClick={salvarDevedor}>{loading?"Salvando...":"Cadastrar Devedor"}</Btn>
+            <Btn onClick={()=>setModal(null)} outline>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── MODAL VER DEVEDOR ── */}
+      {modal==="ver"&&sel&&(
+        <Modal title={sel.nome} onClose={()=>{setModal(null);setSel(null);setNovaDivida(DIVIDA_VAZIA);}} wide>
+          {/* Abas */}
+          <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
+            {["dados","dividas"].map(a=>(
+              <button key={a} onClick={()=>setAba(a)} style={{padding:"8px 20px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:13,color:aba===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${aba===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>
+                {a==="dados"?"📋 Dados":"💰 Dívidas ("+(sel.dividas||[]).length+")"}
+              </button>
+            ))}
+          </div>
+
+          {/* ABA DADOS */}
+          {aba==="dados"&&(
+            <div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                {[["Nome",sel.nome],["CPF/CNPJ",sel.cpf_cnpj],["Tipo",sel.tipo],["Cidade",sel.cidade],["Telefone",sel.telefone],["E-mail",sel.email],["Credor",credores.find(c=>c.id===sel.credor_id)?.nome||"—"],["Status",sel.status]].map(([k,v])=>(
+                  <div key={k} style={{padding:"10px 14px",background:"#f8fafc",borderRadius:10}}>
+                    <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>{k}</p>
+                    <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{v||"—"}</p>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir Devedor</Btn>
+              </div>
+            </div>
+          )}
+
+          {/* ABA DÍVIDAS */}
+          {aba==="dividas"&&(
+            <div>
+              {/* Lista de dívidas existentes */}
+              {(sel.dividas||[]).length===0&&(
+                <div style={{textAlign:"center",padding:"24px",color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12,marginBottom:16}}>
+                  Nenhuma dívida cadastrada. Adicione abaixo.
+                </div>
+              )}
+              {(sel.dividas||[]).map((div,di)=>{
+                const pagas=div.parcelas.filter(p=>p.status==="pago").length;
+                const pct=div.parcelas.length?Math.round(pagas/div.parcelas.length*100):0;
+                return(
+                  <div key={div.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <div>
+                        <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao||"Dívida "+(di+1)}</p>
+                        <p style={{fontSize:12,color:"#64748b"}}>{div.parcelas.length} parcelas · {fmtDate(div.data_vencimento)} · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b></p>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#16a34a"}}>{pct}%</span>
+                        <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
+                      </div>
+                    </div>
+                    {/* Barra */}
+                    <div style={{height:5,background:"#f1f5f9",borderRadius:99,marginBottom:10}}>
+                      <div style={{height:5,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/>
+                    </div>
+                    {/* Parcelas */}
+                    <div style={{maxHeight:200,overflowY:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                        <thead><tr style={{background:"#f8fafc"}}>
+                          {["Nº","Valor","Vencimento","Status","Pago em",""].map(h=><th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {div.parcelas.map((p,pi)=>{
+                            const atrasada=p.status==="pendente"&&new Date(p.venc+"T12:00:00")<new Date();
+                            const sR=atrasada?"atrasado":p.status;
+                            return(
+                              <tr key={p.id} style={{borderTop:"1px solid #f8fafc",background:sR==="pago"?"#f9fffe":sR==="atrasado"?"#fff9f9":"#fff"}}>
+                                <td style={{padding:"5px 8px",fontWeight:700}}>{pi+1}</td>
+                                <td style={{padding:"5px 8px",color:"#4f46e5",fontWeight:700}}>{fmt(p.valor)}</td>
+                                <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.venc)}</td>
+                                <td style={{padding:"5px 8px"}}>
+                                  <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:99,background:bgStatus[sR]||"#f1f5f9",color:corStatus[sR]||"#64748b"}}>
+                                    {sR==="pago"?"Pago":sR==="atrasado"?"Atrasado":"Pendente"}
+                                  </span>
+                                </td>
+                                <td style={{padding:"5px 8px",color:"#94a3b8",fontSize:10}}>{fmtDate(p.pago_em)}</td>
+                                <td style={{padding:"5px 8px"}}>
+                                  {p.status!=="pago"
+                                    ?<button onClick={()=>toggleParcela(div.id,p.id,"pago")} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,fontWeight:700}}>✓ Pago</button>
+                                    :<button onClick={()=>toggleParcela(div.id,p.id,"pendente")} style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10}}>↩</button>
+                                  }
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* ── ADICIONAR NOVA DÍVIDA ── */}
+              <div style={{background:"#f8fafc",borderRadius:14,padding:18,border:"1.5px dashed #e2e8f0",marginTop:8}}>
+                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14}}>➕ Adicionar Nova Dívida</p>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+                  <Inp label="Descrição (ex: Contrato 001)" value={novaDivida.descricao} onChange={v=>ND("descricao",v)} span={2}/>
+                  <Inp label="Valor Total (R$)" value={novaDivida.valor_total} onChange={v=>ND("valor_total",v)} type="number"/>
+                  <Inp label="Data 1ª Parcela / Vencimento" value={novaDivida.data_primeira_parcela||novaDivida.data_vencimento} onChange={v=>{ND("data_primeira_parcela",v);ND("data_vencimento",v);}} type="date"/>
+                  <Inp label="Número de Parcelas" value={novaDivida.qtd_parcelas} onChange={v=>ND("qtd_parcelas",v)} type="number"/>
+                </div>
+
+                {/* Preview da divisão */}
+                {novaDivida.valor_total&&novaDivida.qtd_parcelas&&(
+                  <div style={{background:"#ede9fe",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12}}>
+                    <b style={{color:"#4f46e5"}}>{novaDivida.qtd_parcelas}x de {fmt((parseFloat(novaDivida.valor_total)||0)/parseInt(novaDivida.qtd_parcelas||1))}</b>
+                    <span style={{color:"#6d28d9",marginLeft:8}}>= {fmt(parseFloat(novaDivida.valor_total)||0)} total</span>
+                  </div>
+                )}
+
+                <Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn>
+
+                {/* Tabela de parcelas editável antes de salvar */}
+                {novaDivida.parcelas.length>0&&(
+                  <div style={{marginTop:14}}>
+                    <p style={{fontSize:12,fontWeight:700,color:"#0f172a",marginBottom:8}}>✏️ Ajuste os valores individuais de cada parcela:</p>
+                    <div style={{maxHeight:220,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead><tr style={{background:"#f8fafc"}}>
+                          {["Nº","Valor (R$)","Vencimento",""].map(h=><th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase"}}>{h}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {novaDivida.parcelas.map((p,i)=>(
+                            <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
+                              <td style={{padding:"6px 10px",fontWeight:700,color:"#0f172a"}}>{i+1}</td>
+                              <td style={{padding:"6px 10px"}}>
+                                <input type="number" value={p.valor} onChange={e=>editParc(p.id,"valor",e.target.value)}
+                                  style={{width:90,padding:"4px 7px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none"}}/>
+                              </td>
+                              <td style={{padding:"6px 10px"}}>
+                                <input type="date" value={p.venc} onChange={e=>editParc(p.id,"venc",e.target.value)}
+                                  style={{padding:"4px 7px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none"}}/>
+                              </td>
+                              <td style={{padding:"6px 10px"}}>
+                                <button onClick={()=>remParc(p.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:11}}>✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
+                      <button onClick={addParc} style={{background:"#f1f5f9",color:"#475569",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Parcela</button>
+                      <span style={{fontSize:11,color:"#94a3b8"}}>Total: <b style={{color:"#4f46e5"}}>{fmt(novaDivida.parcelas.reduce((s,p)=>s+p.valor,0))}</b></span>
+                      <div style={{flex:1}}/>
+                      <Btn onClick={adicionarDivida} color="#059669">💾 Salvar Dívida</Btn>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ── MODAL WHATSAPP ── */}
+      {wp&&(
+        <Modal title={`WhatsApp — ${wp.nome}`} onClose={()=>setWp(null)}>
+          {WP_MSGS(wp).map((m,i)=>(
+            <div key={i} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10}}>
+              <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8}}>{m.titulo}</p>
+              <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f8fafc",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
+              <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer"
+                style={{display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
+                {I.wp} Abrir no WhatsApp
+              </a>
+            </div>
+          ))}
+        </Modal>
+      )}
+    </div>
+  );
+}
   const [search, setSearch]   = useState("");
   const [modal, setModal]     = useState(false); // false | "novo" | "editar" | "ver"
   const [sel, setSel]         = useState(null);
@@ -1344,7 +1743,10 @@ export default function App() {
       const [devs, creds, procs, ands, reg] = await Promise.all([
         dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"), dbGet("regua"),
       ]);
-      setDevedores((devs||[]).map(d=>({ ...d, parcelas: typeof d.parcelas==="string"?JSON.parse(d.parcelas||"[]"):(d.parcelas||[]) })));
+      setDevedores((devs||[]).map(d=>({ ...d,
+        dividas: typeof d.dividas==="string"?JSON.parse(d.dividas||"[]"):(d.dividas||[]),
+        parcelas: typeof d.parcelas==="string"?JSON.parse(d.parcelas||"[]"):(d.parcelas||[])
+      })));
       setCredores(creds||[]);
       setProcessos(procs||[]);
       setAndamentos(ands||[]);
