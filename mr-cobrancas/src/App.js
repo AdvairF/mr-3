@@ -210,9 +210,15 @@ function Dashboard({ devedores, processos, andamentos, user }) {
     return s + (dividas.length>0 ? dividas.reduce((ss,div)=>ss+(div.valor_total||0),0) : (d.valor_original||0));
   },0);
   const totalRecuperado = devedores.reduce((s,d)=>{
-    const parcs = (d.dividas||[]).flatMap(div=>div.parcelas||[]);
-    return s + parcs.filter(p=>p.status==="pago").reduce((ss,p)=>ss+p.valor,0);
+    // Parcelas de dívidas avulsas
+    const parcsDividas = (d.dividas||[]).flatMap(div=>div.parcelas||[]);
+    const recDividas = parcsDividas.filter(p=>p.status==="pago").reduce((ss,p)=>ss+(p.valor||0),0);
+    // Parcelas de acordos
+    const recAcordos = calcularTotaisAcordo(d.acordos||[]).recuperado;
+    return s + recDividas + recAcordos;
   },0);
+  const totalAcordos = devedores.reduce((s,d)=>s+(d.acordos||[]).length,0);
+  const acordosAtivos = devedores.reduce((s,d)=>s+(d.acordos||[]).filter(a=>a.status==="ativo").length,0);
   const ativos = processos.filter(p => p.status==="em_andamento").length;
   const prazos7 = andamentos.filter(a => { if(!a.prazo) return false; const d=(new Date(a.prazo)-new Date())/86400000; return d>=0&&d<=7; }).length;
 
@@ -333,484 +339,789 @@ const DIVIDA_VAZIA = {
   data_inicio_atualizacao:"", despesas:"0", observacoes:""
 };
 
-function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos=[], setTab }) {
-  const [search, setSearch]           = useState("");
-  const [filtroCredor, setFiltroCredor] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("");
-  const [modal, setModal]             = useState(null);
-  const [secaoForm, setSecaoForm]     = useState("id");
-  const [sel, setSel]                 = useState(null);
-  const [abaFicha, setAbaFicha]       = useState("dados");
-  const [editando, setEditando]       = useState(false);
-  const [formEdit, setFormEdit]       = useState({});
-  const [form, setForm]               = useState({...FORM_DEV_VAZIO});
-  const [loading, setLoading]         = useState(false);
-  const [loadingEdit, setLoadingEdit] = useState(false);
-  const [buscandoCEP, setBuscandoCEP] = useState(false);
-  const [buscandoCEPEdit, setBuscandoCEPEdit] = useState(false);
-  const [wp, setWp]                   = useState(null);
-  const [nd, setNd]                   = useState(DIVIDA_VAZIA);
-  const [novoContato, setNovoContato] = useState({ tipo:"Ligação", resultado:"Sem resposta", obs:"" });
-  const F  = (k,v) => setForm(f=>({...f,[k]:v}));
-  const FE = (k,v) => setFormEdit(f=>({...f,[k]:v}));
-  const ND = (k,v) => setNd(d=>({...d,[k]:v}));
+// ═══════════════════════════════════════════════════════════════
+// STATUS + CONSTANTES
+// ═══════════════════════════════════════════════════════════════
+const STATUS_DEV = [
+  { v:"novo",           l:"🆕 Novo",              cor:"#64748b", bg:"#f1f5f9" },
+  { v:"em_localizacao", l:"🔍 Em Localização",     cor:"#2563eb", bg:"#dbeafe" },
+  { v:"notificado",     l:"📬 Notificado",          cor:"#7c3aed", bg:"#ede9fe" },
+  { v:"em_negociacao",  l:"🤝 Em Negociação",       cor:"#d97706", bg:"#fef3c7" },
+  { v:"acordo_firmado", l:"✅ Acordo Firmado",       cor:"#16a34a", bg:"#dcfce7" },
+  { v:"pago_integral",  l:"💰 Pago Integralmente",  cor:"#065f46", bg:"#d1fae5" },
+  { v:"pago_parcial",   l:"💵 Pago Parcialmente",   cor:"#0f766e", bg:"#ccfbf1" },
+  { v:"irrecuperavel",  l:"❌ Irrecuperável",        cor:"#dc2626", bg:"#fee2e2" },
+  { v:"ajuizado",       l:"⚖️ Ajuizado",             cor:"#c2410c", bg:"#ffedd5" },
+];
+function BadgeDev({status}){
+  const s=STATUS_DEV.find(x=>x.v===status)||STATUS_DEV[0];
+  return <span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:s.bg,color:s.cor,whiteSpace:"nowrap"}}>{s.l}</span>;
+}
+const UFS=["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+const maskCPF=v=>{const n=v.replace(/\D/g,"");return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,"$1.$2.$3-$4").slice(0,14);};
+const maskCNPJ=v=>{const n=v.replace(/\D/g,"");return n.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,"$1.$2.$3/$4-$5").slice(0,18);};
+const maskTel=v=>{const n=v.replace(/\D/g,"");return n.length<=10?n.replace(/(\d{2})(\d{4})(\d{4})/,"($1) $2-$3"):n.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/,"($1) $2 $3-$4").slice(0,16);};
+const maskCEP=v=>v.replace(/\D/g,"").replace(/(\d{5})(\d{3})/,"$1-$2").slice(0,9);
 
-  function abrirModal(tipo) { setModal(tipo); onModalChange&&onModalChange(true); }
-  function fecharModal()    { setModal(null); setSel(null); setNd(DIVIDA_VAZIA); setSecaoForm("id"); setEditando(false); onModalChange&&onModalChange(false); }
-  function abrirWp(d)       { setWp(d); onModalChange&&onModalChange(true); }
-  function fecharWp()       { setWp(null); onModalChange&&onModalChange(false); }
-  function abrirFicha(d)    { setSel({...d,dividas:d.dividas||[],contatos:d.contatos||[]}); setAbaFicha("dados"); setEditando(false); abrirModal("ficha"); }
+// Componentes de input internos
+function INP({label,value,onChange,type="text",span,opts,placeholder}){
+  const sty={width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"};
+  return(
+    <div style={span?{gridColumn:"1/-1"}:{}}>
+      {label&&<label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>{label}</label>}
+      {opts
+        ?<select value={value} onChange={e=>onChange(e.target.value)} style={sty}>{opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
+        :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={sty}/>
+      }
+    </div>
+  );
+}
 
-  function iniciarEdicao() {
-    if(!sel) return;
-    setFormEdit({
-      nome:sel.nome||"", cpf_cnpj:sel.cpf_cnpj||"", tipo:sel.tipo||"PJ",
-      rg:sel.rg||"", data_nascimento:sel.data_nascimento||"", profissao:sel.profissao||"",
-      socio_nome:sel.socio_nome||"", socio_cpf:sel.socio_cpf||"",
-      email:sel.email||"", telefone:sel.telefone||"", telefone2:sel.telefone2||"",
-      cep:sel.cep||"", logradouro:sel.logradouro||"", numero:sel.numero||"",
-      complemento:sel.complemento||"", bairro:sel.bairro||"", cidade:sel.cidade||"", uf:sel.uf||"GO",
-      credor_id:sel.credor_id||"", valor_nominal:String(sel.valor_original||""),
-      data_origem_divida:sel.data_origem_divida||"", data_recebimento_carteira:sel.data_recebimento_carteira||"",
-      descricao_divida:sel.descricao_divida||"",
-      status:sel.status||"novo", responsavel:sel.responsavel||"", observacoes:sel.observacoes||"",
+// ═══════════════════════════════════════════════════════════════
+// HELPERS DE ACORDO
+// ═══════════════════════════════════════════════════════════════
+function gerarParcelasAcordo(total, qtd, dataInicio){
+  const arr=[];
+  for(let i=0;i<qtd;i++){
+    const d=new Date(dataInicio+"T12:00:00");
+    d.setMonth(d.getMonth()+i);
+    arr.push({
+      id:Date.now()+i, numeroParcela:i+1,
+      valorParcela:Math.round(total/qtd*100)/100,
+      dataVencimento:d.toISOString().slice(0,10),
+      dataPagamento:null, valorPago:null,
+      status:"pendente", formaPagamento:"", observacoes:""
     });
-    setEditando(true);
   }
+  return arr;
+}
 
-  async function salvarEdicao() {
-    if(!formEdit.nome?.trim()) return alert("Informe o nome.");
-    setLoadingEdit(true);
-    try {
-      const payload = {
-        nome:formEdit.nome, cpf_cnpj:formEdit.cpf_cnpj, tipo:formEdit.tipo,
-        rg:formEdit.rg, data_nascimento:formEdit.data_nascimento||null, profissao:formEdit.profissao,
-        socio_nome:formEdit.socio_nome, socio_cpf:formEdit.socio_cpf,
-        email:formEdit.email, telefone:formEdit.telefone, telefone2:formEdit.telefone2,
-        cep:formEdit.cep, logradouro:formEdit.logradouro, numero:formEdit.numero,
-        complemento:formEdit.complemento, bairro:formEdit.bairro, cidade:formEdit.cidade, uf:formEdit.uf,
-        credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,
-        valor_original:parseFloat(formEdit.valor_nominal)||sel.valor_original||0,
-        data_origem_divida:formEdit.data_origem_divida||null,
-        data_recebimento_carteira:formEdit.data_recebimento_carteira||null,
-        descricao_divida:formEdit.descricao_divida,
-        status:formEdit.status, observacoes:formEdit.observacoes,
-      };
-      const res = await dbUpdate("devedores", sel.id, payload);
-      const atu = Array.isArray(res)?res[0]:res;
-      if(atu) {
-        const atualizado = {...atu, dividas:sel.dividas||[], contatos:sel.contatos||[]};
-        setDevedores(prev=>prev.map(d=>d.id===sel.id?atualizado:d));
-        setSel(atualizado);
-        setEditando(false);
-        alert("Cadastro atualizado com sucesso!");
-      } else { alert("Erro ao salvar. Tente novamente."); }
-    } catch(e){ alert("Erro: "+e.message); }
-    setLoadingEdit(false);
-  }
+function verificarAtrasados(parcelas){
+  const hoje=new Date().toISOString().slice(0,10);
+  return parcelas.map(p=>
+    p.status==="pendente"&&p.dataVencimento<hoje
+      ? {...p, status:"atrasado"}
+      : p
+  );
+}
 
-  async function buscarCEPEdit() {
-    const cep = formEdit.cep.replace(/\D/g,"");
-    if(cep.length!==8) return alert("CEP inválido.");
-    setBuscandoCEPEdit(true);
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await res.json();
-      if(data.erro) return alert("CEP não encontrado.");
-      FE("logradouro",data.logradouro||""); FE("bairro",data.bairro||"");
-      FE("cidade",data.localidade||""); FE("uf",data.uf||"GO");
-    } catch(e){ alert("Erro ao buscar CEP."); }
-    setBuscandoCEPEdit(false);
-  }
-
-  async function buscarCEP() {
-    const cep = form.cep.replace(/\D/g,"");
-    if(cep.length!==8) return alert("CEP inválido.");
-    setBuscandoCEP(true);
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await res.json();
-      if(data.erro) return alert("CEP não encontrado.");
-      F("logradouro",data.logradouro||""); F("bairro",data.bairro||"");
-      F("cidade",data.localidade||""); F("uf",data.uf||"GO");
-    } catch(e){ alert("Erro ao buscar CEP."); }
-    setBuscandoCEP(false);
-  }
-
-  const filtered = devedores.filter(d => {
-    const txt = (d.nome||"").toLowerCase().includes(search.toLowerCase()) || (d.cpf_cnpj||"").includes(search);
-    const cred = !filtroCredor || String(d.credor_id)===String(filtroCredor);
-    const stat = !filtroStatus || d.status===filtroStatus;
-    return txt && cred && stat;
-  });
-
-  async function salvarDevedor() {
-    if(!form.nome.trim()) return alert("Informe o nome.");
-    setLoading(true);
-
-    // Tentativas progressivas — remove campos inexistentes até funcionar
-    const tentativas = [
-      // #1 — tudo (após SQL executado)
-      { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
-        email:form.email||null, telefone:form.telefone||null, cidade:form.cidade||"Goiânia",
-        credor_id:form.credor_id?parseInt(form.credor_id):null,
-        valor_original:parseFloat(form.valor_nominal)||0,
-        status:form.status||"novo", dividas:JSON.stringify([]),
-        rg:form.rg||null, profissao:form.profissao||null,
-        socio_nome:form.socio_nome||null, socio_cpf:form.socio_cpf||null,
-        telefone2:form.telefone2||null, cep:form.cep||null,
-        logradouro:form.logradouro||null, numero:form.numero||null,
-        complemento:form.complemento||null, bairro:form.bairro||null, uf:form.uf||"GO",
-        data_origem_divida:form.data_origem_divida||null,
-        data_recebimento_carteira:form.data_recebimento_carteira||null,
-        descricao_divida:form.descricao_divida||null,
-        observacoes:form.observacoes||null, contatos:JSON.stringify([]) },
-      // #2 — sem colunas extras
-      { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
-        email:form.email||null, telefone:form.telefone||null, cidade:form.cidade||"Goiânia",
-        credor_id:form.credor_id?parseInt(form.credor_id):null,
-        valor_original:parseFloat(form.valor_nominal)||0,
-        status:form.status||"novo", dividas:JSON.stringify([]) },
-      // #3 — sem valor_original (coluna pode ter nome diferente)
-      { nome:form.nome, cpf_cnpj:form.cpf_cnpj, tipo:form.tipo,
-        email:form.email||null, telefone:form.telefone||null, cidade:form.cidade||"Goiânia",
-        credor_id:form.credor_id?parseInt(form.credor_id):null,
-        status:form.status||"novo", dividas:JSON.stringify([]) },
-      // #4 — mínimo absoluto
-      { nome:form.nome, tipo:form.tipo||"PJ", dividas:JSON.stringify([]) },
-    ];
-
-    let novo = null;
-    let ultimoErro = "";
-    for(const payload of tentativas) {
-      const res = await dbInsert("devedores", payload);
-      const r = Array.isArray(res)?res[0]:res;
-      if(r?.id) { novo = r; break; }
-      ultimoErro = r?.message||JSON.stringify(r).slice(0,100);
+function calcularTotaisAcordo(acordos=[]){
+  let recuperado=0, emAberto=0;
+  for(const ac of acordos){
+    for(const p of (ac.parcelas||[])){
+      if(p.status==="pago"||p.status==="pago_parcial") recuperado+=(p.valorPago||0);
+      if(p.status==="pendente"||p.status==="atrasado") emAberto+=p.valorParcela;
     }
+  }
+  return { recuperado, emAberto };
+}
 
-    if(novo?.id) {
-      const local = {
-        ...novo, dividas:[], contatos:[],
-        rg:form.rg, profissao:form.profissao, socio_nome:form.socio_nome,
-        socio_cpf:form.socio_cpf, telefone2:form.telefone2, cep:form.cep,
-        logradouro:form.logradouro, numero:form.numero, complemento:form.complemento,
-        bairro:form.bairro, uf:form.uf, descricao_divida:form.descricao_divida,
-        observacoes:form.observacoes, valor_nominal:parseFloat(form.valor_nominal)||0,
-        cidade:form.cidade,
-      };
-      setDevedores(p=>[...p, local]);
-      fecharModal();
-      setForm({...FORM_DEV_VAZIO, responsavel:user?.nome||""});
-      alert(`✅ Devedor "${novo.nome}" cadastrado!`);
-    } else {
-      alert("Falha em todas as tentativas.\nÚltimo erro: "+ultimoErro+"\n\nExecute o SQL no Supabase e envie print do Table Editor > devedores.");
-    }
-    setLoading(false);
+// ═══════════════════════════════════════════════════════════════
+// MODAL DE PAGAMENTO
+// ═══════════════════════════════════════════════════════════════
+function ModalPagamento({parcela, onConfirmar, onFechar}){
+  const hoje=new Date().toISOString().slice(0,10);
+  const [dataPag, setDataPag]=useState(hoje);
+  const [valorPago, setValorPago]=useState(String(parcela.valorParcela));
+  const [forma, setForma]=useState("pix");
+  const [obs, setObs]=useState("");
+  return(
+    <Modal title={`💰 Registrar Pagamento — Parcela ${parcela.numeroParcela}`} onClose={onFechar}>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{background:"#f8fafc",borderRadius:10,padding:12,display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:12,color:"#64748b"}}>Valor da parcela</span>
+          <span style={{fontSize:16,fontWeight:800,color:"#4f46e5"}}>{fmt(parcela.valorParcela)}</span>
+        </div>
+        <INP label="Data do Pagamento" value={dataPag} onChange={setDataPag} type="date"/>
+        <INP label="Valor Pago (R$)" value={valorPago} onChange={setValorPago} type="number"/>
+        <INP label="Forma de Pagamento" value={forma} onChange={setForma} opts={[
+          {v:"pix",l:"PIX"},{v:"ted",l:"TED"},{v:"boleto",l:"Boleto"},
+          {v:"dinheiro",l:"Dinheiro"},{v:"outro",l:"Outro"}
+        ]}/>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Observações</label>
+          <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2}
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+        </div>
+        {parseFloat(valorPago)<parcela.valorParcela&&(
+          <div style={{background:"#fef3c7",border:"1px solid #f59e0b",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#92400e"}}>
+            ⚠️ Valor abaixo do esperado — parcela ficará como <b>Pago Parcialmente</b>
+          </div>
+        )}
+        <Btn onClick={()=>onConfirmar({dataPagamento:dataPag, valorPago:parseFloat(valorPago)||0, formaPagamento:forma, observacoes:obs})}>
+          ✅ Confirmar Pagamento
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORMULÁRIO NOVO ACORDO
+// ═══════════════════════════════════════════════════════════════
+function FormNovoAcordo({devedor, credores, user, onSalvar, onCancelar}){
+  const hoje=new Date().toISOString().slice(0,10);
+  const valorDivida=(devedor.dividas||[]).reduce((s,d)=>s+(d.valor_total||0),0)||devedor.valor_original||devedor.valor_nominal||0;
+  const [valorOriginal]=useState(valorDivida);
+  const [valorNegociado, setValorNegociado]=useState(String(valorDivida));
+  const [dataAcordo, setDataAcordo]=useState(hoje);
+  const [numParcelas, setNumParcelas]=useState("1");
+  const [dataPrimVenc, setDataPrimVenc]=useState(hoje);
+  const [obs, setObs]=useState("");
+  const [parcelas, setParcelas]=useState([]);
+  const [gerado, setGerado]=useState(false);
+
+  const vNeg=parseFloat(valorNegociado)||0;
+  const desconto=valorOriginal>0?((valorOriginal-vNeg)/valorOriginal*100):0;
+
+  function gerar(){
+    const qtd=parseInt(numParcelas)||1;
+    if(!dataPrimVenc) return alert("Informe a data do primeiro vencimento.");
+    if(vNeg<=0) return alert("Informe o valor negociado.");
+    setParcelas(gerarParcelasAcordo(vNeg,qtd,dataPrimVenc));
+    setGerado(true);
   }
 
-
-
-  async function registrarContato() {
-    if(!sel) return;
-    const contato = { id:Date.now(), data:new Date().toLocaleString("pt-BR"), tipo:novoContato.tipo, resultado:novoContato.resultado, responsavel:user?.nome||"Sistema", obs:novoContato.obs };
-    const contatos = [...(sel.contatos||[]), contato];
-    try {
-      const res = await dbUpdate("devedores",sel.id,{contatos:JSON.stringify(contatos)});
-      const atu = Array.isArray(res)?res[0]:res;
-      if(atu){ const parsed={...atu,dividas:sel.dividas||[],contatos}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); setNovoContato({tipo:"Ligação",resultado:"Sem resposta",obs:""}); }
-    } catch(e){ alert("Erro: "+e.message); }
+  function editParcela(id,campo,val){
+    setParcelas(ps=>ps.map(p=>p.id!==id?p:{...p,[campo]:campo==="valorParcela"?parseFloat(val)||0:val}));
   }
 
-  function gerarParcs(total,qtd,dataInicio){ const arr=[]; for(let i=0;i<qtd;i++){ const d=new Date(dataInicio+"T12:00:00"); d.setMonth(d.getMonth()+i); arr.push({id:Date.now()+i,num:i+1,valor:Math.round(total/qtd*100)/100,venc:d.toISOString().slice(0,10),status:"pendente",pago_em:null}); } return arr; }
-  function confirmarParcelas(){ const total=parseFloat(nd.valor_total)||0,qtd=parseInt(nd.qtd_parcelas)||1; if(!nd.data_primeira_parcela) return alert("Informe a data."); setNd(d=>({...d,parcelas:gerarParcs(total,qtd,d.data_primeira_parcela)})); }
-  function editParc(id,campo,val){ setNd(d=>({...d,parcelas:d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})})); }
-  function addParc(){ setNd(d=>{ const ul=d.parcelas[d.parcelas.length-1]; const pD=ul?(()=>{const dd=new Date(ul.venc+"T12:00:00");dd.setMonth(dd.getMonth()+1);return dd.toISOString().slice(0,10);})():new Date().toISOString().slice(0,10); return{...d,parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ul?.valor||0,venc:pD,status:"pendente",pago_em:null}]}; }); }
-  function remParc(id){ setNd(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)})); }
-
-  async function adicionarDivida() {
-    if(!sel) return;
-    const total=parseFloat(nd.valor_total)||0;
-    if(!total) return alert("Informe o valor.");
-    if(!nd.parcelas.length) return alert("Gere as parcelas antes de salvar.");
-    const divida={ id:Date.now(), descricao:nd.descricao||"Dívida", valor_total:total, data_origem:nd.data_origem, data_vencimento:nd.data_primeira_parcela, parcelas:nd.parcelas, criada_em:new Date().toISOString().slice(0,10), indexador:nd.indexador, multa_pct:parseFloat(nd.multa_pct)||2, juros_am:parseFloat(nd.juros_am)||1, honorarios_pct:parseFloat(nd.honorarios_pct)||20, data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela, despesas:parseFloat(nd.despesas)||0, observacoes:nd.observacoes||"" };
-    const dividas=[...(sel.dividas||[]),divida];
-    const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
-    try {
-      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
-      const atu=Array.isArray(res)?res[0]:res;
-      if(atu){ const parsed={...atu,dividas,contatos:sel.contatos||[]}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); setNd(DIVIDA_VAZIA); alert("Dívida adicionada!"); }
-    } catch(e){ alert("Erro: "+e.message); }
+  function salvar(){
+    if(!gerado||!parcelas.length) return alert("Gere as parcelas antes de salvar.");
+    const acordo={
+      id:Date.now(),
+      devedorId:devedor.id, credorId:devedor.credor_id,
+      dataAcordo, valorOriginalDivida:valorOriginal,
+      valorTotalNegociado:vNeg, desconto,
+      numeroParcelas:parseInt(numParcelas)||1,
+      observacoes:obs, status:"ativo",
+      criadoPor:user?.nome||"Sistema",
+      criadoEm:new Date().toISOString(),
+      parcelas,
+    };
+    onSalvar(acordo);
   }
 
-  async function toggleParcela(dividaId,parcId,novoStatus) {
-    if(!sel) return;
-    const dividas=(sel.dividas||[]).map(div=>{ if(div.id!==dividaId) return div; return{...div,parcelas:div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null})}; });
-    const todasPagas=dividas.every(d=>d.parcelas.every(p=>p.status==="pago"));
-    const alguma=dividas.some(d=>d.parcelas.some(p=>p.status==="pago"));
-    const novoSt=todasPagas?"pago_integral":alguma?"pago_parcial":"novo";
+  return(
+    <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"2px solid #4f46e5"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <p style={{fontFamily:"Syne",fontWeight:800,fontSize:14,color:"#4f46e5"}}>🤝 Novo Acordo</p>
+        <button onClick={onCancelar} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:18}}>✕</button>
+      </div>
+
+      {/* Valores */}
+      <div style={{background:"#fff",borderRadius:10,padding:14,marginBottom:12,border:"1px solid #e2e8f0"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Valor Original da Dívida</label>
+            <div style={{padding:"9px 12px",background:"#f1f5f9",borderRadius:9,fontWeight:700,fontSize:14,color:"#64748b"}}>{fmt(valorOriginal)}</div>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Valor Total Negociado (R$)</label>
+            <input type="number" value={valorNegociado} onChange={e=>setValorNegociado(e.target.value)}
+              style={{width:"100%",padding:"8px 10px",border:"1.5px solid #4f46e5",borderRadius:9,fontSize:14,fontWeight:700,color:"#4f46e5",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+        </div>
+        {valorOriginal>0&&(
+          <div style={{marginTop:10,padding:"8px 12px",borderRadius:8,
+            background:desconto>=0?"#dcfce7":"#fee2e2",
+            border:`1px solid ${desconto>=0?"#16a34a":"#dc2626"}`}}>
+            <span style={{fontSize:13,fontWeight:700,color:desconto>=0?"#065f46":"#dc2626"}}>
+              {desconto>=0?"✅ Desconto concedido: ":"⬆️ Acréscimo: "}
+              <b>{Math.abs(desconto).toFixed(2)}%</b>
+              {" = "+fmt(Math.abs(valorOriginal-vNeg))}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Parâmetros */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+        <INP label="Data do Acordo" value={dataAcordo} onChange={setDataAcordo} type="date"/>
+        <INP label="Nº de Parcelas" value={numParcelas} onChange={setNumParcelas} type="number"/>
+        <INP label="Data 1º Vencimento" value={dataPrimVenc} onChange={setDataPrimVenc} type="date"/>
+      </div>
+
+      {vNeg>0&&numParcelas>0&&(
+        <div style={{background:"#ede9fe",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:12}}>
+          <b style={{color:"#4f46e5"}}>{numParcelas}x de {fmt(vNeg/parseInt(numParcelas||1))}</b>
+          <span style={{color:"#7c3aed"}}> · Total: {fmt(vNeg)}</span>
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <Btn onClick={gerar} outline color="#4f46e5">🔄 Gerar Parcelas</Btn>
+      </div>
+
+      {/* Tabela de parcelas editável */}
+      {gerado&&parcelas.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{maxHeight:220,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead>
+                <tr style={{background:"#ede9fe"}}>
+                  {["Parcela","Vencimento","Valor (R$)",""].map(h=>(
+                    <th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#4f46e5",fontWeight:700,fontSize:10}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {parcelas.map((p,i)=>(
+                  <tr key={p.id} style={{borderTop:"1px solid #f1f5f9",background:i%2===0?"#fff":"#fafafe"}}>
+                    <td style={{padding:"6px 10px",fontWeight:700,color:"#7c3aed"}}>{i+1}</td>
+                    <td style={{padding:"6px 10px"}}>
+                      <input type="date" value={p.dataVencimento}
+                        onChange={e=>editParcela(p.id,"dataVencimento",e.target.value)}
+                        style={{padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:11,outline:"none"}}/>
+                    </td>
+                    <td style={{padding:"6px 10px"}}>
+                      <input type="number" value={p.valorParcela}
+                        onChange={e=>editParcela(p.id,"valorParcela",e.target.value)}
+                        style={{width:90,padding:"3px 6px",border:"1.5px solid #e2e8f0",borderRadius:6,fontSize:12,fontWeight:700,color:"#4f46e5",outline:"none"}}/>
+                    </td>
+                    <td style={{padding:"6px 10px"}}>
+                      <button onClick={()=>setParcelas(ps=>ps.filter(x=>x.id!==p.id))}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10}}>✕</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 10px",background:"#f8fafc",borderRadius:"0 0 10px 10px",border:"1px solid #e2e8f0",borderTop:"none",fontSize:12}}>
+            <span style={{color:"#64748b"}}>Total: <b style={{color:"#4f46e5"}}>{fmt(parcelas.reduce((s,p)=>s+p.valorParcela,0))}</b></span>
+          </div>
+        </div>
+      )}
+
+      {/* Observações */}
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
+        <textarea value={obs} onChange={e=>setObs(e.target.value)} rows={2}
+          style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={salvar} color="#059669">💾 Salvar Acordo</Btn>
+        <Btn onClick={onCancelar} outline color="#64748b">Cancelar</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LISTAGEM DE ACORDOS (aba Acordos na ficha do devedor)
+// ═══════════════════════════════════════════════════════════════
+function AbaAcordos({devedor, acordos, credores, user, onAtualizarDevedor}){
+  const [novoAcordo, setNovoAcordo]=useState(false);
+  const [modalPag, setModalPag]=useState(null); // {acordoId, parcela}
+  const [acordosLocal, setAcordosLocal]=useState(acordos||[]);
+
+  // Verificar atrasados ao montar
+  useEffect(()=>{
+    setAcordosLocal((acordos||[]).map(ac=>({
+      ...ac, parcelas:verificarAtrasados(ac.parcelas||[])
+    })));
+  },[acordos]);
+
+  async function salvarNovoAcordo(acordo){
+    const novos=[...acordosLocal, acordo];
+    setAcordosLocal(novos);
+    setNovoAcordo(false);
+    // Salvar no Supabase
     try {
-      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:novoSt});
-      const atu=Array.isArray(res)?res[0]:res;
-      if(atu){ const parsed={...atu,dividas,contatos:sel.contatos||[]}; setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d)); setSel(parsed); }
+      await dbUpdate("devedores", devedor.id, {
+        acordos:JSON.stringify(novos),
+        status:"acordo_firmado",
+      });
+      onAtualizarDevedor({...devedor, acordos:novos, status:"acordo_firmado"});
+      alert("✅ Acordo salvo! Status do devedor atualizado para Acordo Firmado.");
+    } catch(e){ alert("Acordo salvo localmente. Erro ao sincronizar: "+e.message); }
+  }
+
+  async function confirmarPagamento({acordoId, parcela, dados}){
+    const vPago=parseFloat(dados.valorPago)||0;
+    const statusParcela=vPago>=parcela.valorParcela?"pago":"pago_parcial";
+    const novosAcordos=acordosLocal.map(ac=>{
+      if(ac.id!==acordoId) return ac;
+      const novasParcelas=ac.parcelas.map(p=>
+        p.id!==parcela.id?p:{
+          ...p, status:statusParcela,
+          dataPagamento:dados.dataPagamento,
+          valorPago:vPago,
+          formaPagamento:dados.formaPagamento,
+          observacoes:dados.observacoes,
+        }
+      );
+      // Atualizar status do acordo
+      const todasPagas=novasParcelas.every(p=>p.status==="pago");
+      const algumaPaga=novasParcelas.some(p=>p.status==="pago"||p.status==="pago_parcial");
+      return {...ac, parcelas:novasParcelas, status:todasPagas?"quitado":algumaPaga?"ativo":"ativo"};
+    });
+
+    // Status do devedor
+    const todasAcordosQuitados=novosAcordos.every(ac=>ac.status==="quitado");
+    const algumPagamento=novosAcordos.some(ac=>ac.parcelas.some(p=>p.status==="pago"||p.status==="pago_parcial"));
+    const novoStatusDev=todasAcordosQuitados?"pago_integral":algumPagamento?"pago_parcial":"acordo_firmado";
+
+    setAcordosLocal(novosAcordos);
+    setModalPag(null);
+
+    try {
+      await dbUpdate("devedores", devedor.id, {
+        acordos:JSON.stringify(novosAcordos),
+        status:novoStatusDev,
+      });
+      onAtualizarDevedor({...devedor, acordos:novosAcordos, status:novoStatusDev});
     } catch(e){ console.error(e); }
   }
 
-  async function excluirDevedor(d) {
-    if(!window.confirm(`Excluir "${d.nome}"?`)) return;
-    await dbDelete("devedores",d.id);
-    setDevedores(prev=>prev.filter(x=>x.id!==d.id));
-    if(sel?.id===d.id) fecharModal();
+  async function excluirAcordo(acordoId){
+    if(!window.confirm("Excluir este acordo e todas as parcelas?")) return;
+    const novos=acordosLocal.filter(a=>a.id!==acordoId);
+    setAcordosLocal(novos);
+    try { await dbUpdate("devedores", devedor.id, {acordos:JSON.stringify(novos)}); } catch(e){}
+    onAtualizarDevedor({...devedor, acordos:novos});
   }
 
-  const WP_MSGS = d => [
-    {titulo:"Notificação",msg:`Prezado(a) *${d.nome}*, consta débito em aberto.\n\nEntre em contato para regularização.\n\n*MR Cobranças* | (62) 9 9999-0000`},
-    {titulo:"Proposta de Acordo",msg:`Olá *${(d.nome||"").split(" ")[0]}*! Condições especiais para quitação.\n\n*MR Cobranças* | (62) 9 9999-0000`},
-    {titulo:"Aviso Judicial",msg:`*AVISO — ${d.nome}*\nSeu débito foi encaminhado para cobrança judicial.\n\n*Escritório MR Cobranças*`},
-  ];
+  const BADGE_PARC={
+    pago:        {bg:"#dcfce7",cor:"#065f46",l:"✓ Pago"},
+    pago_parcial:{bg:"#ccfbf1",cor:"#0f766e",l:"↗ Parcial"},
+    atrasado:    {bg:"#fee2e2",cor:"#dc2626",l:"⚠ Atrasado"},
+    pendente:    {bg:"#f1f5f9",cor:"#64748b",l:"⏳ Pendente"},
+  };
+  const BADGE_AC={
+    ativo:   {bg:"#dbeafe",cor:"#1d4ed8",l:"Em andamento"},
+    quitado: {bg:"#dcfce7",cor:"#065f46",l:"✅ Quitado"},
+    quebrado:{bg:"#fee2e2",cor:"#dc2626",l:"❌ Quebrado"},
+  };
 
-  const INP = ({label,value,onChange,type="text",opts,span,placeholder=""}) => (
-    <div style={{gridColumn:span===2?"1/-1":"auto"}}>
-      <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>{label}</label>
-      {opts?<select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"Mulish"}}>{opts.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}</select>
-      :<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>}
-    </div>
-  );
+  const totais=calcularTotaisAcordo(acordosLocal);
 
-  const SECOES=[["id","👤 Identificação"],["end","📍 Endereço"],["divida","💰 Dívida"],["ctrl","⚙️ Controle"]];
-
-  return (
+  return(
     <div>
-      {/* ── LISTAGEM ── */}
-      {modal!=="ficha"&&(
-        <>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
-            <Btn onClick={()=>{setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});setSecaoForm("id");abrirModal("novo")}}>{I.plus} Novo Devedor</Btn>
+      {/* Resumo de totais */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+        {[
+          ["Total Negociado", fmt(acordosLocal.reduce((s,a)=>s+a.valorTotalNegociado,0)), "#4f46e5","#ede9fe"],
+          ["💰 Recuperado", fmt(totais.recuperado), "#065f46","#dcfce7"],
+          ["⏳ Em Aberto", fmt(totais.emAberto), "#dc2626","#fee2e2"],
+        ].map(([l,v,cor,bg])=>(
+          <div key={l} style={{background:bg,borderRadius:10,padding:"10px 14px"}}>
+            <p style={{fontSize:10,fontWeight:700,color:cor,textTransform:"uppercase",marginBottom:4}}>{l}</p>
+            <p style={{fontSize:16,fontWeight:800,color:cor}}>{v}</p>
           </div>
+        ))}
+      </div>
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:10,marginBottom:14}}>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:3,textTransform:"uppercase"}}>Credor</label>
-              <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
-                <option value="">Todos os credores</option>
-                {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+      {/* Botão novo acordo */}
+      {!novoAcordo&&(
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+          <Btn onClick={()=>setNovoAcordo(true)} color="#4f46e5">🤝 + Novo Acordo</Btn>
+        </div>
+      )}
+
+      {/* Formulário novo acordo */}
+      {novoAcordo&&(
+        <FormNovoAcordo
+          devedor={devedor} credores={credores} user={user}
+          onSalvar={salvarNovoAcordo}
+          onCancelar={()=>setNovoAcordo(false)}
+        />
+      )}
+
+      {/* Lista de acordos */}
+      {acordosLocal.length===0&&!novoAcordo&&(
+        <div style={{textAlign:"center",padding:32,color:"#94a3b8",background:"#f8fafc",borderRadius:12}}>
+          <div style={{fontSize:36,marginBottom:8}}>🤝</div>
+          <p style={{fontWeight:600}}>Nenhum acordo registrado</p>
+          <p style={{fontSize:12,marginTop:4}}>Clique em "+ Novo Acordo" para registrar um acordo de parcelamento.</p>
+        </div>
+      )}
+
+      {acordosLocal.map(ac=>{
+        const bs=BADGE_AC[ac.status]||BADGE_AC.ativo;
+        const pagas=ac.parcelas.filter(p=>p.status==="pago"||p.status==="pago_parcial").length;
+        const pct=ac.parcelas.length>0?Math.round(pagas/ac.parcelas.length*100):0;
+        return(
+          <div key={ac.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:14,background:"#fff"}}>
+            {/* Cabeçalho do acordo */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontFamily:"Syne",fontWeight:800,fontSize:15,color:"#0f172a"}}>Acordo — {fmtDate(ac.dataAcordo)}</span>
+                  <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:bs.bg,color:bs.cor}}>{bs.l}</span>
+                </div>
+                <div style={{display:"flex",gap:14,fontSize:11,color:"#64748b",flexWrap:"wrap"}}>
+                  <span>Original: <b style={{color:"#64748b"}}>{fmt(ac.valorOriginalDivida)}</b></span>
+                  <span>Negociado: <b style={{color:"#4f46e5"}}>{fmt(ac.valorTotalNegociado)}</b></span>
+                  {ac.desconto>0&&<span style={{color:"#16a34a",fontWeight:700}}>↓{ac.desconto.toFixed(1)}% desconto</span>}
+                  <span>{ac.numeroParcelas}x · por {ac.criadoPor}</span>
+                </div>
+              </div>
+              <button onClick={()=>excluirAcordo(ac.id)}
+                style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:700}}>
+                🗑
+              </button>
             </div>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:3,textTransform:"uppercase"}}>Status</label>
-              <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
-                <option value="">Todos os status</option>
-                {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:"#94a3b8",display:"block",marginBottom:3,textTransform:"uppercase"}}>Buscar</label>
-              <div style={{position:"relative"}}>
-                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94a3b8"}}>{I.search}</span>
-                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome ou CPF/CNPJ..." style={{width:"100%",padding:"8px 10px 8px 32px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+
+            {/* Barra de progresso */}
+            <div style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748b",marginBottom:4}}>
+                <span>{pagas} de {ac.parcelas.length} parcelas pagas</span>
+                <span style={{fontWeight:700,color:"#4f46e5"}}>{pct}%</span>
+              </div>
+              <div style={{height:6,background:"#f1f5f9",borderRadius:99}}>
+                <div style={{height:6,width:`${pct}%`,background:"linear-gradient(90deg,#4f46e5,#7c3aed)",borderRadius:99,transition:"width .4s"}}/>
               </div>
             </div>
-          </div>
 
-          <div style={{background:"#fff",borderRadius:18,border:"1px solid #f1f5f9",overflow:"hidden"}}>
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                <thead><tr style={{background:"#f8fafc"}}>
-                  {["Nome","CPF/CNPJ","Credor","Status","Valor Dívida","Ações"].map(h=>(
-                    <th key={h} style={{textAlign:"left",padding:"10px 14px",color:"#64748b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>
-                  ))}
-                </tr></thead>
+            {/* Tabela de parcelas */}
+            <div style={{maxHeight:240,overflowY:"auto",border:"1px solid #f1f5f9",borderRadius:10,overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{background:"#f8fafc",position:"sticky",top:0}}>
+                    {["#","Vencimento","Valor","Status","Data Pag.","Forma","Ação"].map(h=>(
+                      <th key={h} style={{padding:"6px 8px",textAlign:"left",color:"#94a3b8",fontWeight:700,fontSize:10}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
                 <tbody>
-                  {filtered.map(d=>{
-                    const dividas=d.dividas||[];
-                    const totalDiv=dividas.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||0;
-                    const credor=credores.find(c=>c.id===d.credor_id);
+                  {(ac.parcelas||[]).map(p=>{
+                    const bp=BADGE_PARC[p.status]||BADGE_PARC.pendente;
                     return(
-                      <tr key={d.id} style={{borderTop:"1px solid #f8fafc",cursor:"pointer"}} onClick={()=>abrirFicha(d)}>
-                        <td style={{padding:"11px 14px",fontWeight:700,color:"#4f46e5",textDecoration:"underline"}}>{d.nome}</td>
-                        <td style={{padding:"11px 14px",color:"#64748b",fontFamily:"monospace",fontSize:11}}>{d.cpf_cnpj||"—"}</td>
-                        <td style={{padding:"11px 14px",fontSize:11,color:"#64748b"}}>{(credor?.nome||"—").split(" ").slice(0,2).join(" ")}</td>
-                        <td style={{padding:"11px 14px"}}><BadgeDev status={d.status||"novo"}/></td>
-                        <td style={{padding:"11px 14px",fontWeight:700,color:"#0f172a"}}>{fmt(totalDiv)}</td>
-                        <td style={{padding:"11px 14px"}} onClick={e=>e.stopPropagation()}>
-                          <div style={{display:"flex",gap:4}}>
-                            {d.telefone&&<button onClick={()=>abrirWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>📱</button>}
-                            <button onClick={()=>excluirDevedor(d)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"4px 8px",cursor:"pointer",fontSize:11}}>🗑</button>
-                          </div>
+                      <tr key={p.id} style={{borderTop:"1px solid #f8fafc"}}>
+                        <td style={{padding:"5px 8px",fontWeight:700,color:"#7c3aed"}}>{p.numeroParcela}</td>
+                        <td style={{padding:"5px 8px",color:"#64748b"}}>{fmtDate(p.dataVencimento)}</td>
+                        <td style={{padding:"5px 8px",fontWeight:700,color:"#4f46e5"}}>{fmt(p.valorParcela)}</td>
+                        <td style={{padding:"5px 8px"}}>
+                          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,background:bp.bg,color:bp.cor}}>{bp.l}</span>
+                        </td>
+                        <td style={{padding:"5px 8px",color:"#64748b",fontSize:10}}>{p.dataPagamento?fmtDate(p.dataPagamento):"—"}</td>
+                        <td style={{padding:"5px 8px",color:"#64748b",fontSize:10,textTransform:"uppercase"}}>{p.formaPagamento||"—"}</td>
+                        <td style={{padding:"5px 8px"}}>
+                          {(p.status==="pendente"||p.status==="atrasado")&&(
+                            <button onClick={()=>setModalPag({acordoId:ac.id, parcela:p})}
+                              style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>
+                              💰 Pagar
+                            </button>
+                          )}
+                          {(p.status==="pago"||p.status==="pago_parcial")&&(
+                            <span style={{fontSize:10,color:"#16a34a",fontWeight:700}}>✓ {fmt(p.valorPago)}</span>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
-                  {filtered.length===0&&<tr><td colSpan={6} style={{padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>Nenhum devedor encontrado</td></tr>}
                 </tbody>
               </table>
             </div>
-            <div style={{padding:"8px 14px",background:"#f8fafc",borderTop:"1px solid #f1f5f9",fontSize:11,color:"#94a3b8",fontWeight:600}}>{filtered.length} de {devedores.length} devedores</div>
+
+            {ac.observacoes&&(
+              <p style={{fontSize:11,color:"#94a3b8",marginTop:8,fontStyle:"italic",padding:"6px 10px",background:"#f8fafc",borderRadius:7}}>
+                📝 {ac.observacoes}
+              </p>
+            )}
           </div>
-        </>
+        );
+      })}
+
+      {/* Modal de pagamento */}
+      {modalPag&&(
+        <ModalPagamento
+          parcela={modalPag.parcela}
+          onConfirmar={dados=>confirmarPagamento({acordoId:modalPag.acordoId, parcela:modalPag.parcela, dados})}
+          onFechar={()=>setModalPag(null)}
+        />
       )}
+    </div>
+  );
+}
 
-      {/* ── MODAL NOVO DEVEDOR ── */}
-      {modal==="novo"&&(
-        <Modal title="Novo Devedor" onClose={fecharModal} wide>
-          <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
-            {SECOES.map(([id,label])=>(
-              <button key={id} onClick={()=>setSecaoForm(id)}
-                style={{padding:"7px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-2}}>
-                {label}
-              </button>
-            ))}
+// ═══════════════════════════════════════════════════════════════
+// DEVEDORES — COMPONENTE PRINCIPAL
+// ═══════════════════════════════════════════════════════════════
+const FORM_DEV_VAZIO = {
+  nome:"", cpf_cnpj:"", tipo:"PJ", rg:"", data_nascimento:"", profissao:"",
+  socio_nome:"", socio_cpf:"", email:"", telefone:"", telefone2:"",
+  cep:"", logradouro:"", numero:"", complemento:"", bairro:"", cidade:"Goiânia", uf:"GO",
+  credor_id:"", valor_nominal:"", data_origem_divida:"", data_recebimento_carteira:"", descricao_divida:"",
+  status:"novo", responsavel:"", observacoes:"",
+};
+const DIVIDA_VAZIA={descricao:"",valor_total:"",data_origem:"",data_primeira_parcela:"",qtd_parcelas:"1",parcelas:[],indexador:"igpm",multa_pct:"2",juros_am:"1",honorarios_pct:"20",data_inicio_atualizacao:"",despesas:"0",observacoes:""};
+const SECOES=[["id","👤 Identificação"],["end","📍 Endereço"],["divida","💰 Dívida"],["ctrl","⚙️ Controle"]];
+
+function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos=[], setTab }) {
+  const [search,setSearch]=useState("");
+  const [filtroStatus,setFiltroStatus]=useState("");
+  const [filtroCredor,setFiltroCredor]=useState("");
+  const [modal,setModal]=useState(null);
+  const [sel,setSel]=useState(null);
+  const [abaFicha,setAbaFicha]=useState("dados");
+  const [editando,setEditando]=useState(false);
+  const [secaoForm,setSecaoForm]=useState("id");
+  const [form,setForm]=useState({...FORM_DEV_VAZIO,responsavel:user?.nome||""});
+  const [formEdit,setFormEdit]=useState({});
+  const [loading,setLoading]=useState(false);
+  const [loadingEdit,setLoadingEdit]=useState(false);
+  const [buscandoCep,setBuscandoCep]=useState(false);
+  const [buscandoCEPEdit,setBuscandoCEPEdit]=useState(false);
+  const [nd,setNd]=useState(DIVIDA_VAZIA);
+  const [wp,setWp]=useState(null);
+  const [novoContato,setNovoContato]=useState({tipo:"ligacao",resultado:"sem_resposta",obs:""});
+
+  const F=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const FE=(k,v)=>setFormEdit(f=>({...f,[k]:v}));
+  const ND=(k,v)=>setNd(d=>({...d,[k]:v}));
+
+  function abrirModal(tipo,dev=null){
+    setModal(tipo);
+    if(tipo==="novo"){setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});setSecaoForm("id");}
+    if(tipo==="ficha"&&dev){
+      const d={...dev,dividas:dev.dividas||[],contatos:dev.contatos||[],acordos:dev.acordos||[]};
+      // Verificar atrasados nos acordos
+      d.acordos=d.acordos.map(ac=>({...ac,parcelas:verificarAtrasados(ac.parcelas||[])}));
+      setSel(d);
+      setAbaFicha("dados");
+      setEditando(false);
+      setFormEdit({...dev,valor_nominal:dev.valor_nominal||dev.valor_original||0});
+    }
+    onModalChange&&onModalChange(true);
+  }
+  function fecharModal(){setModal(null);setSel(null);setNd(DIVIDA_VAZIA);setEditando(false);onModalChange&&onModalChange(false);}
+  function abrirWp(d){setWp(d);onModalChange&&onModalChange(true);}
+  function fecharWp(){setWp(null);onModalChange&&onModalChange(false);}
+
+  async function buscarCep(){
+    const c=form.cep.replace(/\D/g,"");
+    if(c.length!==8) return alert("CEP inválido.");
+    setBuscandoCep(true);
+    try{const r=await fetch(`https://viacep.com.br/ws/${c}/json/`);const d=await r.json();if(d.erro)return alert("CEP não encontrado.");setForm(f=>({...f,logradouro:d.logradouro||"",bairro:d.bairro||"",cidade:d.localidade||"",uf:d.uf||"GO"}));}catch(e){alert("Erro ao buscar CEP.");}
+    setBuscandoCep(false);
+  }
+  async function buscarCEPEdit(){
+    const c=(formEdit.cep||"").replace(/\D/g,"");
+    if(c.length!==8) return alert("CEP inválido.");
+    setBuscandoCEPEdit(true);
+    try{const r=await fetch(`https://viacep.com.br/ws/${c}/json/`);const d=await r.json();if(d.erro)return alert("CEP não encontrado.");setFormEdit(f=>({...f,logradouro:d.logradouro||"",bairro:d.bairro||"",cidade:d.localidade||"",uf:d.uf||"GO"}));}catch(e){}
+    setBuscandoCEPEdit(false);
+  }
+
+  // ── Salvar devedor (fallback progressivo) ────────────────────
+  async function salvarDevedor(){
+    if(!form.nome.trim()) return alert("Informe o nome.");
+    setLoading(true);
+    const tentativas=[
+      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,telefone:form.telefone||null,cidade:form.cidade||"Goiânia",credor_id:form.credor_id?parseInt(form.credor_id):null,valor_original:parseFloat(form.valor_nominal)||0,status:form.status||"novo",dividas:JSON.stringify([]),rg:form.rg||null,profissao:form.profissao||null,socio_nome:form.socio_nome||null,socio_cpf:form.socio_cpf||null,telefone2:form.telefone2||null,cep:form.cep||null,logradouro:form.logradouro||null,numero:form.numero||null,complemento:form.complemento||null,bairro:form.bairro||null,uf:form.uf||"GO",descricao_divida:form.descricao_divida||null,observacoes:form.observacoes||null,contatos:JSON.stringify([]),acordos:JSON.stringify([])},
+      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,telefone:form.telefone||null,cidade:form.cidade||"Goiânia",credor_id:form.credor_id?parseInt(form.credor_id):null,valor_original:parseFloat(form.valor_nominal)||0,status:form.status||"novo",dividas:JSON.stringify([])},
+      {nome:form.nome,cpf_cnpj:form.cpf_cnpj,tipo:form.tipo,email:form.email||null,telefone:form.telefone||null,credor_id:form.credor_id?parseInt(form.credor_id):null,status:form.status||"novo",dividas:JSON.stringify([])},
+      {nome:form.nome,tipo:form.tipo||"PJ",dividas:JSON.stringify([])},
+    ];
+    let novo=null;
+    for(const payload of tentativas){
+      const res=await dbInsert("devedores",payload);
+      const r=Array.isArray(res)?res[0]:res;
+      if(r?.id){novo=r;break;}
+    }
+    if(novo?.id){
+      const local={...novo,dividas:[],contatos:[],acordos:[],rg:form.rg,profissao:form.profissao,socio_nome:form.socio_nome,socio_cpf:form.socio_cpf,telefone2:form.telefone2,cep:form.cep,logradouro:form.logradouro,numero:form.numero,complemento:form.complemento,bairro:form.bairro,uf:form.uf,descricao_divida:form.descricao_divida,observacoes:form.observacoes,valor_nominal:parseFloat(form.valor_nominal)||0,cidade:form.cidade};
+      setDevedores(p=>[...p,local]);
+      fecharModal();
+      setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});
+      alert(`✅ Devedor "${novo.nome}" cadastrado!`);
+    } else {
+      alert("Erro ao salvar. Execute o SQL do Supabase (supabase_prompt3.sql) e tente novamente.");
+    }
+    setLoading(false);
+  }
+
+  // ── Editar devedor ───────────────────────────────────────────
+  async function salvarEdicao(){
+    if(!formEdit.nome?.trim()) return alert("Informe o nome.");
+    setLoadingEdit(true);
+    try{
+      const payload={nome:formEdit.nome,cpf_cnpj:formEdit.cpf_cnpj,tipo:formEdit.tipo,email:formEdit.email||null,telefone:formEdit.telefone||null,cidade:formEdit.cidade||"Goiânia",credor_id:formEdit.credor_id?parseInt(formEdit.credor_id):null,valor_original:parseFloat(formEdit.valor_nominal)||sel.valor_original||0,status:formEdit.status||"novo",rg:formEdit.rg||null,profissao:formEdit.profissao||null,socio_nome:formEdit.socio_nome||null,socio_cpf:formEdit.socio_cpf||null,telefone2:formEdit.telefone2||null,cep:formEdit.cep||null,logradouro:formEdit.logradouro||null,numero:formEdit.numero||null,complemento:formEdit.complemento||null,bairro:formEdit.bairro||null,uf:formEdit.uf||"GO",descricao_divida:formEdit.descricao_divida||null,observacoes:formEdit.observacoes||null};
+      const res=await dbUpdate("devedores",sel.id,payload);
+      const atu=Array.isArray(res)?res[0]:res;
+      if(atu){const atualizado={...atu,dividas:sel.dividas||[],contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?atualizado:d));setSel(atualizado);setEditando(false);alert("Cadastro atualizado!");}
+      else alert("Erro ao salvar.");
+    }catch(e){alert("Erro: "+e.message);}
+    setLoadingEdit(false);
+  }
+
+  // ── Contatos ─────────────────────────────────────────────────
+  async function registrarContato(){
+    if(!sel) return;
+    const contato={id:Date.now(),data:new Date().toLocaleString("pt-BR"),tipo:novoContato.tipo,resultado:novoContato.resultado,responsavel:user?.nome||"Sistema",obs:novoContato.obs};
+    const contatos=[...(sel.contatos||[]),contato];
+    try{
+      const res=await dbUpdate("devedores",sel.id,{contatos:JSON.stringify(contatos)});
+      const atu=Array.isArray(res)?res[0]:res;
+      if(atu){const parsed={...atu,dividas:sel.dividas||[],contatos,acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);setNovoContato({tipo:"ligacao",resultado:"sem_resposta",obs:""});}
+    }catch(e){alert("Erro: "+e.message);}
+  }
+
+  // ── Dívidas/Parcelas ─────────────────────────────────────────
+  function gerarParcs(total,qtd,dataInicio){const arr=[];for(let i=0;i<qtd;i++){const d=new Date(dataInicio+"T12:00:00");d.setMonth(d.getMonth()+i);arr.push({id:Date.now()+i,num:i+1,valor:Math.round(total/qtd*100)/100,venc:d.toISOString().slice(0,10),status:"pendente",pago_em:null});}return arr;}
+  function confirmarParcelas(){const total=parseFloat(nd.valor_total)||0,qtd=parseInt(nd.qtd_parcelas)||1;if(!nd.data_primeira_parcela)return alert("Informe a data.");setNd(d=>({...d,parcelas:gerarParcs(total,qtd,d.data_primeira_parcela)}));}
+  function editParc(id,campo,val){setNd(d=>({...d,parcelas:d.parcelas.map(p=>p.id!==id?p:{...p,[campo]:campo==="valor"?parseFloat(val)||0:val})}));}
+  function addParc(){setNd(d=>{const ul=d.parcelas[d.parcelas.length-1];const pD=ul?(()=>{const dd=new Date(ul.venc+"T12:00:00");dd.setMonth(dd.getMonth()+1);return dd.toISOString().slice(0,10);})():new Date().toISOString().slice(0,10);return{...d,parcelas:[...d.parcelas,{id:Date.now(),num:d.parcelas.length+1,valor:ul?.valor||0,venc:pD,status:"pendente",pago_em:null}]};});}
+  function remParc(id){setNd(d=>({...d,parcelas:d.parcelas.filter(p=>p.id!==id)}));}
+
+  async function adicionarDivida(){
+    if(!sel)return;
+    const total=parseFloat(nd.valor_total)||0;
+    if(!total)return alert("Informe o valor.");
+    if(!nd.parcelas.length)return alert("Gere as parcelas antes de salvar.");
+    const divida={id:Date.now(),descricao:nd.descricao||"Dívida",valor_total:total,data_origem:nd.data_origem,data_vencimento:nd.data_primeira_parcela,parcelas:nd.parcelas,criada_em:new Date().toISOString().slice(0,10),indexador:nd.indexador,multa_pct:parseFloat(nd.multa_pct)||2,juros_am:parseFloat(nd.juros_am)||1,honorarios_pct:parseFloat(nd.honorarios_pct)||20,data_inicio_atualizacao:nd.data_inicio_atualizacao||nd.data_primeira_parcela,despesas:parseFloat(nd.despesas)||0,observacoes:nd.observacoes||""};
+    const dividas=[...(sel.dividas||[]),divida];
+    const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+    try{
+      const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
+      const atu=Array.isArray(res)?res[0]:res;
+      if(atu){const parsed={...atu,dividas,contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);setNd(DIVIDA_VAZIA);alert("Dívida adicionada!");}
+    }catch(e){alert("Erro: "+e.message);}
+  }
+
+  async function toggleParcela(dividaId,parcId,novoStatus){
+    if(!sel)return;
+    const dividas=(sel.dividas||[]).map(div=>{if(div.id!==dividaId)return div;return{...div,parcelas:div.parcelas.map(p=>p.id!==parcId?p:{...p,status:novoStatus,pago_em:novoStatus==="pago"?new Date().toISOString().slice(0,10):null})};});
+    const todasPagas=dividas.every(div=>div.parcelas.every(p=>p.status==="pago"));
+    const algumaPaga=dividas.some(div=>div.parcelas.some(p=>p.status==="pago"));
+    const nSt=todasPagas?"pago_integral":algumaPaga?"pago_parcial":sel.status;
+    try{const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),status:nSt});const atu=Array.isArray(res)?res[0]:res;if(atu){const parsed={...atu,dividas,contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);}}catch(e){console.error(e);}
+  }
+
+  async function excluirDivida(dId){
+    if(!sel||!window.confirm("Excluir esta dívida?"))return;
+    const dividas=(sel.dividas||[]).filter(d=>d.id!==dId);
+    const valor_original=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+    const res=await dbUpdate("devedores",sel.id,{dividas:JSON.stringify(dividas),valor_original});
+    const atu=Array.isArray(res)?res[0]:res;
+    if(atu){const parsed={...atu,dividas,contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);}
+  }
+
+  async function atualizarStatus(novoStatus){
+    if(!sel)return;
+    const res=await dbUpdate("devedores",sel.id,{status:novoStatus});
+    const atu=Array.isArray(res)?res[0]:res;
+    if(atu){const parsed={...atu,dividas:sel.dividas||[],contatos:sel.contatos||[],acordos:sel.acordos||[]};setDevedores(prev=>prev.map(d=>d.id===sel.id?parsed:d));setSel(parsed);}
+  }
+
+  async function excluirDevedor(d){
+    if(!window.confirm(`Excluir "${d.nome}"?`))return;
+    await dbDelete("devedores",d.id);
+    setDevedores(prev=>prev.filter(x=>x.id!==d.id));
+    fecharModal();
+  }
+
+  function onAtualizarDevedor(devAtualizado){
+    setDevedores(prev=>prev.map(d=>d.id===devAtualizado.id?devAtualizado:d));
+    setSel(devAtualizado);
+  }
+
+  // ── Filtros ──────────────────────────────────────────────────
+  const filtered=devedores.filter(d=>{
+    const ok1=(d.nome||"").toLowerCase().includes(search.toLowerCase())||(d.cpf_cnpj||"").includes(search);
+    const ok2=!filtroStatus||d.status===filtroStatus;
+    const ok3=!filtroCredor||String(d.credor_id)===String(filtroCredor);
+    return ok1&&ok2&&ok3;
+  });
+
+  const WP_MSGS=d=>[
+    {titulo:"Notificação",msg:`Prezado(a) *${d.nome}*, consta débito em aberto.\n\nEntre em contato para regularização.\n\n*MR Cobranças* | (62) 9 9999-0000`},
+    {titulo:"Proposta de Acordo",msg:`Olá *${(d.nome||"").split(" ")[0]}*! Condições especiais para quitação.\n\n*MR Cobranças* | (62) 9 9999-0000`},
+    {titulo:"Aviso Judicial",msg:`*AVISO — ${d.nome}*\n\nSeu débito foi encaminhado para cobrança judicial.\n\n*Escritório MR Cobranças*`},
+  ];
+
+  // ─────────────────────────────────────────────────────────────
+  // RENDER FICHA INDIVIDUAL
+  // ─────────────────────────────────────────────────────────────
+  if(modal==="ficha"&&sel){
+    const dividas=sel.dividas||[];
+    const acordos=sel.acordos||[];
+    const contatos=[...(sel.contatos||[])].reverse();
+    const credor=credores.find(c=>String(c.id)===String(sel.credor_id));
+    const totalNominal=dividas.reduce((s,d)=>s+(d.valor_total||0),0)||sel.valor_original||sel.valor_nominal||0;
+    const totalRecuperadoAcordos=calcularTotaisAcordo(acordos).recuperado;
+    const procsDevedor=(processos||[]).filter(p=>String(p.devedor_id)===String(sel.id));
+
+    return(
+      <div style={{minHeight:"60vh"}}>
+        {/* Cabeçalho */}
+        <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",borderRadius:16,padding:"20px 24px",marginBottom:20,display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div>
+            <button onClick={fecharModal} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"none",borderRadius:7,padding:"4px 12px",cursor:"pointer",fontSize:12,marginBottom:10}}>← Voltar</button>
+            <p style={{fontFamily:"Syne",fontWeight:800,fontSize:24,color:"#fff",marginBottom:6}}>{sel.nome}</p>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <BadgeDev status={sel.status}/>
+              {credor&&<span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Credor: <b style={{color:"#a5f3fc"}}>{credor.nome?.split(" ").slice(0,3).join(" ")}</b></span>}
+              <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Dívida: <b style={{color:"#fbbf24"}}>{fmt(totalNominal)}</b></span>
+              {totalRecuperadoAcordos>0&&<span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>Recuperado: <b style={{color:"#4ade80"}}>{fmt(totalRecuperadoAcordos)}</b></span>}
+            </div>
           </div>
-
-          {secaoForm==="id"&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-              <INP label="Nome / Razão Social *" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Tipo</label>
-                <div style={{display:"flex",gap:8}}>
-                  {["PF","PJ"].map(t=><button key={t} onClick={()=>F("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${form.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.tipo===t?"#4f46e5":"#fff",color:form.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}
-                </div>
-              </div>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CPF / CNPJ *</label>
-                <input value={form.cpf_cnpj} onChange={e=>F("cpf_cnpj",form.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} placeholder={form.tipo==="PF"?"000.000.000-00":"00.000.000/0000-00"} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
-              </div>
-              {form.tipo==="PF"?(<>
-                <INP label="RG" value={form.rg} onChange={v=>F("rg",v)}/>
-                <INP label="Data de Nascimento" value={form.data_nascimento} onChange={v=>F("data_nascimento",v)} type="date"/>
-                <INP label="Profissão" value={form.profissao} onChange={v=>F("profissao",v)} span={2}/>
-              </>):(<>
-                <INP label="Nome do Sócio / Responsável" value={form.socio_nome} onChange={v=>F("socio_nome",v)} span={2}/>
-                <INP label="CPF do Sócio" value={form.socio_cpf} onChange={v=>F("socio_cpf",maskCPF(v))}/>
-              </>)}
-              <INP label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Principal (WhatsApp)</label>
-                <input value={form.telefone} onChange={e=>F("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
-              </div>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Secundário</label>
-                <input value={form.telefone2} onChange={e=>F("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
-              </div>
-            </div>
-          )}
-
-          {secaoForm==="end"&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CEP</label>
-                <div style={{display:"flex",gap:8}}>
-                  <input value={form.cep} onChange={e=>F("cep",maskCEP(e.target.value))} placeholder="00000-000" style={{flex:1,padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"monospace"}}/>
-                  <button onClick={buscarCEP} disabled={buscandoCEP} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{buscandoCEP?"⏳":"🔍 Buscar"}</button>
-                </div>
-              </div>
-              <INP label="UF" value={form.uf} onChange={v=>F("uf",v)} opts={UFS.map(u=>({v:u,l:u}))}/>
-              <INP label="Logradouro" value={form.logradouro} onChange={v=>F("logradouro",v)} span={2}/>
-              <INP label="Número" value={form.numero} onChange={v=>F("numero",v)}/>
-              <INP label="Complemento" value={form.complemento} onChange={v=>F("complemento",v)}/>
-              <INP label="Bairro" value={form.bairro} onChange={v=>F("bairro",v)}/>
-              <INP label="Cidade" value={form.cidade} onChange={v=>F("cidade",v)}/>
-            </div>
-          )}
-
-          {secaoForm==="divida"&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-              <INP label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} opts={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]} span={2}/>
-              <INP label="Valor Nominal (R$)" value={form.valor_nominal} onChange={v=>F("valor_nominal",v)} type="number"/>
-              <INP label="Data de Origem da Dívida" value={form.data_origem_divida} onChange={v=>F("data_origem_divida",v)} type="date"/>
-              <INP label="Data de Recebimento da Carteira" value={form.data_recebimento_carteira} onChange={v=>F("data_recebimento_carteira",v)} type="date" span={2}/>
-              <div style={{gridColumn:"1/-1"}}>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Descrição / Origem da Dívida</label>
-                <textarea value={form.descricao_divida} onChange={e=>F("descricao_divida",e.target.value)} placeholder="Ex.: Contrato de Compra e Venda nº 001/2023..." rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
-              </div>
-            </div>
-          )}
-
-          {secaoForm==="ctrl"&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-              <INP label="Status" value={form.status} onChange={v=>F("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))} span={2}/>
-              <INP label="Responsável pelo caso" value={form.responsavel} onChange={v=>F("responsavel",v)} span={2}/>
-              <div style={{gridColumn:"1/-1"}}>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Observações</label>
-                <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)} rows={4} placeholder="Informações adicionais..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
-              </div>
-            </div>
-          )}
-
-          <div style={{display:"flex",justifyContent:"space-between",marginTop:20,paddingTop:16,borderTop:"1px solid #f1f5f9"}}>
-            <div>{secaoForm!=="id"&&<Btn onClick={()=>setSecaoForm(SECOES[SECOES.findIndex(s=>s[0]===secaoForm)-1][0])} outline>← Anterior</Btn>}</div>
-            <div style={{display:"flex",gap:8}}>
-              {secaoForm!=="ctrl"?<Btn onClick={()=>setSecaoForm(SECOES[SECOES.findIndex(s=>s[0]===secaoForm)+1][0])}>Próximo →</Btn>:<Btn onClick={salvarDevedor}>{loading?"Salvando...":"💾 Cadastrar"}</Btn>}
-              <Btn onClick={fecharModal} outline>Cancelar</Btn>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── FICHA INDIVIDUAL ── */}
-      {modal==="ficha"&&sel&&(
-        <div>
-          <div style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",borderRadius:18,padding:"20px 24px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
             <div>
-              <button onClick={fecharModal} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,marginBottom:8,fontFamily:"Mulish"}}>← Voltar à listagem</button>
-              <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#fff",marginBottom:6}}>{sel.nome}</h2>
-              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <BadgeDev status={sel.status||"novo"}/>
-                <span style={{fontSize:12,color:"rgba(255,255,255,.6)"}}>{credores.find(c=>c.id===sel.credor_id)?.nome||"Sem credor"}</span>
-                {sel.cpf_cnpj&&<span style={{fontSize:11,color:"rgba(255,255,255,.4)",fontFamily:"monospace"}}>{sel.cpf_cnpj}</span>}
-              </div>
+              <label style={{fontSize:10,color:"rgba(255,255,255,.5)",display:"block",marginBottom:3,textTransform:"uppercase"}}>Alterar Status</label>
+              <select value={sel.status} onChange={e=>atualizarStatus(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"none",fontSize:12,fontFamily:"Mulish",background:"rgba(255,255,255,.1)",color:"#fff",outline:"none"}}>
+                {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+              </select>
             </div>
-            <div style={{textAlign:"right"}}>
-              <p style={{fontSize:11,color:"rgba(255,255,255,.5)",marginBottom:4}}>Total das Dívidas</p>
-              <p style={{fontFamily:"Syne",fontWeight:800,fontSize:26,color:"#a5f3fc",marginBottom:10}}>{fmt((sel.dividas||[]).reduce((s,d)=>s+(d.valor_total||0),0)||sel.valor_original||0)}</p>
-              {!editando ? (
-                <button onClick={iniciarEdicao} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>✏️ Editar</button>
-              ) : (
-                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                  <button onClick={salvarEdicao} disabled={loadingEdit} style={{background:"#22c55e",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>{loadingEdit?"Salvando...":"💾 Salvar"}</button>
-                  <button onClick={()=>setEditando(false)} style={{background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontFamily:"Mulish"}}>✕ Cancelar</button>
-                </div>
-              )}
-            </div>
+            {sel.telefone&&<button onClick={()=>abrirWp(sel)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>📱 WhatsApp</button>}
+            <button onClick={()=>excluirDevedor(sel)} style={{background:"rgba(220,38,38,.3)",color:"#fca5a5",border:"1px solid rgba(220,38,38,.4)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🗑 Excluir</button>
           </div>
+        </div>
 
-          <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid #f1f5f9"}}>
-            {[["dados","📋 Dados"],["contatos","📞 Contatos ("+(sel.contatos||[]).length+")"],["dividas","💰 Dívidas ("+(sel.dividas||[]).length+")"],["processos","⚖️ Processos"]].map(([a,l])=>(
-              <button key={a} onClick={()=>{setAbaFicha(a);setEditando(false);}} style={{padding:"8px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===a?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===a?"#4f46e5":"transparent"}`,marginBottom:-2}}>{l}</button>
-            ))}
-          </div>
+        {/* Abas */}
+        <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid #f1f5f9",overflowX:"auto"}}>
+          {[["dados","📋 Dados"],["contatos","📞 Contatos"],["dividas","💳 Dívidas"],["acordos","🤝 Acordos"],["processos","⚖️ Processos"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setAbaFicha(id)}
+              style={{padding:"9px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:12,color:abaFicha===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${abaFicha===id?"#4f46e5":"transparent"}`,marginBottom:-2,whiteSpace:"nowrap"}}>
+              {label}
+              {id==="acordos"&&acordos.length>0&&<span style={{marginLeft:5,background:"#4f46e5",color:"#fff",borderRadius:99,fontSize:9,padding:"1px 5px"}}>{acordos.length}</span>}
+            </button>
+          ))}
+        </div>
 
+        <div style={{background:"#fff",borderRadius:16,padding:20,border:"1px solid #f1f5f9"}}>
+
+          {/* ABA DADOS */}
           {abaFicha==="dados"&&!editando&&(
             <div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+                <button onClick={()=>{setEditando(true);setFormEdit({...sel,valor_nominal:sel.valor_nominal||sel.valor_original||0});}}
+                  style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:9,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>✏️ Editar</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
                 {[
-                  ["Nome",sel.nome],["CPF/CNPJ",sel.cpf_cnpj],["Tipo",sel.tipo],
-                  sel.tipo==="PF"?["RG",sel.rg]:["Sócio",sel.socio_nome],
-                  sel.tipo==="PF"?["Nascimento",fmtDate(sel.data_nascimento)]:["CPF Sócio",sel.socio_cpf],
-                  sel.tipo==="PF"&&["Profissão",sel.profissao],
-                  ["E-mail",sel.email],["Telefone",sel.telefone],["Tel. 2",sel.telefone2],
-                  ["Endereço",`${sel.logradouro||""}${sel.numero?", "+sel.numero:""} ${sel.complemento||""} — ${sel.bairro||""} — ${sel.cidade||""}/${sel.uf||""} — CEP ${sel.cep||""}`],
+                  ["Tipo",sel.tipo==="PF"?"Pessoa Física":"Pessoa Jurídica"],
+                  ["CPF/CNPJ",sel.cpf_cnpj],
+                  ...(sel.tipo==="PF"?[["RG",sel.rg],["Nascimento",fmtDate(sel.data_nascimento)],["Profissão",sel.profissao]]:[["Sócio",sel.socio_nome],["CPF Sócio",sel.socio_cpf]]),
+                  ["E-mail",sel.email],["Telefone",sel.telefone],["Telefone 2",sel.telefone2],
+                  ["CEP",sel.cep],["Logradouro",sel.logradouro],["Número",sel.numero],
+                  ["Bairro",sel.bairro],["Cidade",sel.cidade],["UF",sel.uf],
+                  ["Credor",credor?.nome],
+                  ["Valor Nominal",sel.valor_nominal||sel.valor_original?fmt(sel.valor_nominal||sel.valor_original):null],
+                  ["Origem Dívida",fmtDate(sel.data_origem_divida)],
+                  ["Recebimento",fmtDate(sel.data_recebimento_carteira)],
                   ["Responsável",sel.responsavel],["Status",(STATUS_DEV.find(s=>s.v===sel.status)||STATUS_DEV[0]).l],
-                  sel.observacoes&&["Observações",sel.observacoes],
-                  sel.descricao_divida&&["Descrição da Dívida",sel.descricao_divida],
-                  sel.data_origem_divida&&["Data Origem",fmtDate(sel.data_origem_divida)],
-                  sel.data_recebimento_carteira&&["Recebimento Carteira",fmtDate(sel.data_recebimento_carteira)],
-                ].filter(Boolean).map(([k,v])=>(
+                ].filter(([,v])=>v&&v!=="—").map(([k,v])=>(
                   <div key={k} style={{padding:"10px 14px",background:"#f8fafc",borderRadius:10}}>
                     <p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>{k}</p>
                     <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{v||"—"}</p>
                   </div>
                 ))}
               </div>
-              <div style={{display:"flex",gap:8}}>
+              {sel.descricao_divida&&<div style={{marginTop:10,padding:"10px 14px",background:"#f8fafc",borderRadius:10}}><p style={{fontSize:10,color:"#94a3b8",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>Descrição da Dívida</p><p style={{fontSize:13,color:"#0f172a"}}>{sel.descricao_divida}</p></div>}
+              {sel.observacoes&&<div style={{marginTop:10,padding:"10px 14px",background:"#fef9c3",borderRadius:10}}><p style={{fontSize:10,color:"#92400e",fontWeight:700,marginBottom:2,textTransform:"uppercase"}}>Observações</p><p style={{fontSize:13,color:"#0f172a"}}>{sel.observacoes}</p></div>}
+              <div style={{display:"flex",gap:8,marginTop:14}}>
                 {sel.telefone&&<Btn onClick={()=>abrirWp(sel)}>📱 WhatsApp</Btn>}
                 <Btn onClick={()=>excluirDevedor(sel)} danger>🗑 Excluir</Btn>
               </div>
             </div>
           )}
 
-          {/* MODO EDIÇÃO — Dados Cadastrais */}
+          {/* ABA DADOS — MODO EDIÇÃO */}
           {abaFicha==="dados"&&editando&&(
             <div style={{background:"#f8fafc",borderRadius:16,padding:20,border:"2px solid #4f46e5"}}>
               <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#4f46e5",marginBottom:16}}>✏️ Editando Cadastro</p>
@@ -822,48 +1133,23 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   </button>
                 ))}
               </div>
-
               {secaoForm==="id"&&(
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
                   <INP label="Nome / Razão Social *" value={formEdit.nome||""} onChange={v=>FE("nome",v)} span={2}/>
                   <div>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Tipo</label>
-                    <div style={{display:"flex",gap:8}}>
-                      {["PF","PJ"].map(t=><button key={t} onClick={()=>FE("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${formEdit.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:formEdit.tipo===t?"#4f46e5":"#fff",color:formEdit.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}
-                    </div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo</label>
+                    <div style={{display:"flex",gap:8}}>{["PF","PJ"].map(t=><button key={t} onClick={()=>FE("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${formEdit.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:formEdit.tipo===t?"#4f46e5":"#fff",color:formEdit.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 PF":"🏢 PJ"}</button>)}</div>
                   </div>
-                  <div>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CPF / CNPJ</label>
-                    <input value={formEdit.cpf_cnpj||""} onChange={e=>FE("cpf_cnpj",formEdit.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} placeholder={formEdit.tipo==="PF"?"000.000.000-00":"00.000.000/0000-00"} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
-                  </div>
-                  {formEdit.tipo==="PF"?(<>
-                    <INP label="RG" value={formEdit.rg||""} onChange={v=>FE("rg",v)}/>
-                    <INP label="Data de Nascimento" value={formEdit.data_nascimento||""} onChange={v=>FE("data_nascimento",v)} type="date"/>
-                    <INP label="Profissão" value={formEdit.profissao||""} onChange={v=>FE("profissao",v)} span={2}/>
-                  </>):(<>
-                    <INP label="Sócio / Responsável" value={formEdit.socio_nome||""} onChange={v=>FE("socio_nome",v)} span={2}/>
-                    <INP label="CPF do Sócio" value={formEdit.socio_cpf||""} onChange={v=>FE("socio_cpf",maskCPF(v))}/>
-                  </>)}
+                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>CPF / CNPJ</label><input value={formEdit.cpf_cnpj||""} onChange={e=>FE("cpf_cnpj",formEdit.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/></div>
+                  {formEdit.tipo==="PF"?(<><INP label="RG" value={formEdit.rg||""} onChange={v=>FE("rg",v)}/><INP label="Data de Nascimento" value={formEdit.data_nascimento||""} onChange={v=>FE("data_nascimento",v)} type="date"/><INP label="Profissão" value={formEdit.profissao||""} onChange={v=>FE("profissao",v)} span={2}/></>):(<><INP label="Sócio / Responsável" value={formEdit.socio_nome||""} onChange={v=>FE("socio_nome",v)} span={2}/><INP label="CPF do Sócio" value={formEdit.socio_cpf||""} onChange={v=>FE("socio_cpf",maskCPF(v))}/></>)}
                   <INP label="E-mail" value={formEdit.email||""} onChange={v=>FE("email",v)} type="email"/>
-                  <div>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Principal</label>
-                    <input value={formEdit.telefone||""} onChange={e=>FE("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Telefone Secundário</label>
-                    <input value={formEdit.telefone2||""} onChange={e=>FE("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
-                  </div>
+                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone</label><input value={formEdit.telefone||""} onChange={e=>FE("telefone",maskTel(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/></div>
+                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone 2</label><input value={formEdit.telefone2||""} onChange={e=>FE("telefone2",maskTel(e.target.value))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/></div>
                 </div>
               )}
               {secaoForm==="end"&&(
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-                  <div>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>CEP</label>
-                    <div style={{display:"flex",gap:8}}>
-                      <input value={formEdit.cep||""} onChange={e=>FE("cep",maskCEP(e.target.value))} placeholder="00000-000" style={{flex:1,padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"monospace"}}/>
-                      <button onClick={buscarCEPEdit} disabled={buscandoCEPEdit} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{buscandoCEPEdit?"⏳":"🔍 Buscar"}</button>
-                    </div>
-                  </div>
+                  <div><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>CEP</label><div style={{display:"flex",gap:8}}><input value={formEdit.cep||""} onChange={e=>FE("cep",maskCEP(e.target.value))} placeholder="00000-000" style={{flex:1,padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"monospace"}}/><button onClick={buscarCEPEdit} disabled={buscandoCEPEdit} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{buscandoCEPEdit?"⏳":"🔍"}</button></div></div>
                   <INP label="UF" value={formEdit.uf||"GO"} onChange={v=>FE("uf",v)} opts={UFS.map(u=>({v:u,l:u}))}/>
                   <INP label="Logradouro" value={formEdit.logradouro||""} onChange={v=>FE("logradouro",v)} span={2}/>
                   <INP label="Número" value={formEdit.numero||""} onChange={v=>FE("numero",v)}/>
@@ -874,84 +1160,69 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               )}
               {secaoForm==="divida"&&(
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-                  <INP label="Credor Vinculado" value={formEdit.credor_id||""} onChange={v=>FE("credor_id",v)} opts={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]} span={2}/>
+                  <INP label="Credor" value={formEdit.credor_id||""} onChange={v=>FE("credor_id",v)} opts={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]} span={2}/>
                   <INP label="Valor Nominal (R$)" value={formEdit.valor_nominal||""} onChange={v=>FE("valor_nominal",v)} type="number"/>
                   <INP label="Data de Origem" value={formEdit.data_origem_divida||""} onChange={v=>FE("data_origem_divida",v)} type="date"/>
-                  <INP label="Recebimento da Carteira" value={formEdit.data_recebimento_carteira||""} onChange={v=>FE("data_recebimento_carteira",v)} type="date" span={2}/>
-                  <div style={{gridColumn:"1/-1"}}>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Descrição / Origem</label>
-                    <textarea value={formEdit.descricao_divida||""} onChange={e=>FE("descricao_divida",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
-                  </div>
+                  <INP label="Recebimento Carteira" value={formEdit.data_recebimento_carteira||""} onChange={v=>FE("data_recebimento_carteira",v)} type="date" span={2}/>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição / Origem</label><textarea value={formEdit.descricao_divida||""} onChange={e=>FE("descricao_divida",e.target.value)} rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
                 </div>
               )}
               {secaoForm==="ctrl"&&(
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
                   <INP label="Status" value={formEdit.status||"novo"} onChange={v=>FE("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))} span={2}/>
                   <INP label="Responsável" value={formEdit.responsavel||""} onChange={v=>FE("responsavel",v)} span={2}/>
-                  <div style={{gridColumn:"1/-1"}}>
-                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".04em"}}>Observações</label>
-                    <textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={4} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
-                  </div>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={formEdit.observacoes||""} onChange={e=>FE("observacoes",e.target.value)} rows={4} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
                 </div>
               )}
+              <div style={{display:"flex",gap:8,marginTop:16}}>
+                <Btn onClick={salvarEdicao} disabled={loadingEdit}>{loadingEdit?"Salvando...":"💾 Salvar Alterações"}</Btn>
+                <Btn onClick={()=>setEditando(false)} outline color="#64748b">Cancelar</Btn>
+              </div>
             </div>
           )}
 
+          {/* ABA CONTATOS */}
           {abaFicha==="contatos"&&(
             <div>
-              <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px solid #e2e8f0",marginBottom:18}}>
-                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>+ Registrar Contato</p>
+              <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:16,border:"1.5px dashed #e2e8f0"}}>
+                <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:10}}>+ Registrar Contato</p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                  <div>
-                    <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo de Contato</label>
-                    <select value={novoContato.tipo} onChange={e=>setNovoContato(c=>({...c,tipo:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
-                      {["Ligação","WhatsApp","E-mail","Carta","Visita","Outro"].map(t=><option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Resultado</label>
-                    <select value={novoContato.resultado} onChange={e=>setNovoContato(c=>({...c,resultado:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
-                      {["Sem resposta","Número inválido","Contato estabelecido","Recusou negociar","Demonstrou interesse","Acordo verbal","Outro"].map(r=><option key={r}>{r}</option>)}
-                    </select>
-                  </div>
-                  <div style={{gridColumn:"1/-1"}}>
-                    <label style={{fontSize:10,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
-                    <textarea value={novoContato.obs} onChange={e=>setNovoContato(c=>({...c,obs:e.target.value}))} rows={2} placeholder="Detalhes do contato..." style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
-                  </div>
+                  <INP label="Tipo de Contato" value={novoContato.tipo} onChange={v=>setNovoContato(c=>({...c,tipo:v}))} opts={[{v:"ligacao",l:"📞 Ligação"},{v:"whatsapp",l:"📱 WhatsApp"},{v:"email",l:"📧 E-mail"},{v:"carta",l:"✉️ Carta"},{v:"visita",l:"🚗 Visita"},{v:"outro",l:"🔹 Outro"}]}/>
+                  <INP label="Resultado" value={novoContato.resultado} onChange={v=>setNovoContato(c=>({...c,resultado:v}))} opts={[{v:"sem_resposta",l:"Sem resposta"},{v:"numero_invalido",l:"Número inválido"},{v:"contato_estabelecido",l:"Contato estabelecido"},{v:"recusou_negociar",l:"Recusou negociar"},{v:"demonstrou_interesse",l:"Demonstrou interesse"},{v:"acordo_verbal",l:"Acordo verbal"},{v:"outro",l:"Outro"}]}/>
+                  <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label><textarea value={novoContato.obs} onChange={e=>setNovoContato(c=>({...c,obs:e.target.value}))} rows={2} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/></div>
                 </div>
-                <Btn onClick={registrarContato} color="#4f46e5">💬 Registrar Contato</Btn>
+                <Btn onClick={registrarContato}>✅ Registrar</Btn>
               </div>
-              {(sel.contatos||[]).length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24}}>Nenhum contato registrado.</p>}
-              {[...(sel.contatos||[])].reverse().map(c=>{
-                const cores={"Contato estabelecido":"#059669","Acordo verbal":"#059669","Demonstrou interesse":"#d97706","Recusou negociar":"#dc2626","Sem resposta":"#64748b","Número inválido":"#dc2626"};
-                return(
-                  <div key={c.id} style={{border:"1px solid #f1f5f9",borderRadius:12,padding:14,marginBottom:10,borderLeft:`4px solid ${cores[c.resultado]||"#e2e8f0"}`}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <span style={{fontSize:11,fontWeight:700,background:"#ede9fe",color:"#6d28d9",padding:"2px 8px",borderRadius:99}}>{c.tipo}</span>
-                        <span style={{fontSize:11,fontWeight:700,color:cores[c.resultado]||"#64748b"}}>{c.resultado}</span>
-                      </div>
-                      <span style={{fontSize:10,color:"#94a3b8"}}>{c.data} · {c.responsavel}</span>
+              {contatos.length===0?<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24}}>Nenhum contato registrado.</p>:contatos.map(c=>(
+                <div key={c.id} style={{border:"1px solid #f1f5f9",borderRadius:12,padding:12,marginBottom:8,background:"#fafafe"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#4f46e5"}}>{c.tipo}</span>
+                      <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#f1f5f9",color:"#475569"}}>{c.resultado}</span>
                     </div>
-                    {c.obs&&<p style={{fontSize:12,color:"#475569",lineHeight:1.5}}>{c.obs}</p>}
+                    <span style={{fontSize:10,color:"#94a3b8"}}>{c.data} · {c.responsavel}</span>
                   </div>
-                );
-              })}
+                  {c.obs&&<p style={{fontSize:12,color:"#64748b",marginTop:6,fontStyle:"italic"}}>{c.obs}</p>}
+                </div>
+              ))}
             </div>
           )}
 
+          {/* ABA DÍVIDAS */}
           {abaFicha==="dividas"&&(
             <div>
-              {(sel.dividas||[]).length===0&&<div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12,marginBottom:16}}>Nenhuma dívida cadastrada.</div>}
-              {(sel.dividas||[]).map((div,di)=>{
-                const pagas=div.parcelas.filter(p=>p.status==="pago").length;
-                const pct=div.parcelas.length?Math.round(pagas/div.parcelas.length*100):0;
+              {dividas.length===0&&<p style={{color:"#94a3b8",fontSize:13,textAlign:"center",padding:24,background:"#f8fafc",borderRadius:12}}>Nenhuma dívida cadastrada.</p>}
+              {dividas.map(div=>{
+                const pct=div.parcelas?.length>0?Math.round(div.parcelas.filter(p=>p.status==="pago").length/div.parcelas.length*100):0;
                 return(
                   <div key={div.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
-                    <div style={{marginBottom:8}}>
-                      <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao}</p>
-                      <p style={{fontSize:11,color:"#64748b"}}>{div.parcelas.length} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</p>
-                      {div.indexador&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Índice: {div.indexador?.toUpperCase()} · Juros: {div.juros_am}%am · Multa: {div.multa_pct}% · Honorários: {div.honorarios_pct}%</p>}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                      <div>
+                        <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{div.descricao}</p>
+                        <p style={{fontSize:11,color:"#64748b"}}>{div.parcelas?.length||0} parcelas · <b style={{color:"#4f46e5"}}>{fmt(div.valor_total)}</b> · {pct}% pago</p>
+                        {div.indexador&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Índice: {div.indexador?.toUpperCase()} · Juros: {div.juros_am}%am · Multa: {div.multa_pct}% · Honorários: {div.honorarios_pct}%</p>}
+                      </div>
+                      <button onClick={()=>excluirDivida(div.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"3px 8px",cursor:"pointer",fontSize:10}}>🗑</button>
                     </div>
                     <div style={{height:4,background:"#f1f5f9",borderRadius:99,marginBottom:10}}><div style={{height:4,width:`${pct}%`,background:"linear-gradient(90deg,#22c55e,#16a34a)",borderRadius:99}}/></div>
                     <div style={{maxHeight:160,overflowY:"auto"}}>
@@ -977,6 +1248,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   </div>
                 );
               })}
+              {/* Formulário nova dívida */}
               <div style={{background:"#f8fafc",borderRadius:14,padding:16,border:"1.5px dashed #e2e8f0",marginTop:8}}>
                 <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a",marginBottom:12}}>➕ Nova Dívida</p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -1028,48 +1300,246 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
             </div>
           )}
 
+          {/* ABA ACORDOS */}
+          {abaFicha==="acordos"&&(
+            <AbaAcordos
+              devedor={sel}
+              acordos={sel.acordos||[]}
+              credores={credores}
+              user={user}
+              onAtualizarDevedor={onAtualizarDevedor}
+            />
+          )}
+
+          {/* ABA PROCESSOS */}
           {abaFicha==="processos"&&(
             <div>
-              {(()=>{
-                const procsDevedor = processos.filter(p=>p.devedor_id===sel.id||String(p.devedor_id)===String(sel.id));
-                if(!procsDevedor.length) return (
-                  <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12}}>
-                    <div style={{fontSize:32,marginBottom:8}}>⚖️</div>
-                    <p>Nenhum processo vinculado a este devedor.</p>
-                    <button onClick={()=>{ fecharModal(); setTab&&setTab("processos"); }} style={{marginTop:14,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>+ Cadastrar Processo</button>
+              {procsDevedor.length===0?(
+                <div style={{textAlign:"center",padding:32,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:12}}>
+                  <div style={{fontSize:32,marginBottom:8}}>⚖️</div>
+                  <p>Nenhum processo vinculado.</p>
+                  <button onClick={()=>{fecharModal();setTab&&setTab("processos");}} style={{marginTop:14,background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>+ Cadastrar Processo</button>
+                </div>
+              ):(
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                    <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>{procsDevedor.length} processo(s)</p>
+                    <button onClick={()=>{fecharModal();setTab&&setTab("processos");}} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish"}}>+ Novo</button>
                   </div>
-                );
-                return (
-                  <div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                      <p style={{fontFamily:"Syne",fontWeight:700,fontSize:13,color:"#0f172a"}}>{procsDevedor.length} processo{procsDevedor.length>1?"s":""} vinculado{procsDevedor.length>1?"s":""}</p>
-                      <button onClick={()=>{ fecharModal(); setTab&&setTab("processos"); }} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"Mulish"}}>+ Novo Processo</button>
-                    </div>
-                    {procsDevedor.map(p=>(
-                      <div key={p.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:10,background:"#fff"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                          <div>
-                            <p style={{fontFamily:"monospace",fontSize:12,color:"#4f46e5",fontWeight:700,marginBottom:2}}>{p.numero}</p>
-                            <p style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{p.tipo||"Execução"}</p>
-                          </div>
-                          <span style={{fontSize:13,fontWeight:800,color:"#4f46e5"}}>{fmt(p.valor)}</span>
-                        </div>
-                        <div style={{display:"flex",gap:16,fontSize:11,color:"#64748b",flexWrap:"wrap"}}>
-                          {p.vara&&<span>🏛 {p.vara}</span>}
-                          {p.fase&&<span>📌 Fase: {p.fase}</span>}
-                          {p.data_distribuicao&&<span>📅 {fmtDate(p.data_distribuicao)}</span>}
-                        </div>
-                        {p.observacoes&&<p style={{fontSize:12,color:"#94a3b8",marginTop:6,fontStyle:"italic"}}>{p.observacoes}</p>}
+                  {procsDevedor.map(p=>(
+                    <div key={p.id} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginBottom:10,background:"#fff"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                        <div><p style={{fontFamily:"monospace",fontSize:12,color:"#4f46e5",fontWeight:700,marginBottom:2}}>{p.numero}</p><p style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{p.tipo||"Execução"}</p></div>
+                        <span style={{fontSize:13,fontWeight:800,color:"#4f46e5"}}>{fmt(p.valor)}</span>
                       </div>
-                    ))}
-                  </div>
-                );
-              })()}
+                      <div style={{display:"flex",gap:16,fontSize:11,color:"#64748b",flexWrap:"wrap"}}>
+                        {p.vara&&<span>🏛 {p.vara}</span>}{p.fase&&<span>📌 {p.fase}</span>}{p.data_distribuicao&&<span>📅 {fmtDate(p.data_distribuicao)}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* WhatsApp Modal */}
+        {wp&&(
+          <Modal title={`WhatsApp — ${wp.nome}`} onClose={fecharWp}>
+            {WP_MSGS(wp).map((m,i)=>(
+              <div key={i} style={{border:"1.5px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:10}}>
+                <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:8}}>{m.titulo}</p>
+                <p style={{fontSize:11,color:"#64748b",lineHeight:1.7,whiteSpace:"pre-wrap",background:"#f8fafc",padding:10,borderRadius:8,marginBottom:10}}>{m.msg}</p>
+                <a href={`https://wa.me/55${phoneFmt(wp.telefone)}?text=${encodeURIComponent(m.msg)}`} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,background:"#16a34a",color:"#fff",borderRadius:9,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>{I.wp} Abrir no WhatsApp</a>
+              </div>
+            ))}
+          </Modal>
+        )}
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // RENDER LISTAGEM
+  // ─────────────────────────────────────────────────────────────
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10}}>
+        <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>Devedores</h2>
+        <Btn onClick={()=>{setForm({...FORM_DEV_VAZIO,responsavel:user?.nome||""});setSecaoForm("id");abrirModal("novo")}}>{I.plus} Novo Devedor</Btn>
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:12,marginBottom:16,alignItems:"end"}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase"}}>Credor</label>
+          <select value={filtroCredor} onChange={e=>setFiltroCredor(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todos os credores</option>
+            {credores.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase"}}>Status</label>
+          <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todos os status</option>
+            {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:5,textTransform:"uppercase"}}>Buscar</label>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome ou CPF/CNPJ..." style={{padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish",minWidth:200}}/>
+        </div>
+      </div>
+
+      {/* Tabela */}
+      <div style={{background:"#fff",borderRadius:16,border:"1px solid #f1f5f9",overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:"#f8fafc"}}>
+              {["Nome","CPF/CNPJ","Credor","Status","Valor Dívida","Acordos","Ações"].map(h=>(
+                <th key={h} style={{padding:"12px 16px",textAlign:"left",fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:".05em"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length===0&&(
+              <tr><td colSpan={7} style={{padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>Nenhum devedor encontrado.</td></tr>
+            )}
+            {filtered.map(d=>{
+              const cr=credores.find(c=>String(c.id)===String(d.credor_id));
+              const acordosDev=d.acordos||[];
+              const totais=calcularTotaisAcordo(acordosDev);
+              const valorDiv=d.dividas?.reduce((s,div)=>s+(div.valor_total||0),0)||d.valor_original||d.valor_nominal||0;
+              return(
+                <tr key={d.id} style={{borderTop:"1px solid #f8fafc",cursor:"pointer"}} onClick={()=>abrirModal("ficha",d)}
+                  onMouseEnter={e=>e.currentTarget.style.background="#fafafe"}
+                  onMouseLeave={e=>e.currentTarget.style.background=""}>
+                  <td style={{padding:"12px 16px"}}>
+                    <p style={{fontWeight:700,color:"#0f172a",fontSize:13}}>{d.nome}</p>
+                    <p style={{fontSize:10,color:"#94a3b8"}}>{d.tipo==="PF"?"PF":"PJ"} · {d.cidade||"—"}</p>
+                  </td>
+                  <td style={{padding:"12px 16px",fontFamily:"monospace",fontSize:12,color:"#475569"}}>{d.cpf_cnpj||"—"}</td>
+                  <td style={{padding:"12px 16px",fontSize:12,color:"#64748b"}}>{cr?.nome?.split(" ")[0]||"—"}</td>
+                  <td style={{padding:"12px 16px"}}><BadgeDev status={d.status}/></td>
+                  <td style={{padding:"12px 16px"}}>
+                    <p style={{fontWeight:700,color:"#4f46e5",fontSize:13}}>{fmt(valorDiv)}</p>
+                    {totais.recuperado>0&&<p style={{fontSize:10,color:"#16a34a"}}>✓ {fmt(totais.recuperado)} rec.</p>}
+                  </td>
+                  <td style={{padding:"12px 16px",fontSize:12,color:"#64748b"}}>
+                    {acordosDev.length>0?<span style={{background:"#ede9fe",color:"#4f46e5",borderRadius:99,padding:"2px 8px",fontSize:10,fontWeight:700}}>{acordosDev.length} acordo{acordosDev.length>1?"s":""}</span>:"—"}
+                  </td>
+                  <td style={{padding:"12px 16px"}} onClick={e=>e.stopPropagation()}>
+                    <div style={{display:"flex",gap:6}}>
+                      {d.telefone&&<button onClick={()=>abrirWp(d)} style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:12}} title="WhatsApp">{I.wp}</button>}
+                      <button onClick={()=>abrirModal("ficha",d)} style={{background:"#ede9fe",color:"#4f46e5",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:11,fontWeight:700}}>Ver →</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{padding:"10px 16px",borderTop:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <p style={{fontSize:11,color:"#94a3b8"}}>{filtered.length} de {devedores.length} devedores</p>
+          {(filtroStatus||filtroCredor||search)&&<button onClick={()=>{setFiltroStatus("");setFiltroCredor("");setSearch("");}} style={{fontSize:11,color:"#4f46e5",background:"none",border:"none",cursor:"pointer",fontWeight:700}}>✕ Limpar filtros</button>}
+        </div>
+      </div>
+
+      {/* Modal novo devedor */}
+      {modal==="novo"&&(
+        <Modal title="Novo Devedor" onClose={fecharModal} width={640}>
+          {/* Navegação entre seções */}
+          <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1px solid #e2e8f0"}}>
+            {SECOES.map(([id,label],i)=>(
+              <button key={id} onClick={()=>setSecaoForm(id)}
+                style={{flex:1,padding:"8px 4px",border:"none",background:"none",cursor:"pointer",fontFamily:"Mulish",fontWeight:700,fontSize:11,color:secaoForm===id?"#4f46e5":"#94a3b8",borderBottom:`2px solid ${secaoForm===id?"#4f46e5":"transparent"}`,marginBottom:-1,textAlign:"center"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {secaoForm==="id"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <INP label="Nome / Razão Social *" value={form.nome} onChange={v=>F("nome",v)} span={2}/>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tipo</label>
+                <div style={{display:"flex",gap:8}}>{["PF","PJ"].map(t=><button key={t} onClick={()=>F("tipo",t)} style={{flex:1,padding:"8px",border:`1.5px solid ${form.tipo===t?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.tipo===t?"#4f46e5":"#fff",color:form.tipo===t?"#fff":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish"}}>{t==="PF"?"👤 Pessoa Física":"🏢 Pessoa Jurídica"}</button>)}</div>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>CPF / CNPJ</label>
+                <input value={form.cpf_cnpj} onChange={e=>F("cpf_cnpj",form.tipo==="PF"?maskCPF(e.target.value):maskCNPJ(e.target.value))} placeholder={form.tipo==="PF"?"000.000.000-00":"00.000.000/0000-00"} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+              </div>
+              {form.tipo==="PF"?(<><INP label="RG" value={form.rg} onChange={v=>F("rg",v)}/><INP label="Data de Nascimento" value={form.data_nascimento} onChange={v=>F("data_nascimento",v)} type="date"/><INP label="Profissão" value={form.profissao} onChange={v=>F("profissao",v)} span={2}/></>):(<><INP label="Sócio / Responsável" value={form.socio_nome} onChange={v=>F("socio_nome",v)} span={2}/><INP label="CPF do Sócio" value={form.socio_cpf} onChange={v=>F("socio_cpf",maskCPF(v))}/></>)}
+              <INP label="E-mail" value={form.email} onChange={v=>F("email",v)} type="email"/>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone Principal (WhatsApp)</label>
+                <input value={form.telefone} onChange={e=>F("telefone",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Telefone Secundário</label>
+                <input value={form.telefone2} onChange={e=>F("telefone2",maskTel(e.target.value))} placeholder="(62) 9 0000-0000" style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+              </div>
+            </div>
+          )}
+          {secaoForm==="end"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>CEP</label>
+                <div style={{display:"flex",gap:8}}>
+                  <input value={form.cep} onChange={e=>F("cep",maskCEP(e.target.value))} placeholder="00000-000" style={{flex:1,padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"monospace"}}/>
+                  <button onClick={buscarCep} disabled={buscandoCep} style={{background:"#4f46e5",color:"#fff",border:"none",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{buscandoCep?"⏳":"🔍 Buscar"}</button>
+                </div>
+              </div>
+              <INP label="UF" value={form.uf} onChange={v=>F("uf",v)} opts={UFS.map(u=>({v:u,l:u}))}/>
+              <INP label="Logradouro" value={form.logradouro} onChange={v=>F("logradouro",v)} span={2}/>
+              <INP label="Número" value={form.numero} onChange={v=>F("numero",v)}/>
+              <INP label="Complemento" value={form.complemento} onChange={v=>F("complemento",v)}/>
+              <INP label="Bairro" value={form.bairro} onChange={v=>F("bairro",v)}/>
+              <INP label="Cidade" value={form.cidade} onChange={v=>F("cidade",v)}/>
+            </div>
+          )}
+          {secaoForm==="divida"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <INP label="Credor Vinculado" value={form.credor_id} onChange={v=>F("credor_id",v)} opts={[{v:"",l:"— Nenhum —"},...credores.map(c=>({v:c.id,l:c.nome}))]} span={2}/>
+              <INP label="Valor Nominal (R$)" value={form.valor_nominal} onChange={v=>F("valor_nominal",v)} type="number"/>
+              <INP label="Data de Origem da Dívida" value={form.data_origem_divida} onChange={v=>F("data_origem_divida",v)} type="date"/>
+              <INP label="Data de Recebimento da Carteira" value={form.data_recebimento_carteira} onChange={v=>F("data_recebimento_carteira",v)} type="date" span={2}/>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição / Origem</label>
+                <textarea value={form.descricao_divida} onChange={e=>F("descricao_divida",e.target.value)} placeholder="Ex: Contrato de Compra e Venda nº 001/2023" rows={3} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+          {secaoForm==="ctrl"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr",gap:13}}>
+              <INP label="Status" value={form.status} onChange={v=>F("status",v)} opts={STATUS_DEV.map(s=>({v:s.v,l:s.l}))}/>
+              <INP label="Responsável pelo Caso" value={form.responsavel} onChange={v=>F("responsavel",v)}/>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
+                <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)} placeholder="Informações adicionais..." rows={4} style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+              </div>
+            </div>
+          )}
+
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20,paddingTop:16,borderTop:"1px solid #f1f5f9"}}>
+            <div style={{display:"flex",gap:8}}>
+              {SECOES.findIndex(([id])=>id===secaoForm)>0&&(
+                <Btn onClick={()=>setSecaoForm(SECOES[SECOES.findIndex(([id])=>id===secaoForm)-1][0])} outline color="#64748b">← Anterior</Btn>
+              )}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              {SECOES.findIndex(([id])=>id===secaoForm)<SECOES.length-1?(
+                <Btn onClick={()=>setSecaoForm(SECOES[SECOES.findIndex(([id])=>id===secaoForm)+1][0])}>Próximo →</Btn>
+              ):(
+                <Btn onClick={salvarDevedor} disabled={loading}>{loading?"Salvando...":"💾 Cadastrar Devedor"}</Btn>
+              )}
+              <Btn onClick={fecharModal} outline color="#64748b">Cancelar</Btn>
+            </div>
+          </div>
+        </Modal>
       )}
 
+      {/* WhatsApp Modal */}
       {wp&&(
         <Modal title={`WhatsApp — ${wp.nome}`} onClose={fecharWp}>
           {WP_MSGS(wp).map((m,i)=>(
@@ -1084,6 +1554,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 // CREDORES
@@ -2217,10 +2688,12 @@ export default function App() {
       const [devs, creds, procs, ands, reg] = await Promise.all([
         dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"), dbGet("regua"),
       ]);
+      const parse = (v,fb="[]") => { try{ return typeof v==="string"?JSON.parse(v||fb):(v||JSON.parse(fb)); }catch(e){return JSON.parse(fb);} };
       setDevedores((devs||[]).map(d=>({ ...d,
-        dividas: typeof d.dividas==="string"?JSON.parse(d.dividas||"[]"):(d.dividas||[]),
-        parcelas: typeof d.parcelas==="string"?JSON.parse(d.parcelas||"[]"):(d.parcelas||[]),
-        contatos: typeof d.contatos==="string"?JSON.parse(d.contatos||"[]"):(d.contatos||[]),
+        dividas:  parse(d.dividas),
+        parcelas: parse(d.parcelas),
+        contatos: parse(d.contatos),
+        acordos:  parse(d.acordos).map(ac=>({...ac, parcelas: verificarAtrasados(ac.parcelas||[])})),
       })));
       setCredores(creds||[]);
       setProcessos(procs||[]);
