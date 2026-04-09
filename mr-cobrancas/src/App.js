@@ -81,6 +81,7 @@ const I = {
   logout: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
   menu: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
   alert: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+  bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 };
 
 // ─── BADGE ───────────────────────────────────────────────────
@@ -240,6 +241,37 @@ function Dashboard({ devedores, processos, andamentos, user }) {
       <h2 style={{ fontFamily:"Syne",fontWeight:800,fontSize:24,color:"#0f172a",marginBottom:20 }}>
         Bom dia, {user.nome.split(" ")[0]}! 👋
       </h2>
+
+      {/* Alerta de lembretes vencidos/hoje */}
+      {(()=>{
+        try {
+          const lems = JSON.parse(localStorage.getItem("mr_lembretes")||"[]");
+          const hoje2 = new Date().toISOString().slice(0,10);
+          const urgentes = lems.filter(l=>l.status==="pendente"&&l.data_prometida<=hoje2);
+          if(!urgentes.length) return null;
+          return(
+            <div style={{background:"#fee2e2",border:"1.5px solid #fca5a5",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <span style={{fontSize:24}}>🔔</span>
+                <div>
+                  <p style={{fontWeight:800,color:"#dc2626",fontSize:14}}>{urgentes.length} lembrete{urgentes.length>1?"s":""} vencido{urgentes.length>1?"s":""} ou para hoje!</p>
+                  <p style={{fontSize:12,color:"#b91c1c",marginTop:2}}>
+                    {urgentes.slice(0,2).map(l=>{
+                      const dev = devedores.find(d=>String(d.id)===String(l.devedor_id));
+                      return `${dev?.nome?.split(" ")[0]||"?"} (${l.data_prometida===hoje2?"hoje":l.data_prometida})`;
+                    }).join(" · ")}
+                    {urgentes.length>2&&` · +${urgentes.length-2} mais`}
+                  </p>
+                </div>
+              </div>
+              <button onClick={()=>window.dispatchEvent(new CustomEvent("mr_goto",{detail:"lembretes"}))}
+                style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"Mulish"}}>
+                Ver Lembretes →
+              </button>
+            </div>
+          );
+        } catch(e){ return null; }
+      })()}
 
       {/* KPIs */}
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:24 }}>
@@ -3389,6 +3421,339 @@ function Calculadora({ devedores }) {
 // ═══════════════════════════════════════════════════════════════
 // RELATÓRIOS & CARTEIRA
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// LEMBRETES E ALERTAS DE COBRANÇA
+// ═══════════════════════════════════════════════════════════════
+const LEMBRETE_VAZIO = {
+  devedor_id:"", descricao:"", data_prometida:"", hora:"08:00",
+  tipo:"promessa_pagamento", prioridade:"normal", observacoes:"",
+  status:"pendente", // pendente | concluido | cancelado
+};
+const TIPOS_LEM = [
+  {v:"promessa_pagamento", l:"💰 Promessa de Pagamento", cor:"#16a34a", bg:"#dcfce7"},
+  {v:"retorno_contato",    l:"📞 Retorno de Contato",    cor:"#2563eb", bg:"#dbeafe"},
+  {v:"prazo_acordo",       l:"🤝 Prazo do Acordo",        cor:"#7c3aed", bg:"#ede9fe"},
+  {v:"vencimento",         l:"📅 Vencimento de Parcela",  cor:"#d97706", bg:"#fef3c7"},
+  {v:"notificacao",        l:"📬 Enviar Notificação",     cor:"#0f766e", bg:"#ccfbf1"},
+  {v:"outro",              l:"🔔 Outro",                  cor:"#64748b", bg:"#f1f5f9"},
+];
+const PRIOR = [
+  {v:"urgente", l:"🔴 Urgente"},
+  {v:"alta",    l:"🟠 Alta"},
+  {v:"normal",  l:"🟡 Normal"},
+  {v:"baixa",   l:"🔵 Baixa"},
+];
+
+function Lembretes({ devedores, credores, user }) {
+  const hoje = new Date().toISOString().slice(0,10);
+  const [lembretes, setLembretes]   = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mr_lembretes")||"[]"); } catch{ return []; }
+  });
+  const [modal, setModal]           = useState(false);
+  const [form, setForm]             = useState({...LEMBRETE_VAZIO, data_prometida:hoje});
+  const [filtroStatus, setFiltroStatus] = useState("pendente");
+  const [filtroPrior, setFiltroPrior]   = useState("");
+  const [search, setSearch]         = useState("");
+  const F = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  // Persistir lembretes no localStorage
+  function salvarLembretes(novos) {
+    setLembretes(novos);
+    try { localStorage.setItem("mr_lembretes", JSON.stringify(novos)); } catch(e){}
+  }
+
+  function salvar() {
+    if(!form.devedor_id) return alert("Selecione o devedor.");
+    if(!form.data_prometida) return alert("Informe a data.");
+    if(!form.descricao.trim()) return alert("Informe a descrição.");
+    const novo = {
+      ...form, id:Date.now(),
+      criado_em: new Date().toISOString(),
+      criado_por: user?.nome||"Sistema",
+      status:"pendente",
+    };
+    salvarLembretes([novo, ...lembretes]);
+    setForm({...LEMBRETE_VAZIO, data_prometida:hoje});
+    setModal(false);
+  }
+
+  function concluir(id) {
+    salvarLembretes(lembretes.map(l=>l.id!==id?l:{...l,status:"concluido",concluido_em:new Date().toISOString()}));
+  }
+  function cancelar(id) {
+    salvarLembretes(lembretes.map(l=>l.id!==id?l:{...l,status:"cancelado"}));
+  }
+  function reativar(id) {
+    salvarLembretes(lembretes.map(l=>l.id!==id?l:{...l,status:"pendente",concluido_em:null}));
+  }
+  function excluir(id) {
+    if(!window.confirm("Excluir este lembrete?")) return;
+    salvarLembretes(lembretes.filter(l=>l.id!==id));
+  }
+
+  // Classificar urgência por data
+  function urgencia(data) {
+    const diff = Math.ceil((new Date(data+"T12:00:00")-new Date())/86400000);
+    if(diff<0)  return {l:"VENCIDO",   cor:"#dc2626", bg:"#fee2e2"};
+    if(diff===0)return {l:"HOJE",      cor:"#c2410c", bg:"#ffedd5"};
+    if(diff<=2) return {l:`${diff}d`,  cor:"#dc2626", bg:"#fee2e2"};
+    if(diff<=7) return {l:`${diff}d`,  cor:"#d97706", bg:"#fef3c7"};
+    return {l:`${diff}d`, cor:"#64748b", bg:"#f1f5f9"};
+  }
+
+  // Filtros
+  const filtrados = lembretes.filter(l=>{
+    const dev = devedores.find(d=>String(d.id)===String(l.devedor_id));
+    const ok1 = !filtroStatus || l.status===filtroStatus;
+    const ok2 = !filtroPrior  || l.prioridade===filtroPrior;
+    const ok3 = !search ||
+      (dev?.nome||"").toLowerCase().includes(search.toLowerCase()) ||
+      (l.descricao||"").toLowerCase().includes(search.toLowerCase());
+    return ok1&&ok2&&ok3;
+  });
+
+  // KPIs
+  const pendentes  = lembretes.filter(l=>l.status==="pendente");
+  const vencidos   = pendentes.filter(l=>l.data_prometida<hoje);
+  const hoje_lem   = pendentes.filter(l=>l.data_prometida===hoje);
+  const proximos   = pendentes.filter(l=>l.data_prometida>hoje&&l.data_prometida<=new Date(Date.now()+7*86400000).toISOString().slice(0,10));
+
+  const tipoMap = Object.fromEntries(TIPOS_LEM.map(t=>[t.v,t]));
+  const priorOrd = {urgente:0,alta:1,normal:2,baixa:3};
+
+  // Ordenar: urgente > alta > data
+  const ordenados = [...filtrados].sort((a,b)=>{
+    if(a.status==="pendente"&&b.status!=="pendente") return -1;
+    if(b.status==="pendente"&&a.status!=="pendente") return 1;
+    const po = (priorOrd[a.prioridade]||2)-(priorOrd[b.prioridade]||2);
+    if(po!==0) return po;
+    return a.data_prometida.localeCompare(b.data_prometida);
+  });
+
+  return (
+    <div>
+      {/* Cabeçalho */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10}}>
+        <div>
+          <h2 style={{fontFamily:"Syne",fontWeight:800,fontSize:22,color:"#0f172a"}}>🔔 Lembretes e Alertas</h2>
+          <p style={{fontSize:13,color:"#64748b",marginTop:2}}>Controle de promessas de pagamento e retornos de cobrança</p>
+        </div>
+        <Btn onClick={()=>setModal(true)} color="#4f46e5">+ Novo Lembrete</Btn>
+      </div>
+
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        {[
+          {l:"🔴 Vencidos",    v:vencidos.length,   bg:"#fee2e2",cor:"#dc2626", sub:"precisam de ação imediata"},
+          {l:"🟠 Hoje",        v:hoje_lem.length,   bg:"#ffedd5",cor:"#c2410c", sub:"cobranças para hoje"},
+          {l:"🟡 Próximos 7d", v:proximos.length,   bg:"#fef3c7",cor:"#d97706", sub:"agendados esta semana"},
+          {l:"✅ Total Pend.",  v:pendentes.length,  bg:"#ede9fe",cor:"#7c3aed", sub:"lembretes ativos"},
+        ].map(k=>(
+          <div key={k.l} style={{background:k.bg,borderRadius:14,padding:"14px 16px",cursor:"pointer"}}
+            onClick={()=>{setFiltroStatus("pendente");setFiltroPrior("");}}>
+            <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
+            <p style={{fontFamily:"Syne",fontWeight:800,fontSize:28,color:k.cor}}>{k.v}</p>
+            <p style={{fontSize:10,color:k.cor,opacity:.7,marginTop:2}}>{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:10,marginBottom:14,alignItems:"end"}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Status</label>
+          <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todos</option>
+            <option value="pendente">⏳ Pendentes</option>
+            <option value="concluido">✅ Concluídos</option>
+            <option value="cancelado">❌ Cancelados</option>
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Prioridade</label>
+          <select value={filtroPrior} onChange={e=>setFiltroPrior(e.target.value)}
+            style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish"}}>
+            <option value="">Todas</option>
+            {PRIOR.map(p=><option key={p.v} value={p.v}>{p.l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Buscar</label>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Devedor ou descrição..."
+            style={{padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"Mulish",minWidth:200}}/>
+        </div>
+      </div>
+
+      {/* Lista */}
+      {ordenados.length===0&&(
+        <div style={{textAlign:"center",padding:48,background:"#fff",borderRadius:16,border:"1px solid #f1f5f9"}}>
+          <div style={{fontSize:48,marginBottom:12}}>🔔</div>
+          <p style={{fontWeight:700,color:"#0f172a",fontSize:15,marginBottom:6}}>Nenhum lembrete encontrado</p>
+          <p style={{color:"#94a3b8",fontSize:13}}>Crie um lembrete quando o cliente prometer pagar ou marcar retorno</p>
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {ordenados.map(l=>{
+          const dev  = devedores.find(d=>String(d.id)===String(l.devedor_id));
+          const tipo = tipoMap[l.tipo]||tipoMap.outro;
+          const urg  = urgencia(l.data_prometida);
+          const concluido = l.status==="concluido";
+          const cancelado = l.status==="cancelado";
+          const priorCor  = {urgente:"#dc2626",alta:"#c2410c",normal:"#d97706",baixa:"#64748b"}[l.prioridade]||"#64748b";
+
+          return(
+            <div key={l.id} style={{
+              background:"#fff", borderRadius:14, padding:16,
+              border:`1.5px solid ${concluido?"#dcfce7":cancelado?"#f1f5f9":l.data_prometida<hoje?"#fecaca":l.data_prometida===hoje?"#fed7aa":"#e2e8f0"}`,
+              opacity:concluido||cancelado?.75:1,
+              display:"flex",gap:14,alignItems:"flex-start",
+            }}>
+              {/* Barra lateral de prioridade */}
+              <div style={{width:4,borderRadius:99,background:concluido?"#22c55e":cancelado?"#94a3b8":priorCor,alignSelf:"stretch",flexShrink:0,minHeight:50}}/>
+
+              <div style={{flex:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8,marginBottom:8}}>
+                  <div>
+                    {/* Badges */}
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                      <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:tipo.bg,color:tipo.cor}}>{tipo.l}</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:urg.bg,color:urg.cor}}>
+                        {l.data_prometida<hoje?"⚠️ VENCIDO":l.data_prometida===hoje?"🔥 HOJE":l.hora?`${fmtDate(l.data_prometida)} ${l.hora}`:`📅 ${fmtDate(l.data_prometida)}`} {l.data_prometida>=hoje&&`(${urg.l})`}
+                      </span>
+                      {l.prioridade==="urgente"&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#fee2e2",color:"#dc2626"}}>🔴 URGENTE</span>}
+                      {l.prioridade==="alta"&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ffedd5",color:"#c2410c"}}>🟠 ALTA</span>}
+                      {concluido&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#dcfce7",color:"#15803d"}}>✅ Concluído</span>}
+                      {cancelado&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#f1f5f9",color:"#64748b"}}>❌ Cancelado</span>}
+                    </div>
+                    {/* Devedor e descrição */}
+                    <p style={{fontWeight:800,color:"#0f172a",fontSize:14,marginBottom:2}}>{dev?.nome||"Devedor não encontrado"}</p>
+                    <p style={{fontSize:13,color:"#475569"}}>{l.descricao}</p>
+                    {l.observacoes&&<p style={{fontSize:11,color:"#94a3b8",marginTop:4,fontStyle:"italic"}}>📝 {l.observacoes}</p>}
+                    <p style={{fontSize:10,color:"#94a3b8",marginTop:6}}>Criado por {l.criado_por} em {l.criado_em?new Date(l.criado_em).toLocaleDateString("pt-BR"):"-"}</p>
+                  </div>
+
+                  {/* Ações */}
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    {l.status==="pendente"&&(<>
+                      {dev?.telefone&&(
+                        <a href={`https://wa.me/55${dev.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(`Olá ${dev.nome?.split(" ")[0]}, conforme combinado, passando para lembrar do compromisso de ${fmtDate(l.data_prometida)}. ${l.descricao}`)}`}
+                          target="_blank" rel="noreferrer"
+                          style={{background:"#dcfce7",color:"#16a34a",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:4}}>
+                          📱 WA
+                        </a>
+                      )}
+                      <button onClick={()=>concluir(l.id)}
+                        style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                        ✅ Concluir
+                      </button>
+                      <button onClick={()=>cancelar(l.id)}
+                        style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>
+                        ✕
+                      </button>
+                    </>)}
+                    {(concluido||cancelado)&&(
+                      <button onClick={()=>reativar(l.id)}
+                        style={{background:"#ede9fe",color:"#7c3aed",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                        🔄 Reativar
+                      </button>
+                    )}
+                    <button onClick={()=>excluir(l.id)}
+                      style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"6px 8px",cursor:"pointer",fontSize:11}}>
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal novo lembrete */}
+      {modal&&(
+        <Modal title="🔔 Novo Lembrete de Cobrança" onClose={()=>setModal(false)}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+            {/* Tipo */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase"}}>Tipo de Lembrete</label>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {TIPOS_LEM.map(t=>(
+                  <button key={t.v} onClick={()=>F("tipo",t.v)}
+                    style={{padding:"9px 12px",border:`1.5px solid ${form.tipo===t.v?t.cor:"#e2e8f0"}`,borderRadius:10,background:form.tipo===t.v?t.bg:"#fff",color:form.tipo===t.v?t.cor:"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"Mulish",textAlign:"left"}}>
+                    {t.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Devedor */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Devedor *</label>
+              <select value={form.devedor_id} onChange={e=>F("devedor_id",e.target.value)}
+                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",fontFamily:"Mulish"}}>
+                <option value="">— Selecione o devedor —</option>
+                {devedores.map(d=><option key={d.id} value={d.id}>{d.nome}</option>)}
+              </select>
+            </div>
+
+            {/* Descrição */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Descrição *</label>
+              <input value={form.descricao} onChange={e=>F("descricao",e.target.value)}
+                placeholder="Ex: Cliente prometeu pagar R$ 500 no dia 15/04"
+                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish"}}/>
+            </div>
+
+            {/* Data e hora */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Data Prometida / Agendada *</label>
+                <input type="date" value={form.data_prometida} onChange={e=>F("data_prometida",e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #4f46e5",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Hora</label>
+                <input type="time" value={form.hora} onChange={e=>F("hora",e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+
+            {/* Prioridade */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase"}}>Prioridade</label>
+              <div style={{display:"flex",gap:8}}>
+                {PRIOR.map(p=>(
+                  <button key={p.v} onClick={()=>F("prioridade",p.v)}
+                    style={{flex:1,padding:"8px",border:`1.5px solid ${form.prioridade===p.v?"#4f46e5":"#e2e8f0"}`,borderRadius:9,background:form.prioridade===p.v?"#ede9fe":"#fff",color:form.prioridade===p.v?"#4f46e5":"#64748b",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"Mulish"}}>
+                    {p.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Observações */}
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Observações</label>
+              <textarea value={form.observacoes} onChange={e=>F("observacoes",e.target.value)}
+                placeholder="Detalhes adicionais sobre a promessa ou acordo verbal..."
+                rows={3} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"Mulish",resize:"vertical"}}/>
+            </div>
+
+            <div style={{display:"flex",gap:10,paddingTop:4}}>
+              <Btn onClick={salvar} color="#4f46e5">🔔 Salvar Lembrete</Btn>
+              <Btn onClick={()=>setModal(false)} outline color="#64748b">Cancelar</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 function Relatorios({ devedores, processos, andamentos, credores }) {
   const [abaRel, setAbaRel] = useState("geral"); // "geral" | "credor" | "contatos" | "despesas"
   const [credorSel, setCredorSel] = useState("");
@@ -3674,6 +4039,13 @@ export default function App() {
 
   useEffect(() => { if(user) carregarTudo(); }, [user, carregarTudo]);
 
+  // Listener para navegação via alerta do dashboard
+  useEffect(() => {
+    const handler = e => setTab(e.detail);
+    window.addEventListener("mr_goto", handler);
+    return () => window.removeEventListener("mr_goto", handler);
+  }, []);
+
   // Polling a cada 60s — mas PAUSA se houver modal aberto
   useEffect(() => {
     if(!user) return;
@@ -3693,6 +4065,7 @@ export default function App() {
     { id:"regua",      label:"Régua",      icon: I.regua },
     { id:"calculadora",label:"Calculadora",icon: I.calc  },
     { id:"relatorios", label:"Relatórios", icon: I.rel   },
+    { id:"lembretes",  label:"Lembretes",  icon: I.bell  },
   ];
 
   const PAGE = {
@@ -3703,6 +4076,7 @@ export default function App() {
     regua:       <Regua       processos={processos} devedores={devedores} regua={regua} setRegua={setRegua}/>,
     calculadora: <Calculadora devedores={devedores}/>,
     relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>,
+    lembretes:   <Lembretes   devedores={devedores} credores={credores} user={user}/>,
   };
 
   return (
