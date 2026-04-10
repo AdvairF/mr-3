@@ -31,7 +31,18 @@ const USERS = [
   { id:2, nome:"Pavel Andrey Rocha",    oab:"OAB/GO 29.214", email:"pavel@mrcobrancas.com.br",   senha:"mr2024",    role:"advogado" },
 ];
 // Carregar usuários extras cadastrados pelo admin
-function getExtraUsers(){ try{ return JSON.parse(localStorage.getItem("mr_users_extra")||"[]"); }catch{ return []; } }
+function getExtraUsers(){ 
+  try{ return JSON.parse(localStorage.getItem("mr_users_extra")||"[]"); }catch{ return []; } 
+}
+// Sincronização: busca do Supabase na inicialização e atualiza localStorage
+async function syncExtraUsers() {
+  try {
+    const res = await dbGet("usuarios_sistema","order=criado_em.asc");
+    if(Array.isArray(res)&&res.length>=0) {
+      localStorage.setItem("mr_users_extra", JSON.stringify(res));
+    }
+  } catch(e) { /* silencioso — usa localStorage como fallback */ }
+}
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -160,8 +171,10 @@ function Login({ onLogin }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleLogin() {
+  async function handleLogin() {
     setLoading(true); setErr("");
+    // Sincronizar usuários do Supabase antes de verificar
+    await syncExtraUsers().catch(()=>{});
     setTimeout(() => {
       const todosUsers = [...USERS, ...getExtraUsers()]; const user = todosUsers.find(u => u.email === email && u.senha === senha);
       if (user) onLogin(user);
@@ -5026,17 +5039,19 @@ function Regua({ devedores, credores, user }) {
   }
 
   function incluirDevedor(devId) {
-    const novos = [...new Set([...incluidos, devId])];
+    const sid = String(devId);
+    const novos = [...new Set([...incluidos.map(String), sid])];
     setIncluidos(novos); localStorage.setItem(inclKey, JSON.stringify(novos));
     // Remove dos excluídos se estava lá
-    const novoExcl = excluidos.filter(id=>id!==devId);
+    const novoExcl = excluidos.map(String).filter(id=>id!==sid);
     setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
   }
   function removerDaRegua(devId) {
     if(!window.confirm("Remover este devedor da régua?")) return;
-    const novoExcl = [...new Set([...excluidos, devId])];
+    const sid = String(devId);
+    const novoExcl = [...new Set([...excluidos.map(String), sid])];
     setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
-    const novoIncl = incluidos.filter(id=>id!==devId);
+    const novoIncl = incluidos.map(String).filter(id=>id!==sid);
     setIncluidos(novoIncl); localStorage.setItem(inclKey, JSON.stringify(novoIncl));
   }
   function reincluirDevedor(devId) {
@@ -5410,7 +5425,7 @@ function Regua({ devedores, credores, user }) {
             <div style={{maxHeight:300,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}}>
               {devedores
                 .filter(d=>!["pago_integral","irrecuperavel"].includes(d.status))
-                .filter(d=>!incluidos.includes(d.id)&&!incluidos.includes(String(d.id)))
+                .filter(d=>!incluidos.map(String).includes(String(d.id)))
                 .filter(d=>!buscaIncluir||(d.nome||"").toLowerCase().includes(buscaIncluir.toLowerCase()))
                 .map(dev=>{
                   const jaNaRegua = acoesPendentes.some(a=>a.dev.id===dev.id&&!a.manual);
@@ -5502,30 +5517,61 @@ const ADMIN_SENHA   = "010789wi";
 const USERS_KEY     = "mr_users_extra";
 
 function GestaoUsuarios({ user }) {
-  const [usuarios, setUsuarios] = useState(()=>{
-    try{ return JSON.parse(localStorage.getItem(USERS_KEY)||"[]"); }catch{ return []; }
-  });
+  const [usuarios, setUsuarios] = useState([]);
+  const [carregando, setCarregando] = useState(true);
   const [modal, setModal] = useState(false);
   const [form, setForm]   = useState({nome:"",email:"",senha:"",oab:"",role:"advogado"});
   const F = (k,v) => setForm(f=>({...f,[k]:v}));
   const [showSenhas, setShowSenhas] = useState({});
 
-  function salvar() {
+  // Carregar usuários do Supabase
+  async function carregarUsuarios() {
+    setCarregando(true);
+    try {
+      const res = await dbGet("usuarios_sistema","order=criado_em.asc");
+      setUsuarios(Array.isArray(res)?res:[]);
+      // Sincronizar no localStorage para o login funcionar offline/rápido
+      localStorage.setItem(USERS_KEY, JSON.stringify(Array.isArray(res)?res:[]));
+    } catch(e) {
+      // Fallback localStorage
+      try{ setUsuarios(JSON.parse(localStorage.getItem(USERS_KEY)||"[]")); }catch{}
+    }
+    setCarregando(false);
+  }
+  useEffect(()=>{ carregarUsuarios(); },[]);
+
+  async function salvar() {
     if(!form.nome.trim()||!form.email.trim()||!form.senha.trim()) return alert("Preencha nome, e-mail e senha.");
     if(form.senha.length<6) return alert("Senha deve ter no mínimo 6 caracteres.");
     const existe = [...USERS,...usuarios].find(u=>u.email===form.email);
     if(existe) return alert("Já existe um usuário com este e-mail.");
-    const novo = {...form, id:Date.now(), criado_em:new Date().toISOString(), criado_por:user.nome };
-    const novos = [...usuarios, novo];
-    setUsuarios(novos);
-    localStorage.setItem(USERS_KEY, JSON.stringify(novos));
-    setModal(false);
-    setForm({nome:"",email:"",senha:"",oab:"",role:"advogado"});
-    alert(`✅ Usuário "${novo.nome}" cadastrado! Ele já pode fazer login com as credenciais informadas.`);
+    const payload = { nome:form.nome, email:form.email, senha:form.senha, oab:form.oab||null, role:form.role, criado_por:user.nome, criado_em:new Date().toISOString() };
+    try {
+      const res = await dbInsert("usuarios_sistema", payload);
+      const novo = Array.isArray(res)?res[0]:res;
+      const novos = [...usuarios, novo||{...payload,id:Date.now()}];
+      setUsuarios(novos);
+      localStorage.setItem(USERS_KEY, JSON.stringify(novos));
+      setModal(false);
+      setForm({nome:"",email:"",senha:"",oab:"",role:"advogado"});
+      alert(`✅ Usuário "${form.nome}" cadastrado! Ele já pode fazer login em qualquer dispositivo.`);
+    } catch(e) {
+      // Fallback local se tabela não existir ainda
+      const novo = {...payload, id:Date.now()};
+      const novos = [...usuarios, novo];
+      setUsuarios(novos);
+      localStorage.setItem(USERS_KEY, JSON.stringify(novos));
+      setModal(false);
+      setForm({nome:"",email:"",senha:"",oab:"",role:"advogado"});
+      alert(`✅ Usuário "${form.nome}" cadastrado localmente!
+
+⚠️ Para funcionar em outros dispositivos, execute o SQL_USUARIOS.sql no Supabase.`);
+    }
   }
 
-  function excluir(id) {
-    if(!window.confirm("Excluir este usuário?")) return;
+  async function excluir(id) {
+    if(!window.confirm("Excluir este usuário? Ele perderá o acesso imediatamente.")) return;
+    try { await dbDelete("usuarios_sistema", id); } catch(e){}
     const novos = usuarios.filter(u=>u.id!==id);
     setUsuarios(novos);
     localStorage.setItem(USERS_KEY, JSON.stringify(novos));
