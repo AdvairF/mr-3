@@ -1770,9 +1770,8 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
     y += linhasObs.length*5+6;
   }
 
-  // ── 7. REGISTROS DE CONTATO (localStorage) ───────────────────
-  let registros = [];
-  try { registros = JSON.parse(localStorage.getItem(`mr_registros_${sel.id}`)||"[]"); } catch(e){}
+  // ── 7. REGISTROS DE CONTATO (Supabase)
+  const registros = sel._registros || [];
   if(registros.length>0) {
     y = checkPage(y, 20);
     y = cabecalhoSecao("7. REGISTROS DE CONTATO DETALHADOS", y);
@@ -2271,7 +2270,12 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               </select>
             </div>
             {sel.telefone&&<button onClick={()=>abrirWp(sel)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>📱 WhatsApp</button>}
-            <button onClick={()=>imprimirFicha(sel,credores,fmt,fmtDate)} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🖨️ Imprimir PDF</button>
+            <button onClick={async()=>{
+                  // Buscar registros do Supabase antes de imprimir
+                  let regs=[];
+                  try{ const r=await dbGet("registros_contato",`devedor_id=eq.${sel.id}&order=data.desc`); regs=Array.isArray(r)?r:[]; }catch{}
+                  imprimirFicha({...sel,_registros:regs},credores,fmt,fmtDate);
+                }} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🖨️ Imprimir PDF</button>
             <button onClick={()=>excluirDevedor(sel)} style={{background:"rgba(220,38,38,.3)",color:"#fca5a5",border:"1px solid rgba(220,38,38,.4)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🗑 Excluir</button>
           </div>
         </div>
@@ -5927,7 +5931,7 @@ export default function App() {
     if(!silencioso) setCarregando(true);
     try {
       const [devs, creds, procs, ands, reg, lems] = await Promise.all([
-        dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"), dbGet("regua"),
+        dbGet("devedores"), dbGet("credores"), dbGet("processos"), dbGet("andamentos"),
         dbGet("lembretes","order=data_prometida.asc"),
       ]);
       setLembretesList(Array.isArray(lems)?lems:[]);
