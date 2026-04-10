@@ -5005,7 +5005,10 @@ function Regua({ devedores, credores, user }) {
   const exclKey     = "mr_regua_excluidos"; // devedores excluídos manualmente
 
   const [etapas, setEtapas] = useState(()=>{
-    try{ return JSON.parse(localStorage.getItem(regKey)||"null")||ETAPAS_PADRAO; }catch{ return ETAPAS_PADRAO; }
+    try{
+      const saved = JSON.parse(localStorage.getItem(regKey)||"null");
+      return (Array.isArray(saved) && saved.length > 0) ? saved : ETAPAS_PADRAO;
+    }catch{ return ETAPAS_PADRAO; }
   });
   // IDs de devedores incluídos manualmente (que não têm dívida vencida automática)
   const [incluidos, setIncluidos] = useState(()=>{
@@ -5125,8 +5128,15 @@ function Regua({ devedores, credores, user }) {
     .filter(a=>!statusFiltro||a.dev.status===statusFiltro)
     .sort((a,b)=>b.diasAtraso-a.diasAtraso);
 
-  const st = (s,fs=11) => ({fontSize:fs,fontFamily:"'Plus Jakarta Sans',sans-serif",...s});
   const card = {background:"#fff",borderRadius:16,border:"1px solid #e2e8f0",padding:20,boxShadow:"0 1px 6px rgba(0,0,0,.05)"};
+
+  // Proteção — nunca deixar branco
+  if(!devedores) return (
+    <div style={{textAlign:"center",padding:48,color:"#94a3b8"}}>
+      <div style={{fontSize:32,marginBottom:8}}>📐</div>
+      <p>Carregando régua...</p>
+    </div>
+  );
 
   return (
     <div>
@@ -5768,11 +5778,12 @@ export default function App() {
     const handler = e => {
       if(typeof e.detail === "object" && e.detail.tab) {
         setTab(e.detail.tab);
-        // Emite evento secundário para o módulo destino aplicar filtro
         setTimeout(()=>window.dispatchEvent(new CustomEvent("mr_filtro", {detail: e.detail})), 50);
       } else {
         setTab(e.detail);
       }
+      // Scroll para o topo
+      setTimeout(()=>{ const main = document.querySelector('.mr-main'); if(main) main.scrollTop=0; }, 30);
     };
     window.addEventListener("mr_goto", handler);
     return () => window.removeEventListener("mr_goto", handler);
@@ -5801,16 +5812,19 @@ export default function App() {
     ...(isAdmin?[{ id:"usuarios", label:"Usuários", icon: I.users2, color:"#7c3aed", bg:"rgba(124,58,237,.18)" }]:[]),
   ];
 
-  const PAGE = {
-    dashboard:   <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList}/>,
-    devedores:   <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab}/>,
-    credores:    <Credores    credores={credores}   setCredores={setCredores}/>,
-    calculadora: <Calculadora devedores={devedores}/>,
-    relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>,
-    lembretes:   <Lembretes   devedores={devedores} credores={credores} user={user}/>,
-    regua:       <Regua       devedores={devedores} credores={credores} user={user}/>,
-    ...(isAdmin?{usuarios:<GestaoUsuarios user={user}/>}:{}),
-  };
+  function renderPage(t) {
+    switch(t) {
+      case "dashboard":   return <Dashboard   devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList}/>;
+      case "devedores":   return <Devedores   devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab}/>;
+      case "credores":    return <Credores    credores={credores} setCredores={setCredores}/>;
+      case "calculadora": return <Calculadora devedores={devedores}/>;
+      case "relatorios":  return <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>;
+      case "lembretes":   return <Lembretes   devedores={devedores} credores={credores} user={user}/>;
+      case "regua":       return <Regua       devedores={devedores} credores={credores} user={user}/>;
+      case "usuarios":    return isAdmin ? <GestaoUsuarios user={user}/> : null;
+      default:            return null;
+    }
+  }
 
   return (
     <div style={{ minHeight:"100vh",display:"flex",fontFamily:"'Plus Jakarta Sans',sans-serif",background:"#f1f5f9" }}>
@@ -5902,7 +5916,7 @@ export default function App() {
         {/* Nav */}
         <nav style={{ flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto",overflowX:"hidden" }}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); }}
+            <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); setTimeout(()=>{ const m=document.querySelector('.mr-main'); if(m)m.scrollTop=0; },30); }}
               className={`nav-btn${tab===n.id?" active":""}`}
               style={{ display:"flex",alignItems:"center",gap:12,padding:"9px 12px",borderRadius:13,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:600,background:tab===n.id?"rgba(255,255,255,.12)":"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.5)",width:"100%",position:"relative",outline:"none" }}>
               {/* Ícone com fundo colorido */}
@@ -5976,14 +5990,14 @@ export default function App() {
               <p style={{ color:"#475569",fontSize:15,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif" }}>Carregando dados...</p>
               <p style={{ color:"#94a3b8",fontSize:13 }}>Conectando ao Supabase</p>
             </div>
-          ) : <div className="page-content">{PAGE[tab]}</div>}
+          ) : <div key={tab} className="page-content">{renderPage(tab)}</div>}
         </div>
       </main>
 
       {/* ── BOTTOM NAV MOBILE ── */}
       <nav className="mr-bottomnav">
         {NAV.map(n=>(
-          <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); }}
+          <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); setTimeout(()=>{ const m=document.querySelector('.mr-main'); if(m)m.scrollTop=0; },30); }}
             className={tab===n.id?"active":""}>
             <div className="bn-icon" style={{ color:tab===n.id?n.color:"#94a3b8" }}>
               {n.icon}
