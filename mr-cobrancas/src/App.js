@@ -5059,39 +5059,54 @@ function Regua({ devedores, credores, user }) {
     setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
   }
 
-  // Calcular ações pendentes — automático (vencido) + incluídos manualmente
-  const acoesPendentes = [];
-  const idsJaAdicionados = new Set();
-
-  devedores.filter(d=>!["pago_integral","irrecuperavel"].includes(d.status)&&!excluidos.includes(d.id)).forEach(dev=>{
-    const dividas = dev.dividas||[];
-    if(!dividas.length) {
-      // Sem dívidas — só entra se incluído manualmente
-      if(incluidos.includes(dev.id)) {
-        const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
-        if(etapasAtivas[0]) {
-          idsJaAdicionados.add(dev.id);
-          acoesPendentes.push({ dev, diasAtraso:0, valorTotal:0, etapa:etapasAtivas[0], dataVenc:hoje, urgente:false, manual:true });
-        }
-      }
-      return;
-    }
-    const primeiraDiv = [...dividas].sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
-    const dataVenc = primeiraDiv?.data_vencimento||primeiraDiv?.data_origem;
-    if(!dataVenc) return;
-    const diasAtraso = Math.max(0, Math.ceil((new Date(hoje+"T12:00:00")-new Date(dataVenc+"T12:00:00"))/(1000*60*60*24)));
-    const valorTotal = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+  // Calcular ações pendentes — seguro com try/catch
+  const acoesPendentes = useMemo(()=>{
+    const lista = [];
     const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
-    // Auto: vencido há mais de 0 dias
-    const proximaEtapa = etapasAtivas.find(e=>e.dias<=diasAtraso && e.dias>=diasAtraso-7);
-    // Manual: incluído forçadamente, pega a etapa pelo dias de atraso ou primeira
-    const etapaManual = incluidos.includes(dev.id) ? (proximaEtapa||etapasAtivas.find(e=>e.dias<=Math.max(diasAtraso,1))||etapasAtivas[0]) : null;
-    const etapaFinal = proximaEtapa||etapaManual;
-    if(etapaFinal && (diasAtraso>0||incluidos.includes(dev.id))) {
-      idsJaAdicionados.add(dev.id);
-      acoesPendentes.push({ dev, diasAtraso, valorTotal, etapa:etapaFinal, dataVenc, urgente:diasAtraso>=60, manual:incluidos.includes(dev.id)&&!proximaEtapa });
-    }
-  });
+    if(!etapasAtivas.length) return lista;
+
+    const incStr = incluidos.map(String);
+    const exclStr = excluidos.map(String);
+
+    (devedores||[]).forEach(dev=>{
+      try {
+        if(!dev||["pago_integral","irrecuperavel"].includes(dev.status)) return;
+        if(exclStr.includes(String(dev.id))) return;
+
+        const dividas = dev.dividas||[];
+        const valorTotal = dividas.reduce((s,d)=>s+(parseFloat(d.valor_total)||0),0);
+        const isManual = incStr.includes(String(dev.id));
+
+        // Dívida sem parcelas/vencimento — só entra se manual
+        const divsComData = dividas.filter(d=>d.data_vencimento||d.data_origem);
+        if(!divsComData.length) {
+          if(isManual && etapasAtivas[0]) {
+            lista.push({ dev, diasAtraso:0, valorTotal, etapa:etapasAtivas[0], dataVenc:hoje, urgente:false, manual:true });
+          }
+          return;
+        }
+
+        const primeiraDiv = [...divsComData].sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
+        const dataVenc = primeiraDiv.data_vencimento||primeiraDiv.data_origem;
+        if(!dataVenc) return;
+
+        const msAtraso = new Date(hoje+"T12:00:00") - new Date(dataVenc+"T12:00:00");
+        const diasAtraso = Math.max(0, Math.ceil(msAtraso/(1000*60*60*24)));
+
+        const proximaEtapa = etapasAtivas.find(e=>e.dias<=diasAtraso && diasAtraso<e.dias+8);
+        const etapaFinal = proximaEtapa || (isManual ? etapasAtivas[0] : null);
+
+        if(etapaFinal && (diasAtraso>0 || isManual)) {
+          lista.push({
+            dev, diasAtraso, valorTotal, etapa:etapaFinal,
+            dataVenc, urgente:diasAtraso>=60,
+            manual:isManual && !proximaEtapa,
+          });
+        }
+      } catch(err) { /* ignora devedor com dado inválido */ }
+    });
+    return lista;
+  }, [devedores, etapas, incluidos, excluidos, hoje]);
 
   function renderMsg(template, dev, diasAtraso, valorTotal, dataVenc) {
     const cred = credores.find(c=>String(c.id)===String(dev.credor_id));
@@ -5184,7 +5199,7 @@ function Regua({ devedores, credores, user }) {
               </div>
             </div>
             {filtrados.length===0&&<p style={{color:"#94a3b8",textAlign:"center",padding:24,fontSize:13}}>Nenhum devedor com ação pendente. 🎉</p>}
-            {filtrados.map(({dev,diasAtraso,valorTotal,etapa,dataVenc,urgente})=>{
+            {filtrados.map(({dev,diasAtraso,valorTotal,etapa,dataVenc,urgente,manual})=>{
               const cat = CAT_CORES[etapa.categoria]||CAT_CORES.amigavel;
               const msg = renderMsg(etapa.mensagem,dev,diasAtraso,valorTotal,dataVenc);
               const isExp = expandMsg===dev.id;
@@ -5203,7 +5218,7 @@ function Regua({ devedores, credores, user }) {
                           {CANAL_ICONS[etapa.canal]} Etapa: {etapa.titulo}
                         </span>
                       </div>
-                      <p style={{fontSize:12,color:"#64748b"}}>Dívida: <b style={{color:"#dc2626"}}>R$ {valorTotal.toFixed(2).replace(".",",")}</b> · Venc: {fmtDate(dataVenc)}</p>
+                      <p style={{fontSize:12,color:"#64748b"}}>Dívida: <b style={{color:"#dc2626"}}>R$ {(valorTotal||0).toFixed(2).replace(".",",")}</b> · Venc: {fmtDate(dataVenc)}</p>
                     </div>
                     <div style={{display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
                       {etapa.canal==="whatsapp"&&dev.telefone&&(
@@ -5329,7 +5344,7 @@ function Regua({ devedores, credores, user }) {
                         <div>
                           <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:2}}>{dev.nome}</p>
                           <p style={{fontSize:11,color:"#64748b"}}>
-                            R$ {valorTotal.toFixed(2).replace(".",",")} · {diasAtraso} dias · {CANAL_ICONS[etapa.canal]} {etapa.titulo}
+                            R$ {(valorTotal||0).toFixed(2).replace(".",",")} · {diasAtraso} dias · {CANAL_ICONS[etapa.canal]} {etapa.titulo}
                           </p>
                         </div>
                         <div style={{display:"flex",gap:6}}>
@@ -5438,7 +5453,7 @@ function Regua({ devedores, credores, user }) {
                           <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{dev.nome}</p>
                           {jaNaRegua&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 6px",borderRadius:99,fontWeight:700}}>JÁ NA RÉGUA</span>}
                         </div>
-                        <p style={{fontSize:11,color:"#64748b",marginTop:1}}>{valor>0?`R$ ${valor.toFixed(2).replace(".",",")} · `:"Sem dívida · "}{dev.status}</p>
+                        <p style={{fontSize:11,color:"#64748b",marginTop:1}}>{valor>0?`R$ ${(valor||0).toFixed(2).replace(".",",")} · `:"Sem dívida · "}{dev.status}</p>
                       </div>
                       {!jaNaRegua&&(
                         <button onClick={()=>{ incluirDevedor(dev.id); }}
