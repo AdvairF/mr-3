@@ -5017,15 +5017,11 @@ const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moder
 
 function Regua({ devedores, credores, user }) {
   const HOJE = new Date().toISOString().slice(0,10);
-  const gl = k => { try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch{ return null; } };
-  const sl = (k,v) => { try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} };
-
-  // Etapas — localStorage (config local por usuário)
-  const [etapas,    setEtapas]    = useState(() => { const s=gl("mr_regua_etapas"); return Array.isArray(s)&&s.length>0?s:ETAPAS_PADRAO; });
-  // Incluídos/excluídos — Supabase (compartilhado entre todos)
+  // Tudo no Supabase — nada no localStorage
+  const [etapas,    setEtapas]    = useState(ETAPAS_PADRAO);
   const [incluidos, setIncluidos] = useState([]);
   const [excluidos, setExcluidos] = useState([]);
-  const [regLoaded, setRegLoaded] = useState(false);
+  const [regCarregada, setRegCarregada] = useState(false);
   const [aba,       setAba]       = useState("visao");
   const [filtro,    setFiltro]    = useState("");
   const [expandido, setExpandido] = useState(null);
@@ -5038,43 +5034,84 @@ function Regua({ devedores, credores, user }) {
   const [moverEtapa,    setMoverEtapa]    = useState(null);
   const [etapasForcadas,setEtapasForcadas]= useState({}); // {devId: etapaId} — posições manuais
 
-  // Carregar régua do Supabase
+  // Carregar TUDO do Supabase ao montar
   useEffect(()=>{
     async function loadRegua(){
+      // 1. Carregar etapas configuradas
+      try {
+        const resEt = await dbGet("regua_etapas","order=dias.asc");
+        const rowsEt = Array.isArray(resEt)?resEt:[];
+        if(rowsEt.length>0){
+          setEtapas(rowsEt.map(r=>({
+            id:r.id, dias:r.dias, canal:r.canal, titulo:r.titulo,
+            ativo:r.ativo!==false, categoria:r.categoria||"amigavel", mensagem:r.mensagem||""
+          })));
+        }
+        // Se não tiver nenhuma, salvar as padrão
+        else {
+          for(const et of ETAPAS_PADRAO){
+            await dbInsert("regua_etapas",{dias:et.dias,canal:et.canal,titulo:et.titulo,ativo:et.ativo,categoria:et.categoria,mensagem:et.mensagem}).catch(()=>{});
+          }
+          const resEt2 = await dbGet("regua_etapas","order=dias.asc");
+          const rowsEt2 = Array.isArray(resEt2)?resEt2:[];
+          if(rowsEt2.length>0) setEtapas(rowsEt2.map(r=>({id:r.id,dias:r.dias,canal:r.canal,titulo:r.titulo,ativo:r.ativo!==false,categoria:r.categoria||"amigavel",mensagem:r.mensagem||""})));
+        }
+      } catch(e){ /* mantém ETAPAS_PADRAO */ }
+
+      // 2. Carregar incluídos/excluídos
       try {
         const res = await dbGet("regua_cobranca","order=criado_em.asc");
         const rows = Array.isArray(res)?res:[];
         setIncluidos(rows.filter(r=>r.tipo==="incluido").map(r=>String(r.devedor_id)));
         setExcluidos(rows.filter(r=>r.tipo==="excluido").map(r=>String(r.devedor_id)));
-        // Carregar etapas forçadas (posições manuais)
         const forcado = {};
-        rows.filter(r=>r.tipo==="incluido"&&r.etapa_forcada).forEach(r=>{
-          forcado[String(r.devedor_id)] = r.etapa_forcada;
-        });
+        rows.filter(r=>r.tipo==="incluido"&&r.etapa_forcada).forEach(r=>{ forcado[String(r.devedor_id)] = r.etapa_forcada; });
         setEtapasForcadas(forcado);
-      } catch(e) {
-        // fallback localStorage
-        setIncluidos(gl("mr_regua_incluidos")||[]);
-        setExcluidos(gl("mr_regua_excluidos")||[]);
-      }
-      setRegLoaded(true);
+      } catch(e){}
+
+      setRegCarregada(true);
     }
     loadRegua();
   },[]);
 
   const E  = (k,v) => setEditando(e=>({...e,[k]:v}));
-  const se = v => { setEtapas(v); sl("mr_regua_etapas",v); };
 
-  async function salvarRegua(devId, tipo) {
+  // Salvar etapa no Supabase
+  async function se(novas) {
+    setEtapas(novas);
+    // Sincronizar com Supabase em background
     try {
-      // Remover registro anterior deste devedor
+      // Buscar IDs existentes
+      const existentes = await dbGet("regua_etapas","select=id");
+      const idsExist = new Set((Array.isArray(existentes)?existentes:[]).map(r=>r.id));
+      for(const et of novas){
+        const payload = {dias:et.dias,canal:et.canal,titulo:et.titulo,ativo:et.ativo,categoria:et.categoria,mensagem:et.mensagem};
+        if(typeof et.id==="number"&&et.id>1e10){
+          // ID gerado localmente (Date.now()) — inserir novo
+          const res = await dbInsert("regua_etapas", payload);
+          const novo = Array.isArray(res)?res[0]:res;
+          if(novo?.id) setEtapas(prev=>prev.map(e=>e.id===et.id?{...e,id:novo.id}:e));
+        } else if(idsExist.has(et.id)){
+          await dbUpdate("regua_etapas", et.id, payload).catch(()=>{});
+        }
+      }
+      // Deletar etapas removidas
+      for(const id of idsExist){
+        if(!novas.find(e=>e.id===id)) await dbDelete("regua_etapas",id).catch(()=>{});
+      }
+    } catch(e){}
+  }
+
+  async function salvarRegua(devId, tipo, etapaForcadaId) {
+    try {
       const existing = await dbGet("regua_cobranca",`devedor_id=eq.${devId}`);
-      const rows = Array.isArray(existing)?existing:[];
-      for(const r of rows) { try{ await dbDelete("regua_cobranca",r.id); }catch{} }
-      if(tipo) await dbInsert("regua_cobranca",{devedor_id:devId, tipo, criado_por:user?.nome||"Sistema"});
-    } catch(e) {
-      sl("mr_regua_"+tipo+"dos",[...(gl("mr_regua_"+tipo+"dos")||[]),String(devId)]);
-    }
+      for(const r of (Array.isArray(existing)?existing:[])) { try{ await dbDelete("regua_cobranca",r.id); }catch{} }
+      if(tipo) {
+        const payload = {devedor_id:devId, tipo, criado_por:user?.nome||"Sistema"};
+        if(etapaForcadaId) payload.etapa_forcada = etapaForcadaId;
+        await dbInsert("regua_cobranca", payload);
+      }
+    } catch(e){}
   }
 
   async function incluirDev(id) {
