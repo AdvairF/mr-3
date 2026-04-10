@@ -5033,7 +5033,9 @@ function Regua({ devedores, credores, user }) {
   const [isNova,    setIsNova]    = useState(false);
   const [modalAdd,  setModalAdd]  = useState(false);
   const [buscaAdd,  setBuscaAdd]  = useState("");
-  const [modalStatus, setModalStatus] = useState(null); // {dev, dias, valor, etapa, dataVenc}
+  const [modalStatus, setModalStatus] = useState(null);
+  const [filtroEtapa, setFiltroEtapa] = useState(null); // id da etapa selecionada na timeline
+  const [moverEtapa,  setMoverEtapa]  = useState(null); // {devId, etapaAtualId} — mover posição
 
   // Carregar régua do Supabase
   useEffect(()=>{
@@ -5154,6 +5156,7 @@ function Regua({ devedores, credores, user }) {
       if(filtro==="__atraso__") return p.dias>0;
       return (p.dev.nome||"").toLowerCase().includes(filtro.toLowerCase());
     })
+    .filter(p=>!filtroEtapa||p.etapa?.id===filtroEtapa)
     .sort((a,b)=>b.dias-a.dias);
 
   // ── Estilos ─────────────────────────────────────────────────
@@ -5204,22 +5207,53 @@ function Regua({ devedores, credores, user }) {
             ))}
           </div>
 
-          {/* Timeline */}
+          {/* Timeline geral clicável */}
           <div style={{...card,marginBottom:20,overflowX:"auto"}}>
-            <p style={{fontFamily:grot,fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14}}>📅 Linha do Tempo</p>
-            <div style={{display:"flex",alignItems:"center",gap:0,minWidth:"max-content"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+              <p style={{fontFamily:grot,fontWeight:700,fontSize:14,color:"#0f172a"}}>📅 Linha do Tempo</p>
+              {filtroEtapa&&(
+                <button onClick={()=>setFiltroEtapa(null)}
+                  style={{fontSize:11,fontWeight:700,padding:"4px 12px",borderRadius:99,background:"#fee2e2",color:"#dc2626",border:"none",cursor:"pointer",fontFamily:fam}}>
+                  ✕ Limpar filtro de etapa
+                </button>
+              )}
+            </div>
+            <div style={{display:"flex",alignItems:"flex-start",gap:0,minWidth:"max-content",paddingBottom:4}}>
               {etapasAtivas.map((e,i,arr)=>{
                 const cat=CAT_CORES[e.categoria]||CAT_CORES.amigavel;
+                const qtdNaEtapa = pendentes.filter(p=>p.etapa?.id===e.id).length;
+                const selecionada = filtroEtapa===e.id;
                 return (
-                  <div key={e.id} style={{display:"flex",alignItems:"center"}}>
-                    <div style={{textAlign:"center",width:90}}>
-                      <div style={{width:40,height:40,borderRadius:99,background:cat.bg,border:`2px solid ${cat.cor}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,margin:"0 auto 5px"}}>
+                  <div key={e.id} style={{display:"flex",alignItems:"flex-start"}}>
+                    <div
+                      onClick={()=>setFiltroEtapa(selecionada?null:e.id)}
+                      style={{textAlign:"center",width:100,cursor:"pointer",padding:"8px 4px",borderRadius:12,
+                        background:selecionada?cat.bg:"transparent",
+                        border:selecionada?`2px solid ${cat.cor}`:"2px solid transparent",
+                        transition:"all .15s",position:"relative"}}
+                      onMouseEnter={e2=>{if(!selecionada){e2.currentTarget.style.background=cat.bg+"88";}}}
+                      onMouseLeave={e2=>{if(!selecionada){e2.currentTarget.style.background="transparent";}}}
+                    >
+                      {/* Badge contador */}
+                      {qtdNaEtapa>0&&(
+                        <div style={{position:"absolute",top:2,right:8,width:18,height:18,borderRadius:99,background:cat.cor,color:"#fff",fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>
+                          {qtdNaEtapa}
+                        </div>
+                      )}
+                      <div style={{width:44,height:44,borderRadius:99,
+                        background:selecionada?cat.cor:qtdNaEtapa>0?cat.bg:"#f1f5f9",
+                        border:`2px solid ${selecionada||qtdNaEtapa>0?cat.cor:"#e2e8f0"}`,
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:20,margin:"0 auto 5px",
+                        boxShadow:selecionada?`0 4px 12px ${cat.cor}50`:"none",
+                        transition:"all .15s"}}>
                         {CANAL_ICONS[e.canal]||"📬"}
                       </div>
-                      <p style={{fontSize:10,fontWeight:700,color:cat.cor}}>Dia {e.dias}</p>
-                      <p style={{fontSize:9,color:"#64748b",lineHeight:1.2,maxWidth:80}}>{e.titulo}</p>
+                      <p style={{fontSize:10,fontWeight:700,color:selecionada||qtdNaEtapa>0?cat.cor:"#94a3b8"}}>Dia {e.dias}</p>
+                      <p style={{fontSize:9,color:selecionada?"#475569":qtdNaEtapa>0?"#64748b":"#94a3b8",lineHeight:1.2}}>{e.titulo}</p>
+                      {qtdNaEtapa>0&&<p style={{fontSize:8,fontWeight:700,color:cat.cor,marginTop:2}}>{qtdNaEtapa} devedor{qtdNaEtapa>1?"es":""}</p>}
                     </div>
-                    {i<arr.length-1&&<div style={{width:28,height:2,background:`${(CAT_CORES[e.categoria]||CAT_CORES.amigavel).cor}44`,flexShrink:0}}/>}
+                    {i<arr.length-1&&<div style={{width:20,height:2,background:`${(CAT_CORES[e.categoria]||CAT_CORES.amigavel).cor}33`,flexShrink:0,marginTop:30}}/>}
                   </div>
                 );
               })}
@@ -5294,35 +5328,55 @@ function Regua({ devedores, credores, user }) {
                     <div style={{marginTop:10}}>
                       {/* Linha do tempo de progresso do cliente */}
                       <div style={{background:"#f8fafc",borderRadius:12,padding:14,border:"1px solid #e2e8f0",marginBottom:10}}>
-                        <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".06em",marginBottom:12}}>📍 Posição na Régua</p>
-                        <div style={{position:"relative",paddingBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                          <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".06em"}}>📍 Posição na Régua</p>
+                          <p style={{fontSize:9,color:"#94a3b8"}}>Clique numa etapa para mover o devedor</p>
+                        </div>
+                        <div style={{position:"relative",paddingBottom:8,overflowX:"auto"}}>
                           {/* Linha base */}
-                          <div style={{position:"absolute",top:18,left:0,right:0,height:3,background:"#e2e8f0",borderRadius:99}}/>
-                          {/* Progresso preenchido até etapa atual */}
-                          <div style={{position:"absolute",top:18,left:0,height:3,borderRadius:99,background:"linear-gradient(90deg,#6366f1,#8b5cf6)",
-                            width:`${Math.min(100, etapasAtivas.length>1 ? (etapasAtivas.findIndex(e=>e.id===etapa?.id)+1)/etapasAtivas.length*100 : 100)}%`,
+                          <div style={{position:"absolute",top:20,left:0,right:0,height:3,background:"#e2e8f0",borderRadius:99,minWidth:"max-content"}}/>
+                          {/* Progresso */}
+                          <div style={{position:"absolute",top:20,left:0,height:3,borderRadius:99,background:"linear-gradient(90deg,#6366f1,#8b5cf6)",
+                            width:`${Math.min(100,etapasAtivas.length>1?(etapasAtivas.findIndex(e=>e.id===etapa?.id)+1)/etapasAtivas.length*100:100)}%`,
                             transition:"width .5s"}}/>
-                          {/* Pontos das etapas */}
-                          <div style={{display:"flex",justifyContent:"space-between",position:"relative"}}>
+                          {/* Pontos */}
+                          <div style={{display:"flex",justifyContent:"space-between",position:"relative",minWidth:"max-content",gap:4}}>
                             {etapasAtivas.map((et,ei)=>{
                               const cat2=CAT_CORES[et.categoria]||CAT_CORES.amigavel;
                               const isAtual = et.id===etapa?.id;
-                              const passou = etapasAtivas.findIndex(e=>e.id===etapa?.id) >= ei;
+                              const passou = etapasAtivas.findIndex(e=>e.id===etapa?.id)>=ei;
+                              const isMover = moverEtapa?.devId===dev.id&&moverEtapa?.novaEtapaId===et.id;
                               return(
-                                <div key={et.id} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
-                                  <div style={{width:isAtual?32:22,height:isAtual?32:22,borderRadius:99,
-                                    background:passou?cat2.cor:"#e2e8f0",
+                                <div key={et.id}
+                                  onClick={async ()=>{
+                                    if(isAtual) return;
+                                    if(!window.confirm(`Mover "${dev.nome}" para a etapa "${et.titulo}" (dia ${et.dias})?`)) return;
+                                    setMoverEtapa({devId:dev.id,novaEtapaId:et.id});
+                                    // Salva na tabela regua_cobranca com a etapa forçada
+                                    try{
+                                      const ex=await dbGet("regua_cobranca",`devedor_id=eq.${dev.id}`);
+                                      for(const r of (Array.isArray(ex)?ex:[])){ try{await dbDelete("regua_cobranca",r.id);}catch{} }
+                                      await dbInsert("regua_cobranca",{devedor_id:dev.id,tipo:"incluido",etapa_forcada:et.id,criado_por:user?.nome||"Sistema"});
+                                    }catch(e){}
+                                    // Atualiza localmente
+                                    setIncluidos(prev=>[...new Set([...prev.map(String),String(dev.id)])]);
+                                    setMoverEtapa(null);
+                                    alert(`✅ ${dev.nome} movido para "${et.titulo}"!`);
+                                  }}
+                                  style={{display:"flex",flexDirection:"column",alignItems:"center",width:80,flexShrink:0,cursor:isAtual?"default":"pointer",position:"relative",zIndex:1}}>
+                                  <div style={{width:isAtual?34:24,height:isAtual?34:24,borderRadius:99,
+                                    background:isMover?"#fef3c7":isAtual?cat2.cor:passou?cat2.cor+"bb":"#e2e8f0",
                                     border:`3px solid ${isAtual?cat2.cor:passou?cat2.cor+"88":"#e2e8f0"}`,
                                     display:"flex",alignItems:"center",justifyContent:"center",
                                     fontSize:isAtual?14:10,color:passou?"#fff":"#94a3b8",
-                                    transition:"all .3s",zIndex:1,position:"relative",
-                                    boxShadow:isAtual?`0 0 0 4px ${cat2.cor}30`:"none"}}>
-                                    {isAtual?"📍":passou?"✓":""}
+                                    transition:"all .2s",
+                                    boxShadow:isAtual?`0 0 0 4px ${cat2.cor}25`:"none"}}
+                                    onMouseEnter={e2=>{if(!isAtual)e2.currentTarget.style.transform="scale(1.2)";}}
+                                    onMouseLeave={e2=>{e2.currentTarget.style.transform="scale(1)";}}>
+                                    {isMover?"⏳":isAtual?"📍":passou?"✓":""}
                                   </div>
-                                  <p style={{fontSize:8,color:isAtual?cat2.cor:passou?"#64748b":"#94a3b8",fontWeight:isAtual?700:400,marginTop:5,textAlign:"center",maxWidth:60,lineHeight:1.2}}>
-                                    {et.titulo}
-                                  </p>
-                                  <p style={{fontSize:7,color:"#94a3b8",marginTop:1}}>dia {et.dias}</p>
+                                  <p style={{fontSize:7,color:isAtual?cat2.cor:passou?"#64748b":"#94a3b8",fontWeight:isAtual?700:400,marginTop:5,textAlign:"center",lineHeight:1.2}}>{et.titulo}</p>
+                                  <p style={{fontSize:6,color:"#94a3b8",marginTop:1}}>dia {et.dias}</p>
                                 </div>
                               );
                             })}
