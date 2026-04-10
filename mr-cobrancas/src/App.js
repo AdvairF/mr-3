@@ -5034,8 +5034,9 @@ function Regua({ devedores, credores, user }) {
   const [modalAdd,  setModalAdd]  = useState(false);
   const [buscaAdd,  setBuscaAdd]  = useState("");
   const [modalStatus, setModalStatus] = useState(null);
-  const [filtroEtapa, setFiltroEtapa] = useState(null); // id da etapa selecionada na timeline
-  const [moverEtapa,  setMoverEtapa]  = useState(null); // {devId, etapaAtualId} — mover posição
+  const [filtroEtapa,   setFiltroEtapa]   = useState(null);
+  const [moverEtapa,    setMoverEtapa]    = useState(null);
+  const [etapasForcadas,setEtapasForcadas]= useState({}); // {devId: etapaId} — posições manuais
 
   // Carregar régua do Supabase
   useEffect(()=>{
@@ -5045,6 +5046,12 @@ function Regua({ devedores, credores, user }) {
         const rows = Array.isArray(res)?res:[];
         setIncluidos(rows.filter(r=>r.tipo==="incluido").map(r=>String(r.devedor_id)));
         setExcluidos(rows.filter(r=>r.tipo==="excluido").map(r=>String(r.devedor_id)));
+        // Carregar etapas forçadas (posições manuais)
+        const forcado = {};
+        rows.filter(r=>r.tipo==="incluido"&&r.etapa_forcada).forEach(r=>{
+          forcado[String(r.devedor_id)] = r.etapa_forcada;
+        });
+        setEtapasForcadas(forcado);
       } catch(e) {
         // fallback localStorage
         setIncluidos(gl("mr_regua_incluidos")||[]);
@@ -5133,17 +5140,23 @@ function Regua({ devedores, credores, user }) {
       const divs = (dev.dividas||[]).filter(d=>!d._nominal&&(d.data_vencimento||d.data_origem));
       const valor = (dev.dividas||[]).reduce((s,d)=>s+(Number(d.valor_total)||0),0);
       if(!divs.length) {
-        if(isManual&&etapasAtivas[0]) pendentes.push({dev,dias:0,valor,etapa:etapasAtivas[0],dataVenc:HOJE,urgente:false,manual:true});
+        if(isManual&&etapasAtivas[0]) {
+          const etForcId2 = etapasForcadas[String(dev.id)];
+          const etForc2 = etForcId2 ? etapasAtivas.find(e=>e.id===etForcId2||String(e.id)===String(etForcId2)) : null;
+          pendentes.push({dev,dias:0,valor,etapa:etForc2||etapasAtivas[0],dataVenc:HOJE,urgente:false,manual:true,forcado:!!etForc2});
+        }
         return;
       }
       const prim = [...divs].sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
       const dataVenc = prim.data_vencimento||prim.data_origem||"";
       if(!dataVenc) return;
       const dias = Math.max(0,Math.ceil((new Date(HOJE+"T12:00:00")-new Date(dataVenc+"T12:00:00"))/864e5));
-      const etAuto = etapasAtivas.find(e=>dias>=e.dias&&dias<e.dias+8);
-      const etapa  = etAuto||(isManual?etapasAtivas[0]:null);
+      const etAuto   = etapasAtivas.find(e=>dias>=e.dias&&dias<e.dias+8);
+      const etForcId = etapasForcadas[String(dev.id)];
+      const etForc   = etForcId ? etapasAtivas.find(e=>e.id===etForcId||String(e.id)===String(etForcId)) : null;
+      const etapa    = etForc || etAuto || (isManual?etapasAtivas[0]:null);
       if(etapa&&(dias>0||isManual)) {
-        pendentes.push({dev,dias,valor,etapa,dataVenc,urgente:dias>=60,manual:isManual&&!etAuto});
+        pendentes.push({dev,dias,valor,etapa,dataVenc,urgente:dias>=60,manual:isManual&&!etAuto,forcado:!!etForc});
       }
     } catch(e) {}
   });
@@ -5352,16 +5365,16 @@ function Regua({ devedores, credores, user }) {
                                     if(isAtual) return;
                                     if(!window.confirm(`Mover "${dev.nome}" para a etapa "${et.titulo}" (dia ${et.dias})?`)) return;
                                     setMoverEtapa({devId:dev.id,novaEtapaId:et.id});
-                                    // Salva na tabela regua_cobranca com a etapa forçada
+                                    // Salva no Supabase
                                     try{
                                       const ex=await dbGet("regua_cobranca",`devedor_id=eq.${dev.id}`);
                                       for(const r of (Array.isArray(ex)?ex:[])){ try{await dbDelete("regua_cobranca",r.id);}catch{} }
                                       await dbInsert("regua_cobranca",{devedor_id:dev.id,tipo:"incluido",etapa_forcada:et.id,criado_por:user?.nome||"Sistema"});
                                     }catch(e){}
-                                    // Atualiza localmente
+                                    // ✅ Atualiza estado local IMEDIATAMENTE — sem precisar recarregar
+                                    setEtapasForcadas(prev=>({...prev,[String(dev.id)]:et.id}));
                                     setIncluidos(prev=>[...new Set([...prev.map(String),String(dev.id)])]);
                                     setMoverEtapa(null);
-                                    alert(`✅ ${dev.nome} movido para "${et.titulo}"!`);
                                   }}
                                   style={{display:"flex",flexDirection:"column",alignItems:"center",width:80,flexShrink:0,cursor:isAtual?"default":"pointer",position:"relative",zIndex:1}}>
                                   <div style={{width:isAtual?34:24,height:isAtual?34:24,borderRadius:99,
