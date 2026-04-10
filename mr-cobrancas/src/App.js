@@ -26,9 +26,7 @@ const dbDelete = (t, id)         => sb(t, "DELETE", null, `?id=eq.${id}`);
 
 // ─── USERS locais (auth simples) ─────────────────────────────
 const USERS = [
-  { id:1, nome:"Advair Freitas Vieira", oab:"OAB/GO 39.275", email:"advair@mrcobrancas.com.br", senha:"mr2024",     role:"admin" },
-  { id:1, nome:"Advair Freitas Vieira", oab:"OAB/GO 39.275", email:"advairvieira@gmail.com",     senha:"010789wi",  role:"admin" },
-  { id:2, nome:"Pavel Andrey Rocha",    oab:"OAB/GO 29.214", email:"pavel@mrcobrancas.com.br",   senha:"mr2024",    role:"advogado" },
+  { id:1, nome:"Advair Freitas Vieira", oab:"OAB/GO 39.275", email:"advairvieira@gmail.com", senha:"010789wi", role:"admin" },
 ];
 // Carregar usuários extras cadastrados pelo admin
 function getExtraUsers(){ 
@@ -4999,264 +4997,220 @@ const CANAL_ICONS = { whatsapp:"📱", email:"📧", sms:"💬", ligacao:"📞",
 const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moderado:{cor:"#d97706",bg:"#fef3c7",l:"Moderado"}, rigido:{cor:"#dc2626",bg:"#fee2e2",l:"Rígido"}, judicial:{cor:"#7c3aed",bg:"#ede9fe",l:"Judicial"} };
 
 function Regua({ devedores, credores, user }) {
-  const hoje = new Date().toISOString().slice(0,10);
-  const regKey      = "mr_regua_etapas";
-  const inclKey     = "mr_regua_incluidos"; // devedores incluídos manualmente
-  const exclKey     = "mr_regua_excluidos"; // devedores excluídos manualmente
+  const HOJE = new Date().toISOString().slice(0,10);
+  const K = { e:"mr_regua_etapas", i:"mr_regua_incluidos", x:"mr_regua_excluidos" };
+  const gl = k => { try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch{ return null; } };
+  const sl = (k,v) => { try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} };
 
-  const [etapas, setEtapas] = useState(()=>{
-    try{
-      const saved = JSON.parse(localStorage.getItem(regKey)||"null");
-      return (Array.isArray(saved) && saved.length > 0) ? saved : ETAPAS_PADRAO;
-    }catch{ return ETAPAS_PADRAO; }
-  });
-  // IDs de devedores incluídos manualmente (que não têm dívida vencida automática)
-  const [incluidos, setIncluidos] = useState(()=>{
-    try{ return JSON.parse(localStorage.getItem(inclKey)||"[]"); }catch{ return []; }
-  });
-  // IDs de devedores excluídos manualmente (removidos da régua)
-  const [excluidos, setExcluidos] = useState(()=>{
-    try{ return JSON.parse(localStorage.getItem(exclKey)||"[]"); }catch{ return []; }
-  });
+  const [etapas,    setEtapas]    = useState(() => { const s=gl(K.e); return Array.isArray(s)&&s.length>0?s:ETAPAS_PADRAO; });
+  const [incluidos, setIncluidos] = useState(() => gl(K.i)||[]);
+  const [excluidos, setExcluidos] = useState(() => gl(K.x)||[]);
+  const [aba,       setAba]       = useState("visao");
+  const [filtro,    setFiltro]    = useState("");
+  const [expandido, setExpandido] = useState(null);
+  const [editando,  setEditando]  = useState(null);
+  const [isNova,    setIsNova]    = useState(false);
+  const [modalAdd,  setModalAdd]  = useState(false);
+  const [buscaAdd,  setBuscaAdd]  = useState("");
 
-  const [modalEtapa, setModalEtapa] = useState(null);
-  const [modalIncluir, setModalIncluir] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState("visao");
-  const [devFiltro, setDevFiltro] = useState("");
-  const [expandMsg, setExpandMsg] = useState(null);
-  const [novaEtapa, setNovaEtapa] = useState(false);
-  const [buscaIncluir, setBuscaIncluir] = useState("");
-  const NE = (k,v) => setModalEtapa(e=>({...e,[k]:v}));
+  const E  = (k,v) => setEditando(e=>({...e,[k]:v}));
+  const se = v => { setEtapas(v);  sl(K.e,v); };
+  const si = v => { setIncluidos(v); sl(K.i,v); };
+  const sx = v => { setExcluidos(v); sl(K.x,v); };
 
-  function salvarEtapas(novos){ setEtapas(novos); localStorage.setItem(regKey,JSON.stringify(novos)); }
-  function toggleEtapa(id){ salvarEtapas(etapas.map(e=>e.id!==id?e:{...e,ativo:!e.ativo})); }
-  function excluirEtapa(id){ if(!window.confirm("Excluir esta etapa?"))return; salvarEtapas(etapas.filter(e=>e.id!==id)); }
-  function salvarEdicaoEtapa(){
-    if(!modalEtapa.titulo?.trim()||!modalEtapa.mensagem?.trim()) return alert("Preencha título e mensagem.");
-    if(novaEtapa){
-      salvarEtapas([...etapas,{...modalEtapa,id:Date.now()}].sort((a,b)=>a.dias-b.dias));
-    } else {
-      salvarEtapas(etapas.map(e=>e.id===modalEtapa.id?modalEtapa:e));
-    }
-    setModalEtapa(null); setNovaEtapa(false);
+  function incluirDev(id) {
+    const s=String(id);
+    si([...new Set([...incluidos.map(String),s])]);
+    sx(excluidos.map(String).filter(x=>x!==s));
   }
-
-  function incluirDevedor(devId) {
-    const sid = String(devId);
-    const novos = [...new Set([...incluidos.map(String), sid])];
-    setIncluidos(novos); localStorage.setItem(inclKey, JSON.stringify(novos));
-    // Remove dos excluídos se estava lá
-    const novoExcl = excluidos.map(String).filter(id=>id!==sid);
-    setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
-  }
-  function removerDaRegua(devId) {
+  function removerDev(id) {
     if(!window.confirm("Remover este devedor da régua?")) return;
-    const sid = String(devId);
-    const novoExcl = [...new Set([...excluidos.map(String), sid])];
-    setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
-    const novoIncl = incluidos.map(String).filter(id=>id!==sid);
-    setIncluidos(novoIncl); localStorage.setItem(inclKey, JSON.stringify(novoIncl));
+    const s=String(id);
+    sx([...new Set([...excluidos.map(String),s])]);
+    si(incluidos.map(String).filter(x=>x!==s));
   }
-  function reincluirDevedor(devId) {
-    const novoExcl = excluidos.filter(id=>id!==devId);
-    setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
+  function reincluir(id) { const s=String(id); sx(excluidos.map(String).filter(x=>x!==s)); }
+
+  function salvarEdicao() {
+    if(!editando?.titulo?.trim()||!editando?.mensagem?.trim()) return alert("Preencha título e mensagem.");
+    if(isNova) se([...etapas,{...editando,id:Date.now()}].sort((a,b)=>a.dias-b.dias));
+    else       se(etapas.map(e=>e.id===editando.id?editando:e));
+    setEditando(null); setIsNova(false);
   }
 
-  // Calcular ações pendentes — seguro com try/catch
-  const acoesPendentes = useMemo(()=>{
-    const lista = [];
-    const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
-    if(!etapasAtivas.length) return lista;
-
-    const incStr = incluidos.map(String);
-    const exclStr = excluidos.map(String);
-
-    (devedores||[]).forEach(dev=>{
-      try {
-        if(!dev||["pago_integral","irrecuperavel"].includes(dev.status)) return;
-        if(exclStr.includes(String(dev.id))) return;
-
-        const dividas = dev.dividas||[];
-        const valorTotal = dividas.reduce((s,d)=>s+(parseFloat(d.valor_total)||0),0);
-        const isManual = incStr.includes(String(dev.id));
-
-        // Dívida sem parcelas/vencimento — só entra se manual
-        const divsComData = dividas.filter(d=>d.data_vencimento||d.data_origem);
-        if(!divsComData.length) {
-          if(isManual && etapasAtivas[0]) {
-            lista.push({ dev, diasAtraso:0, valorTotal, etapa:etapasAtivas[0], dataVenc:hoje, urgente:false, manual:true });
-          }
-          return;
-        }
-
-        const primeiraDiv = [...divsComData].sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
-        const dataVenc = primeiraDiv.data_vencimento||primeiraDiv.data_origem;
-        if(!dataVenc) return;
-
-        const msAtraso = new Date(hoje+"T12:00:00") - new Date(dataVenc+"T12:00:00");
-        const diasAtraso = Math.max(0, Math.ceil(msAtraso/(1000*60*60*24)));
-
-        const proximaEtapa = etapasAtivas.find(e=>e.dias<=diasAtraso && diasAtraso<e.dias+8);
-        const etapaFinal = proximaEtapa || (isManual ? etapasAtivas[0] : null);
-
-        if(etapaFinal && (diasAtraso>0 || isManual)) {
-          lista.push({
-            dev, diasAtraso, valorTotal, etapa:etapaFinal,
-            dataVenc, urgente:diasAtraso>=60,
-            manual:isManual && !proximaEtapa,
-          });
-        }
-      } catch(err) { /* ignora devedor com dado inválido */ }
-    });
-    return lista;
-  }, [devedores, etapas, incluidos, excluidos, hoje]);
-
-  function renderMsg(template, dev, diasAtraso, valorTotal, dataVenc) {
-    const cred = credores.find(c=>String(c.id)===String(dev.credor_id));
-    return template
-      .replace(/\{\{nome\}\}/g, dev.nome?.split(" ")[0]||dev.nome||"cliente")
+  function renderMsg(tpl,dev,dias,valor,dataVenc) {
+    const cred=(credores||[]).find(c=>String(c.id)===String(dev.credor_id));
+    return (tpl||"")
+      .replace(/\{\{nome\}\}/g, (dev.nome||"").split(" ")[0]||"cliente")
       .replace(/\{\{nomeCompleto\}\}/g, dev.nome||"cliente")
-      .replace(/\{\{valor\}\}/g, `R$ ${valorTotal.toFixed(2).replace(".",",")}`)
-      .replace(/\{\{vencimento\}\}/g, fmtDate(dataVenc))
-      .replace(/\{\{diasAtraso\}\}/g, String(diasAtraso))
+      .replace(/\{\{valor\}\}/g, "R$ "+Number(valor||0).toFixed(2).replace(".",","))
+      .replace(/\{\{vencimento\}\}/g, fmtDate(dataVenc||""))
+      .replace(/\{\{diasAtraso\}\}/g, String(dias||0))
       .replace(/\{\{credor\}\}/g, cred?.nome||"")
       .replace(/\{\{data\}\}/g, new Date().toLocaleDateString("pt-BR"));
   }
 
-  const filtrados = acoesPendentes
-    .filter(a=>!devFiltro||a.dev.nome?.toLowerCase().includes(devFiltro.toLowerCase()))
-    .filter(a=>!statusFiltro||a.dev.status===statusFiltro)
-    .sort((a,b)=>b.diasAtraso-a.diasAtraso);
+  // ── Calcular pendentes ──────────────────────────────────────
+  const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
+  const incStr = (incluidos||[]).map(String);
+  const exclStr= (excluidos||[]).map(String);
+  const pendentes = [];
 
-  const card = {background:"#fff",borderRadius:16,border:"1px solid #e2e8f0",padding:20,boxShadow:"0 1px 6px rgba(0,0,0,.05)"};
+  (devedores||[]).forEach(dev=>{
+    try {
+      if(!dev?.id) return;
+      const st = dev.status||"";
+      if(st==="pago_integral"||st==="irrecuperavel") return;
+      if(exclStr.includes(String(dev.id))) return;
+      const isManual = incStr.includes(String(dev.id));
+      const divs = (dev.dividas||[]).filter(d=>!d._nominal&&(d.data_vencimento||d.data_origem));
+      const valor = (dev.dividas||[]).reduce((s,d)=>s+(Number(d.valor_total)||0),0);
+      if(!divs.length) {
+        if(isManual&&etapasAtivas[0]) pendentes.push({dev,dias:0,valor,etapa:etapasAtivas[0],dataVenc:HOJE,urgente:false,manual:true});
+        return;
+      }
+      const prim = [...divs].sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
+      const dataVenc = prim.data_vencimento||prim.data_origem||"";
+      if(!dataVenc) return;
+      const dias = Math.max(0,Math.ceil((new Date(HOJE+"T12:00:00")-new Date(dataVenc+"T12:00:00"))/864e5));
+      const etAuto = etapasAtivas.find(e=>dias>=e.dias&&dias<e.dias+8);
+      const etapa  = etAuto||(isManual?etapasAtivas[0]:null);
+      if(etapa&&(dias>0||isManual)) {
+        pendentes.push({dev,dias,valor,etapa,dataVenc,urgente:dias>=60,manual:isManual&&!etAuto});
+      }
+    } catch(e) {}
+  });
 
-  // Proteção — nunca deixar branco
-  if(!devedores) return (
-    <div style={{textAlign:"center",padding:48,color:"#94a3b8"}}>
-      <div style={{fontSize:32,marginBottom:8}}>📐</div>
-      <p>Carregando régua...</p>
-    </div>
-  );
+  const filtrados = pendentes
+    .filter(p=>!filtro||(p.dev.nome||"").toLowerCase().includes(filtro.toLowerCase()))
+    .sort((a,b)=>b.dias-a.dias);
+
+  // ── Estilos ─────────────────────────────────────────────────
+  const card  = {background:"#fff",borderRadius:16,border:"1px solid #e2e8f0",padding:20,boxShadow:"0 1px 6px rgba(0,0,0,.05)"};
+  const fam   = "'Plus Jakarta Sans',sans-serif";
+  const grot  = "'Space Grotesk',sans-serif";
 
   return (
     <div>
       {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:12}}>
         <div>
-          <h2 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:"#0f172a",letterSpacing:"-.5px"}}>📐 Régua de Cobrança</h2>
-          <p style={{fontSize:13,color:"#64748b",marginTop:2}}>Régua inteligente de comunicação com devedores por etapas de inadimplência</p>
+          <h2 style={{fontFamily:grot,fontWeight:700,fontSize:22,color:"#0f172a",letterSpacing:"-.5px",marginBottom:4}}>📐 Régua de Cobrança</h2>
+          <p style={{fontSize:13,color:"#64748b"}}>Régua inteligente de comunicação por etapas de inadimplência</p>
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button onClick={()=>setModalIncluir(true)}
-            style={{padding:"9px 16px",borderRadius:10,border:"none",background:"#0891b2",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={()=>setModalAdd(true)}
+            style={{padding:"9px 16px",borderRadius:10,border:"none",background:"#0891b2",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:fam}}>
             ➕ Incluir Devedor
           </button>
-          {["visao","config","acoes"].map(a=>(
-            <button key={a} onClick={()=>setAbaAtiva(a)}
-              style={{padding:"9px 16px",borderRadius:10,border:`1.5px solid ${abaAtiva===a?"#6366f1":"#e2e8f0"}`,background:abaAtiva===a?"#6366f1":"#fff",color:abaAtiva===a?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              {a==="visao"?"📊 Visão Geral":a==="config"?"⚙️ Configurar":"🎯 Ações do Dia"}
+          {[["visao","📊 Visão"],["config","⚙️ Etapas"],["acoes","🎯 Ações"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setAba(id)}
+              style={{padding:"9px 16px",borderRadius:10,border:`1.5px solid ${aba===id?"#6366f1":"#e2e8f0"}`,background:aba===id?"#6366f1":"#fff",color:aba===id?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:fam}}>
+              {label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── VISÃO GERAL ── */}
-      {abaAtiva==="visao"&&(
+      {/* ── ABA VISÃO ── */}
+      {aba==="visao"&&(
         <div>
           {/* KPIs */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
             {[
-              {l:"Ações Pendentes",  v:acoesPendentes.length,                                     ic:"🎯",cor:"#6366f1",bg:"#ede9fe"},
-              {l:"Urgentes (+60d)", v:acoesPendentes.filter(a=>a.urgente).length,                ic:"🔴",cor:"#dc2626",bg:"#fee2e2"},
-              {l:"WhatsApp Hoje",   v:acoesPendentes.filter(a=>a.etapa.canal==="whatsapp").length,ic:"📱",cor:"#16a34a",bg:"#dcfce7"},
-              {l:"Em Atraso",       v:acoesPendentes.length,                                     ic:"⏰",cor:"#d97706",bg:"#fef3c7"},
+              {l:"Pendentes",    v:pendentes.length,                                              c:"#6366f1",bg:"#ede9fe",ic:"🎯"},
+              {l:"Urgentes",     v:pendentes.filter(p=>p.urgente).length,                         c:"#dc2626",bg:"#fee2e2",ic:"🔴"},
+              {l:"Via WhatsApp", v:pendentes.filter(p=>p.etapa?.canal==="whatsapp").length,       c:"#16a34a",bg:"#dcfce7",ic:"📱"},
+              {l:"Em Atraso",    v:pendentes.filter(p=>p.dias>0).length,                          c:"#d97706",bg:"#fef3c7",ic:"⏰"},
             ].map(k=>(
-              <div key={k.l} style={{...card,background:k.bg,border:"none",cursor:"default"}}>
-                <p style={{fontSize:10,fontWeight:700,color:k.cor,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>{k.ic} {k.l}</p>
-                <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:28,color:k.cor}}>{k.v}</p>
+              <div key={k.l} style={{background:k.bg,borderRadius:16,padding:"16px 18px",border:"none",boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
+                <p style={{fontSize:10,fontWeight:700,color:k.c,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>{k.ic} {k.l}</p>
+                <p style={{fontFamily:grot,fontWeight:700,fontSize:28,color:k.c}}>{k.v}</p>
               </div>
             ))}
           </div>
 
-          {/* Timeline visual das etapas */}
-          <div style={{...card,marginBottom:20}}>
-            <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:16}}>📅 Linha do Tempo da Régua</p>
-            <div style={{display:"flex",alignItems:"center",overflowX:"auto",paddingBottom:8,gap:0}}>
-              {etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias).map((e,i,arr)=>{
-                const cat = CAT_CORES[e.categoria]||CAT_CORES.amigavel;
-                return(
-                  <div key={e.id} style={{display:"flex",alignItems:"center",flexShrink:0}}>
-                    <div style={{textAlign:"center",minWidth:90}}>
-                      <div style={{width:44,height:44,borderRadius:99,background:cat.bg,border:`2px solid ${cat.cor}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,margin:"0 auto 6px"}}>
+          {/* Timeline */}
+          <div style={{...card,marginBottom:20,overflowX:"auto"}}>
+            <p style={{fontFamily:grot,fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:14}}>📅 Linha do Tempo</p>
+            <div style={{display:"flex",alignItems:"center",gap:0,minWidth:"max-content"}}>
+              {etapasAtivas.map((e,i,arr)=>{
+                const cat=CAT_CORES[e.categoria]||CAT_CORES.amigavel;
+                return (
+                  <div key={e.id} style={{display:"flex",alignItems:"center"}}>
+                    <div style={{textAlign:"center",width:90}}>
+                      <div style={{width:40,height:40,borderRadius:99,background:cat.bg,border:`2px solid ${cat.cor}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,margin:"0 auto 5px"}}>
                         {CANAL_ICONS[e.canal]||"📬"}
                       </div>
                       <p style={{fontSize:10,fontWeight:700,color:cat.cor}}>Dia {e.dias}</p>
-                      <p style={{fontSize:9,color:"#64748b",maxWidth:80,lineHeight:1.2}}>{e.titulo}</p>
+                      <p style={{fontSize:9,color:"#64748b",lineHeight:1.2,maxWidth:80}}>{e.titulo}</p>
                     </div>
-                    {i<arr.length-1&&<div style={{height:2,width:32,background:"linear-gradient(90deg,"+cat.cor+","+( CAT_CORES[arr[i+1].categoria]||cat).cor+")",flexShrink:0,opacity:.4}}/>}
+                    {i<arr.length-1&&<div style={{width:28,height:2,background:`${(CAT_CORES[e.categoria]||CAT_CORES.amigavel).cor}44`,flexShrink:0}}/>}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Lista de devedores por etapa */}
+          {/* Lista */}
           <div style={{...card}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
-              <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:14,color:"#0f172a"}}>👥 Devedores na Régua ({acoesPendentes.length})</p>
-              <div style={{display:"flex",gap:8}}>
-                <input value={devFiltro} onChange={e=>setDevFiltro(e.target.value)} placeholder="Buscar devedor..." style={{padding:"7px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
-              </div>
+              <p style={{fontFamily:grot,fontWeight:700,fontSize:14,color:"#0f172a"}}>👥 Devedores na Régua ({filtrados.length})</p>
+              <input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar devedor..."
+                style={{padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:fam}}/>
             </div>
-            {filtrados.length===0&&<p style={{color:"#94a3b8",textAlign:"center",padding:24,fontSize:13}}>Nenhum devedor com ação pendente. 🎉</p>}
-            {filtrados.map(({dev,diasAtraso,valorTotal,etapa,dataVenc,urgente,manual})=>{
-              const cat = CAT_CORES[etapa.categoria]||CAT_CORES.amigavel;
-              const msg = renderMsg(etapa.mensagem,dev,diasAtraso,valorTotal,dataVenc);
-              const isExp = expandMsg===dev.id;
-              return(
-                <div key={dev.id} style={{borderRadius:12,padding:14,marginBottom:10,border:`1.5px solid ${urgente?"#fca5a5":manual?"#a5f3fc":"#e2e8f0"}`,background:urgente?"#fff7f7":manual?"#ecfeff99":"#fff"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:6}}>
-                        <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{dev.nome}</p>
+            {filtrados.length===0&&(
+              <p style={{color:"#94a3b8",textAlign:"center",padding:"24px 0",fontSize:13}}>🎉 Nenhum devedor com ação pendente.</p>
+            )}
+            {filtrados.map(({dev,dias,valor,etapa,dataVenc,urgente,manual})=>{
+              const cat = CAT_CORES[etapa?.categoria]||CAT_CORES.amigavel;
+              const msg = renderMsg(etapa?.mensagem||"",dev,dias,valor,dataVenc);
+              const exp = expandido===dev.id;
+              return (
+                <div key={dev.id} style={{borderRadius:12,padding:14,marginBottom:10,border:`1.5px solid ${urgente?"#fca5a5":manual?"#a5f3fc":"#e2e8f0"}`,background:urgente?"#fff7f7":manual?"#f0fdff":"#fff"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10,alignItems:"flex-start"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:5}}>
+                        <span style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{dev.nome}</span>
                         <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cat.bg,color:cat.cor}}>{cat.l}</span>
                         <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:urgente?"#fee2e2":"#f1f5f9",color:urgente?"#dc2626":"#64748b"}}>
-                          {urgente?"🔴":"⏰"} {diasAtraso>0?`${diasAtraso} dias em atraso`:"Incluído manualmente"}
+                          {urgente?"🔴":"⏰"} {dias>0?`${dias} dias`:"Incluído"}
                         </span>
-                        <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#6366f1",fontWeight:600}}>
-                         {manual&&<span style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ecfeff",color:"#0891b2",border:"1px solid #a5f3fc"}}>✋ Manual</span>}
-                          {CANAL_ICONS[etapa.canal]} Etapa: {etapa.titulo}
-                        </span>
+                        {manual&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:99,background:"#ecfeff",color:"#0891b2",border:"1px solid #a5f3fc"}}>✋ Manual</span>}
+                        <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#6366f1",fontWeight:600}}>{CANAL_ICONS[etapa?.canal]||""} {etapa?.titulo||""}</span>
                       </div>
-                      <p style={{fontSize:12,color:"#64748b"}}>Dívida: <b style={{color:"#dc2626"}}>R$ {(valorTotal||0).toFixed(2).replace(".",",")}</b> · Venc: {fmtDate(dataVenc)}</p>
+                      <p style={{fontSize:12,color:"#64748b"}}>
+                        Dívida: <b style={{color:"#dc2626"}}>R$ {Number(valor||0).toFixed(2).replace(".",",")}</b>
+                        {dataVenc?` · Venc: ${fmtDate(dataVenc)}`:""}
+                      </p>
                     </div>
-                    <div style={{display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
-                      {etapa.canal==="whatsapp"&&dev.telefone&&(
-                        <a href={`https://wa.me/55${dev.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`}
+                    <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
+                      {etapa?.canal==="whatsapp"&&dev.telefone&&(
+                        <a href={"https://wa.me/55"+(dev.telefone||"").replace(/\D/g,"")+"?text="+encodeURIComponent(msg)}
                           target="_blank" rel="noreferrer"
-                          style={{background:"#16a34a",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
+                          style={{background:"#16a34a",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
                           📱 WA
                         </a>
                       )}
-                      {etapa.canal==="email"&&dev.email&&(
-                        <a href={`mailto:${dev.email}?subject=${encodeURIComponent("Pendência - "+etapa.titulo)}&body=${encodeURIComponent(msg)}`}
-                          style={{background:"#2563eb",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
+                      {etapa?.canal==="email"&&dev.email&&(
+                        <a href={"mailto:"+dev.email+"?subject="+encodeURIComponent("Pendência - "+(etapa?.titulo||""))+"&body="+encodeURIComponent(msg)}
+                          style={{background:"#2563eb",color:"#fff",borderRadius:9,padding:"8px 12px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
                           📧
                         </a>
                       )}
-                      <button onClick={()=>setExpandMsg(isExp?null:dev.id)}
-                        style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:9,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                        {isExp?"▲":"▼ Msg"}
+                      <button onClick={()=>setExpandido(exp?null:dev.id)}
+                        style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:9,padding:"8px 11px",cursor:"pointer",fontSize:12,fontFamily:fam}}>
+                        {exp?"▲":"▼"}
                       </button>
-                      <button onClick={()=>removerDaRegua(dev.id)}
-                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:9,padding:"8px 10px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                        ✕ Remover
+                      <button onClick={()=>removerDev(dev.id)}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:9,padding:"8px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                        ✕
                       </button>
                     </div>
                   </div>
-                  {isExp&&(
-                    <div style={{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
-                      <p style={{fontSize:10,fontWeight:700,color:"#6366f1",marginBottom:6,textTransform:"uppercase"}}>Mensagem a ser enviada:</p>
+                  {exp&&(
+                    <div style={{marginTop:10,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
+                      <p style={{fontSize:10,fontWeight:700,color:"#6366f1",marginBottom:6,textTransform:"uppercase"}}>Mensagem:</p>
                       <p style={{fontSize:12,color:"#374151",whiteSpace:"pre-wrap",lineHeight:1.7}}>{msg}</p>
                     </div>
                   )}
@@ -5264,52 +5218,74 @@ function Regua({ devedores, credores, user }) {
               );
             })}
           </div>
+
+          {/* Excluídos */}
+          {excluidos.length>0&&(
+            <div style={{...card,marginTop:12,borderColor:"#fde68a",background:"#fefce8"}}>
+              <p style={{fontFamily:grot,fontWeight:700,fontSize:13,color:"#92400e",marginBottom:10}}>🚫 Excluídos ({excluidos.length})</p>
+              {(excluidos||[]).map(id=>{
+                const dev=(devedores||[]).find(d=>String(d.id)===String(id));
+                if(!dev) return null;
+                return (
+                  <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"#fff",borderRadius:9,marginBottom:6,border:"1px solid #fde68a"}}>
+                    <p style={{fontWeight:600,color:"#78350f",fontSize:13}}>{dev.nome}</p>
+                    <button onClick={()=>reincluir(id)}
+                      style={{background:"#0891b2",color:"#fff",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                      🔄 Reincluir
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── CONFIGURAR ETAPAS ── */}
-      {abaAtiva==="config"&&(
+      {/* ── ABA CONFIGURAR ── */}
+      {aba==="config"&&(
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <p style={{fontSize:13,color:"#64748b"}}>{etapas.filter(e=>e.ativo).length} etapas ativas de {etapas.length} configuradas</p>
+            <p style={{fontSize:13,color:"#64748b"}}>{etapasAtivas.length} de {etapas.length} etapas ativas</p>
             <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>{salvarEtapas(ETAPAS_PADRAO);}} style={{background:"#fff",border:"1.5px solid #e2e8f0",color:"#64748b",borderRadius:9,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🔄 Restaurar Padrão</button>
-              <button onClick={()=>{setNovaEtapa(true);setModalEtapa({id:Date.now(),dias:7,canal:"whatsapp",titulo:"",ativo:true,categoria:"amigavel",mensagem:"Olá, {{nome}}! "});}}
-                style={{background:"#6366f1",color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>+ Nova Etapa</button>
+              <button onClick={()=>se(ETAPAS_PADRAO)}
+                style={{background:"#fff",border:"1.5px solid #e2e8f0",color:"#64748b",borderRadius:9,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:fam}}>
+                🔄 Restaurar Padrão
+              </button>
+              <button onClick={()=>{setIsNova(true);setEditando({id:Date.now(),dias:7,canal:"whatsapp",titulo:"",ativo:true,categoria:"amigavel",mensagem:"Olá, {{nome}}! "});}}
+                style={{background:"#6366f1",color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:fam}}>
+                + Nova Etapa
+              </button>
             </div>
           </div>
-
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {etapas.sort((a,b)=>a.dias-b.dias).map(e=>{
-              const cat = CAT_CORES[e.categoria]||CAT_CORES.amigavel;
-              return(
-                <div key={e.id} style={{...card,opacity:e.ativo?1:.6,border:`1.5px solid ${e.ativo?"#e2e8f0":"#f1f5f9"}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-                    <div style={{display:"flex",gap:14,alignItems:"flex-start",flex:1}}>
-                      {/* Dias badge */}
-                      <div style={{width:56,height:56,borderRadius:14,background:cat.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0,border:`2px solid ${cat.cor}`}}>
-                        <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,color:cat.cor,lineHeight:1}}>{e.dias}</span>
+            {[...etapas].sort((a,b)=>a.dias-b.dias).map(e=>{
+              const cat=CAT_CORES[e.categoria]||CAT_CORES.amigavel;
+              return (
+                <div key={e.id} style={{...card,opacity:e.ativo?1:.55}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+                    <div style={{display:"flex",gap:12,alignItems:"center",flex:1,minWidth:0}}>
+                      <div style={{width:50,height:50,borderRadius:13,background:cat.bg,border:`2px solid ${cat.cor}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontFamily:grot,fontWeight:700,fontSize:14,color:cat.cor,lineHeight:1}}>{e.dias}</span>
                         <span style={{fontSize:8,color:cat.cor,opacity:.8}}>dias</span>
                       </div>
-                      <div style={{flex:1}}>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
-                          <span style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{e.titulo}</span>
-                          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cat.bg,color:cat.cor}}>{cat.l}</span>
-                          <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"#f1f5f9",color:"#475569"}}>{CANAL_ICONS[e.canal]} {e.canal}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:3}}>
+                          <span style={{fontWeight:700,color:"#0f172a",fontSize:13}}>{e.titulo}</span>
+                          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:cat.bg,color:cat.cor}}>{cat.l}</span>
+                          <span style={{fontSize:10,padding:"2px 7px",borderRadius:99,background:"#f1f5f9",color:"#475569"}}>{CANAL_ICONS[e.canal]||""} {e.canal}</span>
                         </div>
-                        <p style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,WebkitLineClamp:2,overflow:"hidden",display:"-webkit-box",WebkitBoxOrient:"vertical"}}>{e.mensagem}</p>
+                        <p style={{fontSize:11,color:"#94a3b8",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{e.mensagem}</p>
                       </div>
                     </div>
                     <div style={{display:"flex",gap:6,flexShrink:0}}>
-                      {/* Toggle ativo */}
-                      <button onClick={()=>toggleEtapa(e.id)}
-                        style={{background:e.ativo?"#dcfce7":"#f1f5f9",color:e.ativo?"#16a34a":"#94a3b8",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                      <button onClick={()=>se(etapas.map(x=>x.id!==e.id?x:{...x,ativo:!x.ativo}))}
+                        style={{background:e.ativo?"#dcfce7":"#f1f5f9",color:e.ativo?"#16a34a":"#94a3b8",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:fam}}>
                         {e.ativo?"✓ Ativa":"○ Inativa"}
                       </button>
-                      <button onClick={()=>{setNovaEtapa(false);setModalEtapa({...e});}}
-                        style={{background:"#ede9fe",color:"#6366f1",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>✏️ Editar</button>
-                      <button onClick={()=>excluirEtapa(e.id)}
-                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>🗑</button>
+                      <button onClick={()=>{setIsNova(false);setEditando({...e});}}
+                        style={{background:"#ede9fe",color:"#6366f1",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>✏️</button>
+                      <button onClick={()=>{if(!window.confirm("Excluir?"))return;se(etapas.filter(x=>x.id!==e.id));}}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"6px 9px",cursor:"pointer",fontSize:11}}>🗑</button>
                     </div>
                   </div>
                 </div>
@@ -5319,57 +5295,47 @@ function Regua({ devedores, credores, user }) {
         </div>
       )}
 
-      {/* ── AÇÕES DO DIA ── */}
-      {abaAtiva==="acoes"&&(
+      {/* ── ABA AÇÕES DO DIA ── */}
+      {aba==="acoes"&&(
         <div>
           <div style={{...card,marginBottom:16,background:"linear-gradient(135deg,#ede9fe,#fce7f3)",border:"none"}}>
-            <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:14,color:"#6366f1",marginBottom:4}}>🎯 Plano de Ação do Dia — {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
-            <p style={{fontSize:12,color:"#64748b"}}>{filtrados.length} devedor{filtrados.length!==1?"es":""} aguardando ação hoje</p>
+            <p style={{fontFamily:grot,fontWeight:700,fontSize:14,color:"#6366f1",marginBottom:4}}>🎯 Ações do Dia — {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
+            <p style={{fontSize:12,color:"#64748b"}}>{filtrados.length} devedor{filtrados.length!==1?"es":""} aguardando</p>
           </div>
-
           {filtrados.length===0&&(
-            <div style={{textAlign:"center",padding:48,...card}}>
-              <div style={{fontSize:48,marginBottom:12}}>🎉</div>
-              <p style={{fontWeight:700,color:"#16a34a",fontSize:16}}>Parabéns! Nenhuma ação pendente.</p>
-              <p style={{color:"#94a3b8",fontSize:13,marginTop:6}}>Todos os devedores estão dentro do prazo ou já foram contatados.</p>
+            <div style={{...card,textAlign:"center",padding:48}}>
+              <p style={{fontSize:40,marginBottom:12}}>🎉</p>
+              <p style={{fontWeight:700,color:"#16a34a",fontSize:16}}>Nenhuma ação pendente!</p>
             </div>
           )}
-
-          {/* Agrupar por categoria */}
-          {["judicial","rigido","moderado","amigavel"].map(cat=>{
-            const grupo = filtrados.filter(a=>a.etapa.categoria===cat);
+          {["judicial","rigido","moderado","amigavel"].map(catKey=>{
+            const grupo=filtrados.filter(p=>p.etapa?.categoria===catKey);
             if(!grupo.length) return null;
-            const cc = CAT_CORES[cat];
-            return(
-              <div key={cat} style={{marginBottom:20}}>
+            const cc=CAT_CORES[catKey];
+            return (
+              <div key={catKey} style={{marginBottom:20}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                  <div style={{width:12,height:12,borderRadius:99,background:cc.cor}}/>
-                  <p style={{fontWeight:700,color:cc.cor,fontSize:13}}>{cc.l} — {grupo.length} devedor{grupo.length!==1?"es":""}</p>
+                  <div style={{width:10,height:10,borderRadius:99,background:cc.cor}}/>
+                  <p style={{fontWeight:700,color:cc.cor,fontSize:13}}>{cc.l} — {grupo.length}</p>
                 </div>
-                {grupo.map(({dev,diasAtraso,valorTotal,etapa,dataVenc})=>{
-                  const msg = renderMsg(etapa.mensagem,dev,diasAtraso,valorTotal,dataVenc);
-                  return(
+                {grupo.map(({dev,dias,valor,etapa,dataVenc})=>{
+                  const msg=renderMsg(etapa?.mensagem||"",dev,dias,valor,dataVenc);
+                  return (
                     <div key={dev.id} style={{...card,marginBottom:8,borderLeft:`4px solid ${cc.cor}`}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
                         <div>
                           <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:2}}>{dev.nome}</p>
-                          <p style={{fontSize:11,color:"#64748b"}}>
-                            R$ {(valorTotal||0).toFixed(2).replace(".",",")} · {diasAtraso} dias · {CANAL_ICONS[etapa.canal]} {etapa.titulo}
-                          </p>
+                          <p style={{fontSize:11,color:"#64748b"}}>R$ {Number(valor||0).toFixed(2).replace(".",",")} · {dias}d · {CANAL_ICONS[etapa?.canal]||""} {etapa?.titulo||""}</p>
                         </div>
                         <div style={{display:"flex",gap:6}}>
-                          {etapa.canal==="whatsapp"&&dev.telefone&&(
-                            <a href={`https://wa.me/55${dev.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`}
+                          {etapa?.canal==="whatsapp"&&dev.telefone&&(
+                            <a href={"https://wa.me/55"+(dev.telefone||"").replace(/\D/g,"")+"?text="+encodeURIComponent(msg)}
                               target="_blank" rel="noreferrer"
-                              style={{background:"#16a34a",color:"#fff",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
-                              📱 WhatsApp
-                            </a>
+                              style={{background:"#16a34a",color:"#fff",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>📱 WA</a>
                           )}
-                          {etapa.canal==="email"&&dev.email&&(
-                            <a href={`mailto:${dev.email}?subject=${encodeURIComponent("Pendência - "+etapa.titulo)}&body=${encodeURIComponent(msg)}`}
-                              style={{background:"#2563eb",color:"#fff",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
-                              📧 E-mail
-                            </a>
+                          {etapa?.canal==="email"&&dev.email&&(
+                            <a href={"mailto:"+dev.email+"?subject="+encodeURIComponent("Pendência - "+(etapa?.titulo||""))+"&body="+encodeURIComponent(msg)}
+                              style={{background:"#2563eb",color:"#fff",borderRadius:8,padding:"7px 12px",fontSize:12,fontWeight:700,textDecoration:"none"}}>📧</a>
                           )}
                         </div>
                       </div>
@@ -5382,92 +5348,47 @@ function Regua({ devedores, credores, user }) {
         </div>
       )}
 
-      {/* Seção de devedores excluídos da régua */}
-      {abaAtiva==="visao"&&excluidos.length>0&&(
-        <div style={{background:"#fff",borderRadius:14,padding:16,border:"1.5px solid #fde68a",marginTop:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:13,color:"#92400e"}}>🚫 Excluídos da Régua ({excluidos.length})</p>
-            <span style={{fontSize:11,color:"#94a3b8"}}>Clique em Reincluir para reativar</span>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {excluidos.map(id=>{
-              const dev = devedores.find(d=>d.id===id||String(d.id)===String(id));
-              if(!dev) return null;
-              return(
-                <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"#fefce8",borderRadius:10,border:"1px solid #fde68a"}}>
-                  <div>
-                    <p style={{fontWeight:600,color:"#78350f",fontSize:13}}>{dev.nome}</p>
-                    <p style={{fontSize:11,color:"#92400e",marginTop:2}}>Removido manualmente da régua</p>
-                  </div>
-                  <button onClick={()=>reincluirDevedor(id)}
-                    style={{background:"#0891b2",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                    🔄 Reincluir
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Modal incluir devedor manualmente */}
-      {modalIncluir&&(
-        <Modal title="➕ Incluir Devedor na Régua" onClose={()=>{setModalIncluir(false);setBuscaIncluir("");}}>
+      {/* Modal incluir devedor */}
+      {modalAdd&&(
+        <Modal title="➕ Incluir Devedor na Régua" onClose={()=>{setModalAdd(false);setBuscaAdd("");}}>
           <div>
-            <p style={{fontSize:13,color:"#64748b",marginBottom:12}}>
-              Selecione devedores que ainda não estão na régua automática para incluí-los manualmente.
-            </p>
-            <input value={buscaIncluir} onChange={e=>setBuscaIncluir(e.target.value)}
-              placeholder="Buscar por nome..." autoFocus
-              style={{width:"100%",padding:"10px 14px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12}}/>
-
-            {/* Devedores já na régua */}
-            {incluidos.length>0&&(
+            <p style={{fontSize:13,color:"#64748b",marginBottom:12}}>Inclua devedores manualmente na régua de cobrança.</p>
+            <input value={buscaAdd} onChange={e=>setBuscaAdd(e.target.value)} placeholder="Buscar por nome..." autoFocus
+              style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:fam,marginBottom:12}}/>
+            {incStr.length>0&&(
               <div style={{marginBottom:12}}>
-                <p style={{fontSize:11,fontWeight:700,color:"#0891b2",textTransform:"uppercase",marginBottom:6}}>✅ Incluídos manualmente</p>
-                {incluidos.map(id=>{
-                  const dev=devedores.find(d=>String(d.id)===String(id)||d.id===id);
-                  if(!dev)return null;
-                  const dividas=dev.dividas||[];
-                  const valor=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
-                  return(
-                    <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#ecfeff",borderRadius:10,marginBottom:6,border:"1px solid #a5f3fc"}}>
-                      <div>
-                        <p style={{fontWeight:600,color:"#0e7490",fontSize:13}}>{dev.nome}</p>
-                        <p style={{fontSize:11,color:"#64748b"}}>{valor>0?`R$ ${valor.toFixed(2).replace(".",",")}`:""} · {dev.status}</p>
-                      </div>
-                      <button onClick={()=>removerDaRegua(dev.id)}
-                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>
-                        ✕ Remover
-                      </button>
+                <p style={{fontSize:11,fontWeight:700,color:"#0891b2",textTransform:"uppercase",marginBottom:6}}>✅ Incluídos</p>
+                {incStr.map(id=>{
+                  const dev=(devedores||[]).find(d=>String(d.id)===id);
+                  if(!dev) return null;
+                  return (
+                    <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"#ecfeff",borderRadius:9,marginBottom:5,border:"1px solid #a5f3fc"}}>
+                      <p style={{fontWeight:600,color:"#0e7490",fontSize:13}}>{dev.nome}</p>
+                      <button onClick={()=>removerDev(dev.id)} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>✕ Remover</button>
                     </div>
                   );
                 })}
               </div>
             )}
-
-            <p style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:8}}>📋 Disponíveis para incluir</p>
-            <div style={{maxHeight:300,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}}>
-              {devedores
-                .filter(d=>!["pago_integral","irrecuperavel"].includes(d.status))
-                .filter(d=>!incluidos.map(String).includes(String(d.id)))
-                .filter(d=>!buscaIncluir||(d.nome||"").toLowerCase().includes(buscaIncluir.toLowerCase()))
+            <p style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:8}}>Disponíveis</p>
+            <div style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
+              {(devedores||[])
+                .filter(d=>!["pago_integral","irrecuperavel"].includes(d.status||""))
+                .filter(d=>!incStr.includes(String(d.id)))
+                .filter(d=>!buscaAdd||(d.nome||"").toLowerCase().includes(buscaAdd.toLowerCase()))
                 .map(dev=>{
-                  const jaNaRegua = acoesPendentes.some(a=>a.dev.id===dev.id&&!a.manual);
-                  const dividas=dev.dividas||[];
-                  const valor=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
-                  return(
-                    <div key={dev.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:jaNaRegua?"#f8fafc":"#fff",borderRadius:10,border:`1px solid ${jaNaRegua?"#e2e8f0":"#f1f5f9"}`}}>
+                  const jaAuto=pendentes.some(p=>String(p.dev.id)===String(dev.id)&&!p.manual);
+                  return (
+                    <div key={dev.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:jaAuto?"#f8fafc":"#fff",borderRadius:9,border:"1px solid #f1f5f9"}}>
                       <div>
-                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                          <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{dev.nome}</p>
-                          {jaNaRegua&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 6px",borderRadius:99,fontWeight:700}}>JÁ NA RÉGUA</span>}
-                        </div>
-                        <p style={{fontSize:11,color:"#64748b",marginTop:1}}>{valor>0?`R$ ${(valor||0).toFixed(2).replace(".",",")} · `:"Sem dívida · "}{dev.status}</p>
+                        <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{dev.nome}
+                          {jaAuto&&<span style={{marginLeft:6,fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 6px",borderRadius:99,fontWeight:700}}>NA RÉGUA</span>}
+                        </p>
+                        <p style={{fontSize:11,color:"#64748b"}}>{dev.status}</p>
                       </div>
-                      {!jaNaRegua&&(
-                        <button onClick={()=>{ incluirDevedor(dev.id); }}
-                          style={{background:"#0891b2",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                      {!jaAuto&&(
+                        <button onClick={()=>incluirDev(dev.id)}
+                          style={{background:"#0891b2",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:fam}}>
                           + Incluir
                         </button>
                       )}
@@ -5475,56 +5396,52 @@ function Regua({ devedores, credores, user }) {
                   );
                 })}
             </div>
-            <div style={{marginTop:16}}>
-              <Btn onClick={()=>{setModalIncluir(false);setBuscaIncluir("");}} color="#6366f1">✅ Pronto</Btn>
+            <div style={{marginTop:14}}>
+              <Btn onClick={()=>{setModalAdd(false);setBuscaAdd("");}} color="#6366f1">✅ Pronto</Btn>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Modal edição de etapa */}
-      {modalEtapa&&(
-        <Modal title={novaEtapa?"Nova Etapa":"Editar Etapa"} onClose={()=>{setModalEtapa(null);setNovaEtapa(false);}}>
+      {/* Modal editar etapa */}
+      {editando&&(
+        <Modal title={isNova?"Nova Etapa":"Editar Etapa"} onClose={()=>{setEditando(null);setIsNova(false);}}>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Título da Etapa</label>
-                <input value={modalEtapa.titulo||""} onChange={e=>NE("titulo",e.target.value)}
-                  placeholder="Ex: 1º Lembrete Amigável"
-                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Título *</label>
+                <input value={editando.titulo||""} onChange={e=>E("titulo",e.target.value)} placeholder="Ex: 1º Lembrete"
+                  style={{width:"100%",padding:"9px 11px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:fam}}/>
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Disparar no dia (de atraso)</label>
-                <input type="number" min="0" value={modalEtapa.dias||0} onChange={e=>NE("dias",parseInt(e.target.value)||0)}
-                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+                <input type="number" min="0" value={editando.dias||0} onChange={e=>E("dias",parseInt(e.target.value)||0)}
+                  style={{width:"100%",padding:"9px 11px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
               </div>
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Canal</label>
-                <select value={modalEtapa.canal||"whatsapp"} onChange={e=>NE("canal",e.target.value)}
-                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                  {[["whatsapp","📱 WhatsApp"],["email","📧 E-mail"],["sms","💬 SMS"],["ligacao","📞 Ligação"],["sistema","⚙️ Alerta Sistema"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                <select value={editando.canal||"whatsapp"} onChange={e=>E("canal",e.target.value)}
+                  style={{width:"100%",padding:"9px 11px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:fam}}>
+                  {[["whatsapp","📱 WhatsApp"],["email","📧 E-mail"],["sms","💬 SMS"],["ligacao","📞 Ligação"],["sistema","⚙️ Sistema"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Categoria / Tom</label>
-                <select value={modalEtapa.categoria||"amigavel"} onChange={e=>NE("categoria",e.target.value)}
-                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Tom</label>
+                <select value={editando.categoria||"amigavel"} onChange={e=>E("categoria",e.target.value)}
+                  style={{width:"100%",padding:"9px 11px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:fam}}>
                   {Object.entries(CAT_CORES).map(([v,{l}])=><option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
             </div>
             <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Mensagem</label>
-              <div style={{fontSize:10,color:"#94a3b8",marginBottom:6}}>
-                Variáveis: <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{nome}}"}</code> <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{valor}}"}</code> <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{vencimento}}"}</code> <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{diasAtraso}}"}</code>
-              </div>
-              <textarea value={modalEtapa.mensagem||""} onChange={e=>NE("mensagem",e.target.value)}
-                rows={6} placeholder="Digite a mensagem..."
-                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif",resize:"vertical",lineHeight:1.6}}/>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Mensagem *</label>
+              <p style={{fontSize:10,color:"#94a3b8",marginBottom:6}}>Use: {"{{nome}}"} {"{{valor}}"} {"{{vencimento}}"} {"{{diasAtraso}}"}</p>
+              <textarea value={editando.mensagem||""} onChange={e=>E("mensagem",e.target.value)} rows={5}
+                style={{width:"100%",padding:"10px 11px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:fam,resize:"vertical",lineHeight:1.6}}/>
             </div>
             <div style={{display:"flex",gap:8}}>
-              <Btn onClick={salvarEdicaoEtapa} color="#6366f1">💾 Salvar Etapa</Btn>
-              <Btn onClick={()=>{setModalEtapa(null);setNovaEtapa(false);}} outline color="#64748b">Cancelar</Btn>
+              <Btn onClick={salvarEdicao} color="#6366f1">💾 Salvar</Btn>
+              <Btn onClick={()=>{setEditando(null);setIsNova(false);}} outline color="#64748b">Cancelar</Btn>
             </div>
           </div>
         </Modal>
