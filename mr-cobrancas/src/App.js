@@ -4416,6 +4416,7 @@ function Lembretes({ devedores, credores, user }) {
   const [form, setForm]             = useState({...LEMBRETE_VAZIO, data_prometida:hoje});
   const [filtroStatus, setFiltroStatus] = useState("pendente");
   const [filtroPrior, setFiltroPrior]   = useState("");
+  const [filtroData,  setFiltroData]    = useState(""); // "vencidos" | "hoje" | "proximos7" | ""
   const [search, setSearch]         = useState("");
   const F = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -4486,7 +4487,11 @@ function Lembretes({ devedores, credores, user }) {
     const ok3 = !search ||
       (dev?.nome||"").toLowerCase().includes(search.toLowerCase()) ||
       (l.descricao||"").toLowerCase().includes(search.toLowerCase());
-    return ok1&&ok2&&ok3;
+    const ok4 = !filtroData ||
+      (filtroData==="vencidos"  && l.status==="pendente" && l.data_prometida<hoje) ||
+      (filtroData==="hoje"      && l.status==="pendente" && l.data_prometida===hoje) ||
+      (filtroData==="proximos7" && l.status==="pendente" && l.data_prometida>hoje && l.data_prometida<=new Date(Date.now()+7*86400000).toISOString().slice(0,10));
+    return ok1&&ok2&&ok3&&ok4;
   });
 
   // KPIs
@@ -4521,18 +4526,31 @@ function Lembretes({ devedores, credores, user }) {
       {/* KPIs */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
         {[
-          {l:"🔴 Vencidos",    v:vencidos.length,   bg:"#fee2e2",cor:"#dc2626", sub:"precisam de ação imediata"},
-          {l:"🟠 Hoje",        v:hoje_lem.length,   bg:"#ffedd5",cor:"#c2410c", sub:"cobranças para hoje"},
-          {l:"🟡 Próximos 7d", v:proximos.length,   bg:"#fef3c7",cor:"#d97706", sub:"agendados esta semana"},
-          {l:"✅ Total Pend.",  v:pendentes.length,  bg:"#ede9fe",cor:"#7c3aed", sub:"lembretes ativos"},
-        ].map(k=>(
-          <div key={k.l} style={{background:k.bg,borderRadius:14,padding:"14px 16px",cursor:"pointer"}}
-            onClick={()=>{setFiltroStatus("pendente");setFiltroPrior("");}}>
-            <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
-            <p style={{fontFamily:"Space Grotesk",fontWeight:800,fontSize:28,color:k.cor}}>{k.v}</p>
-            <p style={{fontSize:10,color:k.cor,opacity:.7,marginTop:2}}>{k.sub}</p>
-          </div>
-        ))}
+          {l:"🔴 Vencidos",    v:vencidos.length,   bg:"#fee2e2",cor:"#dc2626", sub:"precisam de ação imediata", fd:"vencidos"},
+          {l:"🟠 Hoje",        v:hoje_lem.length,   bg:"#ffedd5",cor:"#c2410c", sub:"cobranças para hoje",       fd:"hoje"},
+          {l:"🟡 Próximos 7d", v:proximos.length,   bg:"#fef3c7",cor:"#d97706", sub:"agendados esta semana",     fd:"proximos7"},
+          {l:"✅ Total Pend.",  v:pendentes.length,  bg:"#ede9fe",cor:"#7c3aed", sub:"lembretes ativos",           fd:""},
+        ].map(k=>{
+          const ativo = filtroData===k.fd&&(k.fd!==""||filtroStatus==="pendente");
+          return(
+            <div key={k.l}
+              onClick={()=>{
+                setFiltroStatus("pendente");
+                setFiltroPrior("");
+                // Toggle: se já está filtrado por este, limpa
+                setFiltroData(filtroData===k.fd&&k.fd!==""?"":k.fd);
+              }}
+              style={{background:k.bg,borderRadius:14,padding:"14px 16px",cursor:"pointer",transition:"all .15s",
+                outline:ativo?`3px solid ${k.cor}`:"3px solid transparent",
+                transform:ativo?"scale(1.02)":"scale(1)",
+                boxShadow:ativo?`0 4px 16px ${k.cor}40`:"0 1px 4px rgba(0,0,0,.06)"}}>
+              <p style={{fontSize:11,fontWeight:700,color:k.cor,marginBottom:4}}>{k.l}</p>
+              <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:800,fontSize:28,color:k.cor}}>{k.v}</p>
+              <p style={{fontSize:10,color:k.cor,opacity:.7,marginTop:2}}>{k.sub}</p>
+              {ativo&&<p style={{fontSize:9,fontWeight:700,color:k.cor,marginTop:4,textTransform:"uppercase",letterSpacing:".06em"}}>● Filtro ativo — clique para limpar</p>}
+            </div>
+          );
+        })}
       </div>
 
       {/* Filtros */}
@@ -5273,9 +5291,63 @@ function Regua({ devedores, credores, user }) {
                     </div>
                   </div>
                   {exp&&(
-                    <div style={{marginTop:10,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
-                      <p style={{fontSize:10,fontWeight:700,color:"#6366f1",marginBottom:6,textTransform:"uppercase"}}>Mensagem:</p>
-                      <p style={{fontSize:12,color:"#374151",whiteSpace:"pre-wrap",lineHeight:1.7}}>{msg}</p>
+                    <div style={{marginTop:10}}>
+                      {/* Linha do tempo de progresso do cliente */}
+                      <div style={{background:"#f8fafc",borderRadius:12,padding:14,border:"1px solid #e2e8f0",marginBottom:10}}>
+                        <p style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".06em",marginBottom:12}}>📍 Posição na Régua</p>
+                        <div style={{position:"relative",paddingBottom:8}}>
+                          {/* Linha base */}
+                          <div style={{position:"absolute",top:18,left:0,right:0,height:3,background:"#e2e8f0",borderRadius:99}}/>
+                          {/* Progresso preenchido até etapa atual */}
+                          <div style={{position:"absolute",top:18,left:0,height:3,borderRadius:99,background:"linear-gradient(90deg,#6366f1,#8b5cf6)",
+                            width:`${Math.min(100, etapasAtivas.length>1 ? (etapasAtivas.findIndex(e=>e.id===etapa?.id)+1)/etapasAtivas.length*100 : 100)}%`,
+                            transition:"width .5s"}}/>
+                          {/* Pontos das etapas */}
+                          <div style={{display:"flex",justifyContent:"space-between",position:"relative"}}>
+                            {etapasAtivas.map((et,ei)=>{
+                              const cat2=CAT_CORES[et.categoria]||CAT_CORES.amigavel;
+                              const isAtual = et.id===etapa?.id;
+                              const passou = etapasAtivas.findIndex(e=>e.id===etapa?.id) >= ei;
+                              return(
+                                <div key={et.id} style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1}}>
+                                  <div style={{width:isAtual?32:22,height:isAtual?32:22,borderRadius:99,
+                                    background:passou?cat2.cor:"#e2e8f0",
+                                    border:`3px solid ${isAtual?cat2.cor:passou?cat2.cor+"88":"#e2e8f0"}`,
+                                    display:"flex",alignItems:"center",justifyContent:"center",
+                                    fontSize:isAtual?14:10,color:passou?"#fff":"#94a3b8",
+                                    transition:"all .3s",zIndex:1,position:"relative",
+                                    boxShadow:isAtual?`0 0 0 4px ${cat2.cor}30`:"none"}}>
+                                    {isAtual?"📍":passou?"✓":""}
+                                  </div>
+                                  <p style={{fontSize:8,color:isAtual?cat2.cor:passou?"#64748b":"#94a3b8",fontWeight:isAtual?700:400,marginTop:5,textAlign:"center",maxWidth:60,lineHeight:1.2}}>
+                                    {et.titulo}
+                                  </p>
+                                  <p style={{fontSize:7,color:"#94a3b8",marginTop:1}}>dia {et.dias}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* Info da posição atual */}
+                        <div style={{marginTop:14,display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:99,background:(CAT_CORES[etapa?.categoria]||CAT_CORES.amigavel).bg,color:(CAT_CORES[etapa?.categoria]||CAT_CORES.amigavel).cor}}>
+                            Etapa {etapasAtivas.findIndex(e=>e.id===etapa?.id)+1} de {etapasAtivas.length}
+                          </span>
+                          <span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"#f1f5f9",color:"#475569"}}>
+                            {dias>0?`${dias} dias em atraso`:"Incluído manualmente"}
+                          </span>
+                          {dias>0&&(
+                            <span style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:"#f8fafc",color:"#64748b"}}>
+                              Próxima: {etapasAtivas[etapasAtivas.findIndex(e=>e.id===etapa?.id)+1]?.titulo||"Última etapa"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Mensagem */}
+                      <div style={{background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
+                        <p style={{fontSize:10,fontWeight:700,color:"#6366f1",marginBottom:6,textTransform:"uppercase"}}>Mensagem a enviar:</p>
+                        <p style={{fontSize:12,color:"#374151",whiteSpace:"pre-wrap",lineHeight:1.7}}>{msg}</p>
+                      </div>
                     </div>
                   )}
                 </div>
