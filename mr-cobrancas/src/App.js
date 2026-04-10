@@ -4987,16 +4987,29 @@ const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moder
 
 function Regua({ devedores, credores, user }) {
   const hoje = new Date().toISOString().slice(0,10);
-  const regKey = "mr_regua_etapas";
+  const regKey      = "mr_regua_etapas";
+  const inclKey     = "mr_regua_incluidos"; // devedores incluídos manualmente
+  const exclKey     = "mr_regua_excluidos"; // devedores excluídos manualmente
+
   const [etapas, setEtapas] = useState(()=>{
     try{ return JSON.parse(localStorage.getItem(regKey)||"null")||ETAPAS_PADRAO; }catch{ return ETAPAS_PADRAO; }
   });
-  const [modalEtapa, setModalEtapa] = useState(null); // etapa em edição
-  const [abaAtiva, setAbaAtiva] = useState("visao"); // visao | config | acoes
+  // IDs de devedores incluídos manualmente (que não têm dívida vencida automática)
+  const [incluidos, setIncluidos] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem(inclKey)||"[]"); }catch{ return []; }
+  });
+  // IDs de devedores excluídos manualmente (removidos da régua)
+  const [excluidos, setExcluidos] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem(exclKey)||"[]"); }catch{ return []; }
+  });
+
+  const [modalEtapa, setModalEtapa] = useState(null);
+  const [modalIncluir, setModalIncluir] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState("visao");
   const [devFiltro, setDevFiltro] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState("");
   const [expandMsg, setExpandMsg] = useState(null);
   const [novaEtapa, setNovaEtapa] = useState(false);
+  const [buscaIncluir, setBuscaIncluir] = useState("");
   const NE = (k,v) => setModalEtapa(e=>({...e,[k]:v}));
 
   function salvarEtapas(novos){ setEtapas(novos); localStorage.setItem(regKey,JSON.stringify(novos)); }
@@ -5012,22 +5025,56 @@ function Regua({ devedores, credores, user }) {
     setModalEtapa(null); setNovaEtapa(false);
   }
 
-  // Calcular ações pendentes baseado nos devedores e inadimplência
+  function incluirDevedor(devId) {
+    const novos = [...new Set([...incluidos, devId])];
+    setIncluidos(novos); localStorage.setItem(inclKey, JSON.stringify(novos));
+    // Remove dos excluídos se estava lá
+    const novoExcl = excluidos.filter(id=>id!==devId);
+    setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
+  }
+  function removerDaRegua(devId) {
+    if(!window.confirm("Remover este devedor da régua?")) return;
+    const novoExcl = [...new Set([...excluidos, devId])];
+    setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
+    const novoIncl = incluidos.filter(id=>id!==devId);
+    setIncluidos(novoIncl); localStorage.setItem(inclKey, JSON.stringify(novoIncl));
+  }
+  function reincluirDevedor(devId) {
+    const novoExcl = excluidos.filter(id=>id!==devId);
+    setExcluidos(novoExcl); localStorage.setItem(exclKey, JSON.stringify(novoExcl));
+  }
+
+  // Calcular ações pendentes — automático (vencido) + incluídos manualmente
   const acoesPendentes = [];
-  devedores.filter(d=>!["pago_integral","irrecuperavel"].includes(d.status)).forEach(dev=>{
+  const idsJaAdicionados = new Set();
+
+  devedores.filter(d=>!["pago_integral","irrecuperavel"].includes(d.status)&&!excluidos.includes(d.id)).forEach(dev=>{
     const dividas = dev.dividas||[];
-    if(!dividas.length) return;
-    const primeiraDiv = dividas.sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
+    if(!dividas.length) {
+      // Sem dívidas — só entra se incluído manualmente
+      if(incluidos.includes(dev.id)) {
+        const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
+        if(etapasAtivas[0]) {
+          idsJaAdicionados.add(dev.id);
+          acoesPendentes.push({ dev, diasAtraso:0, valorTotal:0, etapa:etapasAtivas[0], dataVenc:hoje, urgente:false, manual:true });
+        }
+      }
+      return;
+    }
+    const primeiraDiv = [...dividas].sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
     const dataVenc = primeiraDiv?.data_vencimento||primeiraDiv?.data_origem;
     if(!dataVenc) return;
     const diasAtraso = Math.max(0, Math.ceil((new Date(hoje+"T12:00:00")-new Date(dataVenc+"T12:00:00"))/(1000*60*60*24)));
-    if(diasAtraso===0) return;
     const valorTotal = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
-    // Encontrar próxima etapa aplicável
     const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
+    // Auto: vencido há mais de 0 dias
     const proximaEtapa = etapasAtivas.find(e=>e.dias<=diasAtraso && e.dias>=diasAtraso-7);
-    if(proximaEtapa) {
-      acoesPendentes.push({ dev, diasAtraso, valorTotal, etapa:proximaEtapa, dataVenc, urgente:diasAtraso>=60 });
+    // Manual: incluído forçadamente, pega a etapa pelo dias de atraso ou primeira
+    const etapaManual = incluidos.includes(dev.id) ? (proximaEtapa||etapasAtivas.find(e=>e.dias<=Math.max(diasAtraso,1))||etapasAtivas[0]) : null;
+    const etapaFinal = proximaEtapa||etapaManual;
+    if(etapaFinal && (diasAtraso>0||incluidos.includes(dev.id))) {
+      idsJaAdicionados.add(dev.id);
+      acoesPendentes.push({ dev, diasAtraso, valorTotal, etapa:etapaFinal, dataVenc, urgente:diasAtraso>=60, manual:incluidos.includes(dev.id)&&!proximaEtapa });
     }
   });
 
@@ -5059,11 +5106,15 @@ function Regua({ devedores, credores, user }) {
           <h2 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:"#0f172a",letterSpacing:"-.5px"}}>📐 Régua de Cobrança</h2>
           <p style={{fontSize:13,color:"#64748b",marginTop:2}}>Régua inteligente de comunicação com devedores por etapas de inadimplência</p>
         </div>
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={()=>setModalIncluir(true)}
+            style={{padding:"9px 16px",borderRadius:10,border:"none",background:"#0891b2",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",gap:6}}>
+            ➕ Incluir Devedor
+          </button>
           {["visao","config","acoes"].map(a=>(
             <button key={a} onClick={()=>setAbaAtiva(a)}
-              style={{padding:"8px 16px",borderRadius:10,border:`1.5px solid ${abaAtiva===a?"#6366f1":"#e2e8f0"}`,background:abaAtiva===a?"#6366f1":"#fff",color:abaAtiva===a?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              {a==="visao"?"📊 Visão Geral":a==="config"?"⚙️ Configurar Etapas":"🎯 Ações do Dia"}
+              style={{padding:"9px 16px",borderRadius:10,border:`1.5px solid ${abaAtiva===a?"#6366f1":"#e2e8f0"}`,background:abaAtiva===a?"#6366f1":"#fff",color:abaAtiva===a?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              {a==="visao"?"📊 Visão Geral":a==="config"?"⚙️ Configurar":"🎯 Ações do Dia"}
             </button>
           ))}
         </div>
@@ -5123,16 +5174,17 @@ function Regua({ devedores, credores, user }) {
               const msg = renderMsg(etapa.mensagem,dev,diasAtraso,valorTotal,dataVenc);
               const isExp = expandMsg===dev.id;
               return(
-                <div key={dev.id} style={{borderRadius:12,padding:14,marginBottom:10,border:`1.5px solid ${urgente?"#fca5a5":"#e2e8f0"}`,background:urgente?"#fff7f7":"#fff"}}>
+                <div key={dev.id} style={{borderRadius:12,padding:14,marginBottom:10,border:`1.5px solid ${urgente?"#fca5a5":manual?"#a5f3fc":"#e2e8f0"}`,background:urgente?"#fff7f7":manual?"#ecfeff99":"#fff"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:6}}>
                         <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{dev.nome}</p>
                         <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cat.bg,color:cat.cor}}>{cat.l}</span>
                         <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:urgente?"#fee2e2":"#f1f5f9",color:urgente?"#dc2626":"#64748b"}}>
-                          {urgente?"🔴":"⏰"} {diasAtraso} dias em atraso
+                          {urgente?"🔴":"⏰"} {diasAtraso>0?`${diasAtraso} dias em atraso`:"Incluído manualmente"}
                         </span>
                         <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#6366f1",fontWeight:600}}>
+                         {manual&&<span style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ecfeff",color:"#0891b2",border:"1px solid #a5f3fc"}}>✋ Manual</span>}
                           {CANAL_ICONS[etapa.canal]} Etapa: {etapa.titulo}
                         </span>
                       </div>
@@ -5143,18 +5195,22 @@ function Regua({ devedores, credores, user }) {
                         <a href={`https://wa.me/55${dev.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`}
                           target="_blank" rel="noreferrer"
                           style={{background:"#16a34a",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
-                          📱 Enviar WA
+                          📱 WA
                         </a>
                       )}
                       {etapa.canal==="email"&&dev.email&&(
-                        <a href={`mailto:${dev.email}?subject=${encodeURIComponent("Pendência Financeira - "+etapa.titulo)}&body=${encodeURIComponent(msg)}`}
+                        <a href={`mailto:${dev.email}?subject=${encodeURIComponent("Pendência - "+etapa.titulo)}&body=${encodeURIComponent(msg)}`}
                           style={{background:"#2563eb",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
-                          📧 Enviar E-mail
+                          📧
                         </a>
                       )}
                       <button onClick={()=>setExpandMsg(isExp?null:dev.id)}
                         style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:9,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-                        {isExp?"▲ Ocultar":"▼ Ver mensagem"}
+                        {isExp?"▲":"▼ Msg"}
+                      </button>
+                      <button onClick={()=>removerDaRegua(dev.id)}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:9,padding:"8px 10px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                        ✕ Remover
                       </button>
                     </div>
                   </div>
@@ -5284,6 +5340,106 @@ function Regua({ devedores, credores, user }) {
             );
           })}
         </div>
+      )}
+
+      {/* Seção de devedores excluídos da régua */}
+      {abaAtiva==="visao"&&excluidos.length>0&&(
+        <div style={{background:"#fff",borderRadius:14,padding:16,border:"1.5px solid #fde68a",marginTop:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:13,color:"#92400e"}}>🚫 Excluídos da Régua ({excluidos.length})</p>
+            <span style={{fontSize:11,color:"#94a3b8"}}>Clique em Reincluir para reativar</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {excluidos.map(id=>{
+              const dev = devedores.find(d=>d.id===id||String(d.id)===String(id));
+              if(!dev) return null;
+              return(
+                <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"#fefce8",borderRadius:10,border:"1px solid #fde68a"}}>
+                  <div>
+                    <p style={{fontWeight:600,color:"#78350f",fontSize:13}}>{dev.nome}</p>
+                    <p style={{fontSize:11,color:"#92400e",marginTop:2}}>Removido manualmente da régua</p>
+                  </div>
+                  <button onClick={()=>reincluirDevedor(id)}
+                    style={{background:"#0891b2",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                    🔄 Reincluir
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal incluir devedor manualmente */}
+      {modalIncluir&&(
+        <Modal title="➕ Incluir Devedor na Régua" onClose={()=>{setModalIncluir(false);setBuscaIncluir("");}}>
+          <div>
+            <p style={{fontSize:13,color:"#64748b",marginBottom:12}}>
+              Selecione devedores que ainda não estão na régua automática para incluí-los manualmente.
+            </p>
+            <input value={buscaIncluir} onChange={e=>setBuscaIncluir(e.target.value)}
+              placeholder="Buscar por nome..." autoFocus
+              style={{width:"100%",padding:"10px 14px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:12}}/>
+
+            {/* Devedores já na régua */}
+            {incluidos.length>0&&(
+              <div style={{marginBottom:12}}>
+                <p style={{fontSize:11,fontWeight:700,color:"#0891b2",textTransform:"uppercase",marginBottom:6}}>✅ Incluídos manualmente</p>
+                {incluidos.map(id=>{
+                  const dev=devedores.find(d=>String(d.id)===String(id)||d.id===id);
+                  if(!dev)return null;
+                  const dividas=dev.dividas||[];
+                  const valor=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+                  return(
+                    <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#ecfeff",borderRadius:10,marginBottom:6,border:"1px solid #a5f3fc"}}>
+                      <div>
+                        <p style={{fontWeight:600,color:"#0e7490",fontSize:13}}>{dev.nome}</p>
+                        <p style={{fontSize:11,color:"#64748b"}}>{valor>0?`R$ ${valor.toFixed(2).replace(".",",")}`:""} · {dev.status}</p>
+                      </div>
+                      <button onClick={()=>removerDaRegua(dev.id)}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                        ✕ Remover
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:8}}>📋 Disponíveis para incluir</p>
+            <div style={{maxHeight:300,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}}>
+              {devedores
+                .filter(d=>!["pago_integral","irrecuperavel"].includes(d.status))
+                .filter(d=>!incluidos.includes(d.id)&&!incluidos.includes(String(d.id)))
+                .filter(d=>!buscaIncluir||(d.nome||"").toLowerCase().includes(buscaIncluir.toLowerCase()))
+                .map(dev=>{
+                  const jaNaRegua = acoesPendentes.some(a=>a.dev.id===dev.id&&!a.manual);
+                  const dividas=dev.dividas||[];
+                  const valor=dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+                  return(
+                    <div key={dev.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:jaNaRegua?"#f8fafc":"#fff",borderRadius:10,border:`1px solid ${jaNaRegua?"#e2e8f0":"#f1f5f9"}`}}>
+                      <div>
+                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          <p style={{fontWeight:600,color:"#0f172a",fontSize:13}}>{dev.nome}</p>
+                          {jaNaRegua&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 6px",borderRadius:99,fontWeight:700}}>JÁ NA RÉGUA</span>}
+                        </div>
+                        <p style={{fontSize:11,color:"#64748b",marginTop:1}}>{valor>0?`R$ ${valor.toFixed(2).replace(".",",")} · `:"Sem dívida · "}{dev.status}</p>
+                      </div>
+                      {!jaNaRegua&&(
+                        <button onClick={()=>{ incluirDevedor(dev.id); }}
+                          style={{background:"#0891b2",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                          + Incluir
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+            <div style={{marginTop:16}}>
+              <Btn onClick={()=>{setModalIncluir(false);setBuscaIncluir("");}} color="#6366f1">✅ Pronto</Btn>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Modal edição de etapa */}
