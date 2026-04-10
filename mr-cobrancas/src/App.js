@@ -155,8 +155,8 @@ function Btn({ children, onClick, color="#4f46e5", sm, outline, danger }) {
 // LOGIN SCREEN
 // ═══════════════════════════════════════════════════════════════
 function Login({ onLogin }) {
-  const [email, setEmail] = useState("advair@mrcobrancas.com.br");
-  const [senha, setSenha] = useState("mr2024");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
