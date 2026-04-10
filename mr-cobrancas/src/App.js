@@ -4998,6 +4998,29 @@ const ETAPAS_PADRAO = [
 const CANAL_ICONS = { whatsapp:"📱", email:"📧", sms:"💬", ligacao:"📞", sistema:"⚙️" };
 const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moderado:{cor:"#d97706",bg:"#fef3c7",l:"Moderado"}, rigido:{cor:"#dc2626",bg:"#fee2e2",l:"Rígido"}, judicial:{cor:"#7c3aed",bg:"#ede9fe",l:"Judicial"} };
 
+class ReguaErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={erro:null}; }
+  static getDerivedStateFromError(e){ return {erro:e}; }
+  render(){
+    if(this.state.erro) return(
+      <div style={{padding:32,textAlign:"center",color:"#64748b"}}>
+        <div style={{fontSize:36,marginBottom:12}}>⚠️</div>
+        <p style={{fontWeight:700,color:"#dc2626",fontSize:15,marginBottom:8}}>Erro ao carregar a Régua</p>
+        <p style={{fontSize:12,color:"#94a3b8",marginBottom:16}}>{this.state.erro?.message||"Erro desconhecido"}</p>
+        <button onClick={()=>this.setState({erro:null})}
+          style={{background:"#6366f1",color:"#fff",border:"none",borderRadius:9,padding:"9px 20px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          🔄 Tentar novamente
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+function ReguaWrapper(props){
+  return <ReguaErrorBoundary><Regua {...props}/></ReguaErrorBoundary>;
+}
+
 function Regua({ devedores, credores, user }) {
   const hoje = new Date().toISOString().slice(0,10);
   const regKey      = "mr_regua_etapas";
@@ -5728,6 +5751,7 @@ function GestaoUsuarios({ user }) {
 export default function App() {
   const [user, setUser]             = useState(null);
   const [tab, setTab]               = useState("dashboard");
+  const [tabKey, setTabKey]         = useState(0); // incrementa para forçar reset do módulo atual
   const [sideOpen, setSideOpen]     = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [modalAberto, setModalAberto] = useState(false); // controla se tem modal aberto em qualquer módulo
@@ -5820,7 +5844,7 @@ export default function App() {
       case "calculadora": return <Calculadora devedores={devedores}/>;
       case "relatorios":  return <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>;
       case "lembretes":   return <Lembretes   devedores={devedores} credores={credores} user={user}/>;
-      case "regua":       return <Regua       devedores={devedores} credores={credores} user={user}/>;
+      case "regua":       return <ReguaWrapper devedores={devedores} credores={credores} user={user}/>;
       case "usuarios":    return isAdmin ? <GestaoUsuarios user={user}/> : null;
       default:            return null;
     }
@@ -5916,7 +5940,7 @@ export default function App() {
         {/* Nav */}
         <nav style={{ flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:1,overflowY:"auto",overflowX:"hidden" }}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); setTimeout(()=>{ const m=document.querySelector('.mr-main'); if(m)m.scrollTop=0; },30); }}
+            <button key={n.id} onClick={()=>{ if(tab===n.id){ setTabKey(k=>k+1); } else { setTab(n.id); } setSideOpen(false); setTimeout(()=>{ const main=document.querySelector('.mr-main'); if(main)main.scrollTop=0; },30); }}
               className={`nav-btn${tab===n.id?" active":""}`}
               style={{ display:"flex",alignItems:"center",gap:12,padding:"9px 12px",borderRadius:13,border:"none",cursor:"pointer",textAlign:"left",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:13,fontWeight:600,background:tab===n.id?"rgba(255,255,255,.12)":"transparent",color:tab===n.id?"#fff":"rgba(255,255,255,.5)",width:"100%",position:"relative",outline:"none" }}>
               {/* Ícone com fundo colorido */}
@@ -5990,14 +6014,14 @@ export default function App() {
               <p style={{ color:"#475569",fontSize:15,fontWeight:700,fontFamily:"'Space Grotesk',sans-serif" }}>Carregando dados...</p>
               <p style={{ color:"#94a3b8",fontSize:13 }}>Conectando ao Supabase</p>
             </div>
-          ) : <div key={tab} className="page-content">{renderPage(tab)}</div>}
+          ) : <div key={`${tab}-${tabKey}`} className="page-content">{renderPage(tab)}</div>}
         </div>
       </main>
 
       {/* ── BOTTOM NAV MOBILE ── */}
       <nav className="mr-bottomnav">
         {NAV.map(n=>(
-          <button key={n.id} onClick={()=>{ setTab(n.id); setSideOpen(false); setTimeout(()=>{ const m=document.querySelector('.mr-main'); if(m)m.scrollTop=0; },30); }}
+          <button key={n.id} onClick={()=>{ if(tab===n.id){ setTabKey(k=>k+1); } else { setTab(n.id); } setSideOpen(false); setTimeout(()=>{ const main=document.querySelector('.mr-main'); if(main)main.scrollTop=0; },30); }}
             className={tab===n.id?"active":""}>
             <div className="bn-icon" style={{ color:tab===n.id?n.color:"#94a3b8" }}>
               {n.icon}
