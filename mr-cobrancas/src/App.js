@@ -481,15 +481,15 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes=[] }) {
 // STATUS + CONSTANTES
 // ═══════════════════════════════════════════════════════════════
 const STATUS_DEV = [
-  { v:"novo",           l:"🆕 Novo",              cor:"#64748b", bg:"#f1f5f9" },
-  { v:"em_localizacao", l:"🔍 Em Localização",     cor:"#2563eb", bg:"#dbeafe" },
-  { v:"notificado",     l:"📬 Notificado",          cor:"#7c3aed", bg:"#ede9fe" },
-  { v:"em_negociacao",  l:"🤝 Em Negociação",       cor:"#d97706", bg:"#fef3c7" },
-  { v:"acordo_firmado", l:"✅ Acordo Firmado",       cor:"#16a34a", bg:"#dcfce7" },
-  { v:"pago_integral",  l:"💰 Pago Integralmente",  cor:"#065f46", bg:"#d1fae5" },
-  { v:"pago_parcial",   l:"💵 Pago Parcialmente",   cor:"#0f766e", bg:"#ccfbf1" },
-  { v:"irrecuperavel",  l:"❌ Irrecuperável",        cor:"#dc2626", bg:"#fee2e2" },
-  { v:"ajuizado",       l:"⚖️ Ajuizado",             cor:"#c2410c", bg:"#ffedd5" },
+  { v:"novo",           l:"Novo",              cor:"#64748b", bg:"#f1f5f9" },
+  { v:"em_localizacao", l:"Em Localização",    cor:"#2563eb", bg:"#dbeafe" },
+  { v:"notificado",     l:"Notificado",        cor:"#7c3aed", bg:"#ede9fe" },
+  { v:"em_negociacao",  l:"Em Negociação",     cor:"#d97706", bg:"#fef3c7" },
+  { v:"acordo_firmado", l:"Acordo Firmado",    cor:"#16a34a", bg:"#dcfce7" },
+  { v:"pago_integral",  l:"Pago Integralmente",cor:"#065f46", bg:"#d1fae5" },
+  { v:"pago_parcial",   l:"Pago Parcialmente", cor:"#0f766e", bg:"#ccfbf1" },
+  { v:"irrecuperavel",  l:"Irrecuperável",     cor:"#dc2626", bg:"#fee2e2" },
+  { v:"ajuizado",       l:"Ajuizado",          cor:"#c2410c", bg:"#ffedd5" },
 ];
 function BadgeDev({status}){
   const s=STATUS_DEV.find(x=>x.v===status)||STATUS_DEV[0];
@@ -2265,8 +2265,9 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           <div style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
             <div>
               <label style={{fontSize:10,color:"rgba(255,255,255,.5)",display:"block",marginBottom:3,textTransform:"uppercase"}}>Alterar Status</label>
-              <select value={sel.status} onChange={e=>atualizarStatus(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"none",fontSize:12,fontFamily:"Plus Jakarta Sans",background:"rgba(255,255,255,.1)",color:"#fff",outline:"none"}}>
-                {STATUS_DEV.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+              <select value={sel.status} onChange={e=>atualizarStatus(e.target.value)}
+                style={{padding:"7px 12px",borderRadius:9,border:"1px solid rgba(255,255,255,.15)",fontSize:12,fontFamily:"'Plus Jakarta Sans',sans-serif",background:"rgba(255,255,255,.12)",color:"#fff",outline:"none",minWidth:170,cursor:"pointer"}}>
+                {STATUS_DEV.map(s=><option key={s.v} value={s.v} style={{background:"#1e1b4b",color:"#fff"}}>{s.l}</option>)}
               </select>
             </div>
             {sel.telefone&&<button onClick={()=>abrirWp(sel)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>📱 WhatsApp</button>}
@@ -4998,13 +4999,15 @@ const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moder
 
 function Regua({ devedores, credores, user }) {
   const HOJE = new Date().toISOString().slice(0,10);
-  const K = { e:"mr_regua_etapas", i:"mr_regua_incluidos", x:"mr_regua_excluidos" };
   const gl = k => { try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch{ return null; } };
   const sl = (k,v) => { try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} };
 
-  const [etapas,    setEtapas]    = useState(() => { const s=gl(K.e); return Array.isArray(s)&&s.length>0?s:ETAPAS_PADRAO; });
-  const [incluidos, setIncluidos] = useState(() => gl(K.i)||[]);
-  const [excluidos, setExcluidos] = useState(() => gl(K.x)||[]);
+  // Etapas — localStorage (config local por usuário)
+  const [etapas,    setEtapas]    = useState(() => { const s=gl("mr_regua_etapas"); return Array.isArray(s)&&s.length>0?s:ETAPAS_PADRAO; });
+  // Incluídos/excluídos — Supabase (compartilhado entre todos)
+  const [incluidos, setIncluidos] = useState([]);
+  const [excluidos, setExcluidos] = useState([]);
+  const [regLoaded, setRegLoaded] = useState(false);
   const [aba,       setAba]       = useState("visao");
   const [filtro,    setFiltro]    = useState("");
   const [expandido, setExpandido] = useState(null);
@@ -5012,24 +5015,68 @@ function Regua({ devedores, credores, user }) {
   const [isNova,    setIsNova]    = useState(false);
   const [modalAdd,  setModalAdd]  = useState(false);
   const [buscaAdd,  setBuscaAdd]  = useState("");
+  const [modalStatus, setModalStatus] = useState(null); // {dev, dias, valor, etapa, dataVenc}
+
+  // Carregar régua do Supabase
+  useEffect(()=>{
+    async function loadRegua(){
+      try {
+        const res = await dbGet("regua_cobranca","order=criado_em.asc");
+        const rows = Array.isArray(res)?res:[];
+        setIncluidos(rows.filter(r=>r.tipo==="incluido").map(r=>String(r.devedor_id)));
+        setExcluidos(rows.filter(r=>r.tipo==="excluido").map(r=>String(r.devedor_id)));
+      } catch(e) {
+        // fallback localStorage
+        setIncluidos(gl("mr_regua_incluidos")||[]);
+        setExcluidos(gl("mr_regua_excluidos")||[]);
+      }
+      setRegLoaded(true);
+    }
+    loadRegua();
+  },[]);
 
   const E  = (k,v) => setEditando(e=>({...e,[k]:v}));
-  const se = v => { setEtapas(v);  sl(K.e,v); };
-  const si = v => { setIncluidos(v); sl(K.i,v); };
-  const sx = v => { setExcluidos(v); sl(K.x,v); };
+  const se = v => { setEtapas(v); sl("mr_regua_etapas",v); };
 
-  function incluirDev(id) {
-    const s=String(id);
-    si([...new Set([...incluidos.map(String),s])]);
-    sx(excluidos.map(String).filter(x=>x!==s));
+  async function salvarRegua(devId, tipo) {
+    try {
+      // Remover registro anterior deste devedor
+      const existing = await dbGet("regua_cobranca",`devedor_id=eq.${devId}`);
+      const rows = Array.isArray(existing)?existing:[];
+      for(const r of rows) { try{ await dbDelete("regua_cobranca",r.id); }catch{} }
+      if(tipo) await dbInsert("regua_cobranca",{devedor_id:devId, tipo, criado_por:user?.nome||"Sistema"});
+    } catch(e) {
+      sl("mr_regua_"+tipo+"dos",[...(gl("mr_regua_"+tipo+"dos")||[]),String(devId)]);
+    }
   }
-  function removerDev(id) {
+
+  async function incluirDev(id) {
+    const s=String(id);
+    setIncluidos(prev=>[...new Set([...prev.map(String),s])]);
+    setExcluidos(prev=>prev.map(String).filter(x=>x!==s));
+    await salvarRegua(id,"incluido");
+  }
+  async function removerDev(id) {
     if(!window.confirm("Remover este devedor da régua?")) return;
     const s=String(id);
-    sx([...new Set([...excluidos.map(String),s])]);
-    si(incluidos.map(String).filter(x=>x!==s));
+    setExcluidos(prev=>[...new Set([...prev.map(String),s])]);
+    setIncluidos(prev=>prev.map(String).filter(x=>x!==s));
+    await salvarRegua(id,"excluido");
   }
-  function reincluir(id) { const s=String(id); sx(excluidos.map(String).filter(x=>x!==s)); }
+  async function reincluir(id) {
+    const s=String(id);
+    setExcluidos(prev=>prev.map(String).filter(x=>x!==s));
+    await salvarRegua(id,null);
+  }
+  async function atualizarStatusRegua(devId, novoStatus) {
+    try { await dbUpdate("devedores",devId,{status:novoStatus}); } catch(e){}
+    // Atualizar localmente nos devedores para refletir imediatamente
+    if(typeof window.__mrSetDevedores === "function") {
+      window.__mrSetDevedores(prev=>prev.map(d=>String(d.id)===String(devId)?{...d,status:novoStatus}:d));
+    }
+    setModalStatus(prev=>prev?{...prev,dev:{...prev.dev,status:novoStatus}}:null);
+    setTimeout(()=>setModalStatus(null), 800);
+  }
 
   function salvarEdicao() {
     if(!editando?.titulo?.trim()||!editando?.mensagem?.trim()) return alert("Preencha título e mensagem.");
@@ -5082,7 +5129,13 @@ function Regua({ devedores, credores, user }) {
   });
 
   const filtrados = pendentes
-    .filter(p=>!filtro||(p.dev.nome||"").toLowerCase().includes(filtro.toLowerCase()))
+    .filter(p=>{
+      if(!filtro) return true;
+      if(filtro==="__urgente__") return p.urgente;
+      if(filtro==="__whatsapp__") return p.etapa?.canal==="whatsapp";
+      if(filtro==="__atraso__") return p.dias>0;
+      return (p.dev.nome||"").toLowerCase().includes(filtro.toLowerCase());
+    })
     .sort((a,b)=>b.dias-a.dias);
 
   // ── Estilos ─────────────────────────────────────────────────
@@ -5118,14 +5171,17 @@ function Regua({ devedores, credores, user }) {
           {/* KPIs */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
             {[
-              {l:"Pendentes",    v:pendentes.length,                                              c:"#6366f1",bg:"#ede9fe",ic:"🎯"},
-              {l:"Urgentes",     v:pendentes.filter(p=>p.urgente).length,                         c:"#dc2626",bg:"#fee2e2",ic:"🔴"},
-              {l:"Via WhatsApp", v:pendentes.filter(p=>p.etapa?.canal==="whatsapp").length,       c:"#16a34a",bg:"#dcfce7",ic:"📱"},
-              {l:"Em Atraso",    v:pendentes.filter(p=>p.dias>0).length,                          c:"#d97706",bg:"#fef3c7",ic:"⏰"},
+              {l:"Pendentes",    v:pendentes.length,                                              c:"#6366f1",bg:"#ede9fe",ic:"🎯", fil:""},
+              {l:"Urgentes",     v:pendentes.filter(p=>p.urgente).length,                         c:"#dc2626",bg:"#fee2e2",ic:"🔴", fil:"urgente"},
+              {l:"Via WhatsApp", v:pendentes.filter(p=>p.etapa?.canal==="whatsapp").length,       c:"#16a34a",bg:"#dcfce7",ic:"📱", fil:"whatsapp"},
+              {l:"Em Atraso",    v:pendentes.filter(p=>p.dias>0).length,                          c:"#d97706",bg:"#fef3c7",ic:"⏰", fil:"atraso"},
             ].map(k=>(
-              <div key={k.l} style={{background:k.bg,borderRadius:16,padding:"16px 18px",border:"none",boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
+              <div key={k.l} onClick={()=>setFiltro(k.fil==="urgente"?"__urgente__":k.fil==="whatsapp"?"__whatsapp__":k.fil==="atraso"?"__atraso__":"")}
+                style={{background:k.bg,borderRadius:16,padding:"16px 18px",border:"none",boxShadow:"0 2px 8px rgba(0,0,0,.06)",cursor:"pointer",transition:"transform .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseLeave={e=>e.currentTarget.style.transform=""}>
                 <p style={{fontSize:10,fontWeight:700,color:k.c,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>{k.ic} {k.l}</p>
                 <p style={{fontFamily:grot,fontWeight:700,fontSize:28,color:k.c}}>{k.v}</p>
+                <p style={{fontSize:9,color:k.c,opacity:.6,marginTop:4}}>clique para filtrar →</p>
               </div>
             ))}
           </div>
@@ -5198,9 +5254,17 @@ function Regua({ devedores, credores, user }) {
                           📧
                         </a>
                       )}
+                      <button onClick={()=>setModalStatus({dev,dias,valor,etapa,dataVenc})}
+                        style={{background:"#fef3c7",color:"#d97706",border:"1px solid #fde68a",borderRadius:9,padding:"8px 11px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:fam}}>
+                        📋 Status
+                      </button>
                       <button onClick={()=>setExpandido(exp?null:dev.id)}
                         style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:9,padding:"8px 11px",cursor:"pointer",fontSize:12,fontFamily:fam}}>
                         {exp?"▲":"▼"}
+                      </button>
+                      <button onClick={()=>setModalStatus({dev,dias,valor,etapa,dataVenc})}
+                        style={{background:"#ede9fe",color:"#6366f1",border:"none",borderRadius:9,padding:"8px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                        ✏️ Status
                       </button>
                       <button onClick={()=>removerDev(dev.id)}
                         style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:9,padding:"8px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>
@@ -5346,6 +5410,31 @@ function Regua({ devedores, credores, user }) {
             );
           })}
         </div>
+      )}
+
+      {/* Modal alterar status na régua */}
+      {modalStatus&&(
+        <Modal title={`📋 Status de Cobrança — ${modalStatus.dev.nome}`} onClose={()=>setModalStatus(null)}>
+          <div>
+            <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:16,border:"1px solid #e2e8f0"}}>
+              <p style={{fontSize:12,color:"#64748b",marginBottom:4}}>Etapa atual: <b style={{color:"#6366f1"}}>{modalStatus.etapa?.titulo||"—"}</b></p>
+              <p style={{fontSize:12,color:"#64748b",marginBottom:4}}>Dias em atraso: <b style={{color:"#dc2626"}}>{modalStatus.dias}</b></p>
+              <p style={{fontSize:12,color:"#64748b"}}>Dívida: <b>R$ {Number(modalStatus.valor||0).toFixed(2).replace(".",",")}</b></p>
+            </div>
+            <p style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:10}}>Alterar Status do Devedor</p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {STATUS_DEV.map(s=>{
+                const ativo = modalStatus.dev.status===s.v;
+                return(
+                  <button key={s.v} onClick={()=>atualizarStatusRegua(modalStatus.dev.id,s.v)}
+                    style={{padding:"10px 12px",border:`2px solid ${ativo?s.cor:"#e2e8f0"}`,borderRadius:10,background:ativo?s.bg:"#fff",color:ativo?s.cor:"#64748b",fontWeight:ativo?700:500,fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:fam,transition:"all .15s"}}>
+                    {ativo?"✓ ":""}{s.l}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Modal incluir devedor */}
@@ -5643,7 +5732,7 @@ function GestaoUsuarios({ user }) {
 }
 
 export default function App() {
-  const [user, setUser]             = useState(null);
+  const [user, setUser]             = useState(()=>{ try{ return JSON.parse(sessionStorage.getItem("mr_user")||"null"); }catch{ return null; } });
   const [tab, setTab]               = useState("dashboard");
   const [tabKey, setTabKey]         = useState(0); // incrementa para forçar reset do módulo atual
   const [sideOpen, setSideOpen]     = useState(false);
@@ -5651,6 +5740,7 @@ export default function App() {
   const [modalAberto, setModalAberto] = useState(false); // controla se tem modal aberto em qualquer módulo
 
   const [devedores,  setDevedores]  = useState([]);
+  useEffect(()=>{ window.__mrSetDevedores = setDevedores; return ()=>{ delete window.__mrSetDevedores; }; },[setDevedores]);
   const [credores,   setCredores]   = useState([]);
   const [processos,  setProcessos]  = useState([]);
   const [andamentos, setAndamentos] = useState([]);
@@ -5716,7 +5806,7 @@ export default function App() {
     return () => clearInterval(iv);
   }, [user, carregarTudo, modalAberto]);
 
-  if(!user) return <Login onLogin={setUser}/>;
+  if(!user) return <Login onLogin={u=>{ setUser(u); try{ sessionStorage.setItem("mr_user",JSON.stringify(u)); }catch{} }}/>;
 
   const isAdmin = user?.email===ADMIN_EMAIL||user?.role==="admin";
   const NAV = [
@@ -5857,12 +5947,14 @@ export default function App() {
                 <p style={{ color:"rgba(255,255,255,.28)",fontSize:10,marginTop:1 }}>{user.oab}</p>
               </div>
             </div>
-            <div style={{ display:"flex",gap:4 }}>
-              <button onClick={carregarTudo} title="Atualizar" style={{ color:"rgba(255,255,255,.3)",background:"rgba(255,255,255,.06)",border:"none",cursor:"pointer",fontSize:13,padding:"6px 7px",borderRadius:9,transition:"all .15s",lineHeight:1 }}
-                onMouseEnter={e=>{e.currentTarget.style.color="#fff";e.currentTarget.style.background="rgba(255,255,255,.12)"}} onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,.3)";e.currentTarget.style.background="rgba(255,255,255,.06)"}}>🔄</button>
-              <button onClick={()=>setUser(null)} title="Sair" style={{ color:"rgba(255,255,255,.3)",background:"rgba(255,255,255,.06)",border:"none",cursor:"pointer",padding:"6px 7px",borderRadius:9,display:"flex",alignItems:"center",transition:"all .15s" }}
-                onMouseEnter={e=>{e.currentTarget.style.color="#fca5a5";e.currentTarget.style.background="rgba(220,38,38,.15)"}} onMouseLeave={e=>{e.currentTarget.style.color="rgba(255,255,255,.3)";e.currentTarget.style.background="rgba(255,255,255,.06)"}}>{I.logout}</button>
-            </div>
+            <button
+              onClick={()=>{ if(!window.confirm("Deseja sair do sistema?")) return; setUser(null); try{ sessionStorage.removeItem("mr_user"); }catch{} }}
+              style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:"rgba(220,38,38,.15)",color:"#fca5a5",border:"1px solid rgba(220,38,38,.25)",cursor:"pointer",padding:"10px",borderRadius:11,transition:"all .18s",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",marginTop:8 }}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,.3)";e.currentTarget.style.color="#fff";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="rgba(220,38,38,.15)";e.currentTarget.style.color="#fca5a5";}}>
+              <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sair
+            </button>
           </div>
         </div>
       </aside>
