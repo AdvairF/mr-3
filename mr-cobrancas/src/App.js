@@ -26,9 +26,12 @@ const dbDelete = (t, id)         => sb(t, "DELETE", null, `?id=eq.${id}`);
 
 // ─── USERS locais (auth simples) ─────────────────────────────
 const USERS = [
-  { id:1, nome:"Advair Freitas Vieira", oab:"OAB/GO 39.275", email:"advair@mrcobrancas.com.br", senha:"mr2024", role:"admin" },
-  { id:2, nome:"Pavel Andrey Rocha",    oab:"OAB/GO 29.214", email:"pavel@mrcobrancas.com.br",  senha:"mr2024", role:"advogado" },
+  { id:1, nome:"Advair Freitas Vieira", oab:"OAB/GO 39.275", email:"advair@mrcobrancas.com.br", senha:"mr2024",     role:"admin" },
+  { id:1, nome:"Advair Freitas Vieira", oab:"OAB/GO 39.275", email:"advairvieira@gmail.com",     senha:"010789wi",  role:"admin" },
+  { id:2, nome:"Pavel Andrey Rocha",    oab:"OAB/GO 29.214", email:"pavel@mrcobrancas.com.br",   senha:"mr2024",    role:"advogado" },
 ];
+// Carregar usuários extras cadastrados pelo admin
+function getExtraUsers(){ try{ return JSON.parse(localStorage.getItem("mr_users_extra")||"[]"); }catch{ return []; } }
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -88,6 +91,10 @@ const I = {
   alert: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   // Bell moderno com ponto de notificação
   bell: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>,
+  // Régua de cobrança — escadas crescentes
+  regua2: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 4-4"/></svg>,
+  // Usuários — grupo com escudo
+  users2: <svg style={{width:18,height:18,flexShrink:0}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   // Plus moderno
   plus2: <svg style={{width:18,height:18}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
 };
@@ -156,7 +163,7 @@ function Login({ onLogin }) {
   function handleLogin() {
     setLoading(true); setErr("");
     setTimeout(() => {
-      const user = USERS.find(u => u.email === email && u.senha === senha);
+      const todosUsers = [...USERS, ...getExtraUsers()]; const user = todosUsers.find(u => u.email === email && u.senha === senha);
       if (user) onLogin(user);
       else { setErr("E-mail ou senha incorretos."); setLoading(false); }
     }, 700);
@@ -203,7 +210,7 @@ function Login({ onLogin }) {
         </div>
 
         <p style={{ color:"rgba(255,255,255,.3)",fontSize:11,textAlign:"center",marginTop:24 }}>
-          Demo: advair@mrcobrancas.com.br / mr2024
+          
         </p>
       </div>
     </div>
@@ -5031,6 +5038,545 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
 // ═══════════════════════════════════════════════════════════════
 // MAIN APP — dados em tempo real via Supabase
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// RÉGUA DE COBRANÇA INTELIGENTE
+// ═══════════════════════════════════════════════════════════════
+const ETAPAS_PADRAO = [
+  { id:1, dias:0,   canal:"whatsapp", titulo:"Boas-vindas",           ativo:true,  categoria:"amigavel",
+    mensagem:"Olá, {{nome}}! Identificamos uma pendência no valor de {{valor}} com vencimento em {{vencimento}}. Entre em contato para regularizar. 😊" },
+  { id:2, dias:3,   canal:"whatsapp", titulo:"1º Lembrete",           ativo:true,  categoria:"amigavel",
+    mensagem:"Olá, {{nome}}! Seu débito de {{valor}} está em aberto há 3 dias. Podemos negociar condições especiais. Responda esta mensagem! 📞" },
+  { id:3, dias:7,   canal:"whatsapp", titulo:"2º Lembrete",           ativo:true,  categoria:"moderado",
+    mensagem:"{{nome}}, passamos para lembrar que seu débito de {{valor}} não foi regularizado. Evite encargos adicionais — entre em contato hoje! ⚠️" },
+  { id:4, dias:15,  canal:"email",    titulo:"Notificação Formal",    ativo:true,  categoria:"moderado",
+    mensagem:"Prezado(a) {{nome}},\n\nInformamos que o valor de {{valor}}, vencido em {{vencimento}}, encontra-se em aberto. Solicitamos que regularize sua situação em até 5 dias úteis.\n\nAtenciosamente,\nEquipe de Cobrança MR Cobranças" },
+  { id:5, dias:30,  canal:"whatsapp", titulo:"Proposta de Acordo",    ativo:true,  categoria:"moderado",
+    mensagem:"{{nome}}, temos uma proposta especial para regularizar seu débito de {{valor}} em condições facilitadas. Clique para conversar com nossa equipe e encontrar a melhor solução! 🤝" },
+  { id:6, dias:45,  canal:"whatsapp", titulo:"Aviso de Cobrança",     ativo:true,  categoria:"rigido",
+    mensagem:"{{nome}}, seu débito de {{valor}} já acumula {{diasAtraso}} dias sem pagamento. Caso não haja regularização, adotaremos medidas administrativas. Entre em contato URGENTE! 🔴" },
+  { id:7, dias:60,  canal:"email",    titulo:"Notificação Extrajudicial", ativo:true, categoria:"rigido",
+    mensagem:"NOTIFICAÇÃO EXTRAJUDICIAL\n\nNOTIFICAMOS V.Sa., {{nome}}, da existência de débito no valor de {{valor}}, que permanece sem pagamento há {{diasAtraso}} dias. Concedemos prazo de 72 horas para regularização, sob pena de encaminhamento para protesto e ação judicial.\n\nMR Cobranças — CRM Jurídico" },
+  { id:8, dias:90,  canal:"sistema",  titulo:"Ajuizamento",           ativo:true,  categoria:"judicial",
+    mensagem:"[SISTEMA] Devedor {{nome}} atingiu 90 dias de inadimplência. Verificar viabilidade de ajuizamento. Valor: {{valor}}. Avaliar custo-benefício da ação judicial." },
+];
+
+const CANAL_ICONS = { whatsapp:"📱", email:"📧", sms:"💬", ligacao:"📞", sistema:"⚙️" };
+const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moderado:{cor:"#d97706",bg:"#fef3c7",l:"Moderado"}, rigido:{cor:"#dc2626",bg:"#fee2e2",l:"Rígido"}, judicial:{cor:"#7c3aed",bg:"#ede9fe",l:"Judicial"} };
+
+function Regua({ devedores, credores, user }) {
+  const hoje = new Date().toISOString().slice(0,10);
+  const regKey = "mr_regua_etapas";
+  const [etapas, setEtapas] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem(regKey)||"null")||ETAPAS_PADRAO; }catch{ return ETAPAS_PADRAO; }
+  });
+  const [modalEtapa, setModalEtapa] = useState(null); // etapa em edição
+  const [abaAtiva, setAbaAtiva] = useState("visao"); // visao | config | acoes
+  const [devFiltro, setDevFiltro] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState("");
+  const [expandMsg, setExpandMsg] = useState(null);
+  const [novaEtapa, setNovaEtapa] = useState(false);
+  const NE = (k,v) => setModalEtapa(e=>({...e,[k]:v}));
+
+  function salvarEtapas(novos){ setEtapas(novos); localStorage.setItem(regKey,JSON.stringify(novos)); }
+  function toggleEtapa(id){ salvarEtapas(etapas.map(e=>e.id!==id?e:{...e,ativo:!e.ativo})); }
+  function excluirEtapa(id){ if(!window.confirm("Excluir esta etapa?"))return; salvarEtapas(etapas.filter(e=>e.id!==id)); }
+  function salvarEdicaoEtapa(){
+    if(!modalEtapa.titulo?.trim()||!modalEtapa.mensagem?.trim()) return alert("Preencha título e mensagem.");
+    if(novaEtapa){
+      salvarEtapas([...etapas,{...modalEtapa,id:Date.now()}].sort((a,b)=>a.dias-b.dias));
+    } else {
+      salvarEtapas(etapas.map(e=>e.id===modalEtapa.id?modalEtapa:e));
+    }
+    setModalEtapa(null); setNovaEtapa(false);
+  }
+
+  // Calcular ações pendentes baseado nos devedores e inadimplência
+  const acoesPendentes = [];
+  devedores.filter(d=>!["pago_integral","irrecuperavel"].includes(d.status)).forEach(dev=>{
+    const dividas = dev.dividas||[];
+    if(!dividas.length) return;
+    const primeiraDiv = dividas.sort((a,b)=>(a.data_vencimento||a.data_origem||"").localeCompare(b.data_vencimento||b.data_origem||""))[0];
+    const dataVenc = primeiraDiv?.data_vencimento||primeiraDiv?.data_origem;
+    if(!dataVenc) return;
+    const diasAtraso = Math.max(0, Math.ceil((new Date(hoje+"T12:00:00")-new Date(dataVenc+"T12:00:00"))/(1000*60*60*24)));
+    if(diasAtraso===0) return;
+    const valorTotal = dividas.reduce((s,d)=>s+(d.valor_total||0),0);
+    // Encontrar próxima etapa aplicável
+    const etapasAtivas = etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias);
+    const proximaEtapa = etapasAtivas.find(e=>e.dias<=diasAtraso && e.dias>=diasAtraso-7);
+    if(proximaEtapa) {
+      acoesPendentes.push({ dev, diasAtraso, valorTotal, etapa:proximaEtapa, dataVenc, urgente:diasAtraso>=60 });
+    }
+  });
+
+  function renderMsg(template, dev, diasAtraso, valorTotal, dataVenc) {
+    const cred = credores.find(c=>String(c.id)===String(dev.credor_id));
+    return template
+      .replace(/\{\{nome\}\}/g, dev.nome?.split(" ")[0]||dev.nome||"cliente")
+      .replace(/\{\{nomeCompleto\}\}/g, dev.nome||"cliente")
+      .replace(/\{\{valor\}\}/g, `R$ ${valorTotal.toFixed(2).replace(".",",")}`)
+      .replace(/\{\{vencimento\}\}/g, fmtDate(dataVenc))
+      .replace(/\{\{diasAtraso\}\}/g, String(diasAtraso))
+      .replace(/\{\{credor\}\}/g, cred?.nome||"")
+      .replace(/\{\{data\}\}/g, new Date().toLocaleDateString("pt-BR"));
+  }
+
+  const filtrados = acoesPendentes
+    .filter(a=>!devFiltro||a.dev.nome?.toLowerCase().includes(devFiltro.toLowerCase()))
+    .filter(a=>!statusFiltro||a.dev.status===statusFiltro)
+    .sort((a,b)=>b.diasAtraso-a.diasAtraso);
+
+  const st = (s,fs=11) => ({fontSize:fs,fontFamily:"'Plus Jakarta Sans',sans-serif",...s});
+  const card = {background:"#fff",borderRadius:16,border:"1px solid #e2e8f0",padding:20,boxShadow:"0 1px 6px rgba(0,0,0,.05)"};
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div>
+          <h2 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:"#0f172a",letterSpacing:"-.5px"}}>📐 Régua de Cobrança</h2>
+          <p style={{fontSize:13,color:"#64748b",marginTop:2}}>Régua inteligente de comunicação com devedores por etapas de inadimplência</p>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {["visao","config","acoes"].map(a=>(
+            <button key={a} onClick={()=>setAbaAtiva(a)}
+              style={{padding:"8px 16px",borderRadius:10,border:`1.5px solid ${abaAtiva===a?"#6366f1":"#e2e8f0"}`,background:abaAtiva===a?"#6366f1":"#fff",color:abaAtiva===a?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              {a==="visao"?"📊 Visão Geral":a==="config"?"⚙️ Configurar Etapas":"🎯 Ações do Dia"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── VISÃO GERAL ── */}
+      {abaAtiva==="visao"&&(
+        <div>
+          {/* KPIs */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
+            {[
+              {l:"Ações Pendentes",  v:acoesPendentes.length,                                     ic:"🎯",cor:"#6366f1",bg:"#ede9fe"},
+              {l:"Urgentes (+60d)", v:acoesPendentes.filter(a=>a.urgente).length,                ic:"🔴",cor:"#dc2626",bg:"#fee2e2"},
+              {l:"WhatsApp Hoje",   v:acoesPendentes.filter(a=>a.etapa.canal==="whatsapp").length,ic:"📱",cor:"#16a34a",bg:"#dcfce7"},
+              {l:"Em Atraso",       v:acoesPendentes.length,                                     ic:"⏰",cor:"#d97706",bg:"#fef3c7"},
+            ].map(k=>(
+              <div key={k.l} style={{...card,background:k.bg,border:"none",cursor:"default"}}>
+                <p style={{fontSize:10,fontWeight:700,color:k.cor,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>{k.ic} {k.l}</p>
+                <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:28,color:k.cor}}>{k.v}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Timeline visual das etapas */}
+          <div style={{...card,marginBottom:20}}>
+            <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:14,color:"#0f172a",marginBottom:16}}>📅 Linha do Tempo da Régua</p>
+            <div style={{display:"flex",alignItems:"center",overflowX:"auto",paddingBottom:8,gap:0}}>
+              {etapas.filter(e=>e.ativo).sort((a,b)=>a.dias-b.dias).map((e,i,arr)=>{
+                const cat = CAT_CORES[e.categoria]||CAT_CORES.amigavel;
+                return(
+                  <div key={e.id} style={{display:"flex",alignItems:"center",flexShrink:0}}>
+                    <div style={{textAlign:"center",minWidth:90}}>
+                      <div style={{width:44,height:44,borderRadius:99,background:cat.bg,border:`2px solid ${cat.cor}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,margin:"0 auto 6px"}}>
+                        {CANAL_ICONS[e.canal]||"📬"}
+                      </div>
+                      <p style={{fontSize:10,fontWeight:700,color:cat.cor}}>Dia {e.dias}</p>
+                      <p style={{fontSize:9,color:"#64748b",maxWidth:80,lineHeight:1.2}}>{e.titulo}</p>
+                    </div>
+                    {i<arr.length-1&&<div style={{height:2,width:32,background:"linear-gradient(90deg,"+cat.cor+","+( CAT_CORES[arr[i+1].categoria]||cat).cor+")",flexShrink:0,opacity:.4}}/>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Lista de devedores por etapa */}
+          <div style={{...card}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
+              <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:14,color:"#0f172a"}}>👥 Devedores na Régua ({acoesPendentes.length})</p>
+              <div style={{display:"flex",gap:8}}>
+                <input value={devFiltro} onChange={e=>setDevFiltro(e.target.value)} placeholder="Buscar devedor..." style={{padding:"7px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:12,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+              </div>
+            </div>
+            {filtrados.length===0&&<p style={{color:"#94a3b8",textAlign:"center",padding:24,fontSize:13}}>Nenhum devedor com ação pendente. 🎉</p>}
+            {filtrados.map(({dev,diasAtraso,valorTotal,etapa,dataVenc,urgente})=>{
+              const cat = CAT_CORES[etapa.categoria]||CAT_CORES.amigavel;
+              const msg = renderMsg(etapa.mensagem,dev,diasAtraso,valorTotal,dataVenc);
+              const isExp = expandMsg===dev.id;
+              return(
+                <div key={dev.id} style={{borderRadius:12,padding:14,marginBottom:10,border:`1.5px solid ${urgente?"#fca5a5":"#e2e8f0"}`,background:urgente?"#fff7f7":"#fff"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:6}}>
+                        <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{dev.nome}</p>
+                        <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cat.bg,color:cat.cor}}>{cat.l}</span>
+                        <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:urgente?"#fee2e2":"#f1f5f9",color:urgente?"#dc2626":"#64748b"}}>
+                          {urgente?"🔴":"⏰"} {diasAtraso} dias em atraso
+                        </span>
+                        <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:"#ede9fe",color:"#6366f1",fontWeight:600}}>
+                          {CANAL_ICONS[etapa.canal]} Etapa: {etapa.titulo}
+                        </span>
+                      </div>
+                      <p style={{fontSize:12,color:"#64748b"}}>Dívida: <b style={{color:"#dc2626"}}>R$ {valorTotal.toFixed(2).replace(".",",")}</b> · Venc: {fmtDate(dataVenc)}</p>
+                    </div>
+                    <div style={{display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
+                      {etapa.canal==="whatsapp"&&dev.telefone&&(
+                        <a href={`https://wa.me/55${dev.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`}
+                          target="_blank" rel="noreferrer"
+                          style={{background:"#16a34a",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
+                          📱 Enviar WA
+                        </a>
+                      )}
+                      {etapa.canal==="email"&&dev.email&&(
+                        <a href={`mailto:${dev.email}?subject=${encodeURIComponent("Pendência Financeira - "+etapa.titulo)}&body=${encodeURIComponent(msg)}`}
+                          style={{background:"#2563eb",color:"#fff",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
+                          📧 Enviar E-mail
+                        </a>
+                      )}
+                      <button onClick={()=>setExpandMsg(isExp?null:dev.id)}
+                        style={{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:9,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                        {isExp?"▲ Ocultar":"▼ Ver mensagem"}
+                      </button>
+                    </div>
+                  </div>
+                  {isExp&&(
+                    <div style={{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12,border:"1px solid #e2e8f0"}}>
+                      <p style={{fontSize:10,fontWeight:700,color:"#6366f1",marginBottom:6,textTransform:"uppercase"}}>Mensagem a ser enviada:</p>
+                      <p style={{fontSize:12,color:"#374151",whiteSpace:"pre-wrap",lineHeight:1.7}}>{msg}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIGURAR ETAPAS ── */}
+      {abaAtiva==="config"&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <p style={{fontSize:13,color:"#64748b"}}>{etapas.filter(e=>e.ativo).length} etapas ativas de {etapas.length} configuradas</p>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{salvarEtapas(ETAPAS_PADRAO);}} style={{background:"#fff",border:"1.5px solid #e2e8f0",color:"#64748b",borderRadius:9,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>🔄 Restaurar Padrão</button>
+              <button onClick={()=>{setNovaEtapa(true);setModalEtapa({id:Date.now(),dias:7,canal:"whatsapp",titulo:"",ativo:true,categoria:"amigavel",mensagem:"Olá, {{nome}}! "});}}
+                style={{background:"#6366f1",color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>+ Nova Etapa</button>
+            </div>
+          </div>
+
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {etapas.sort((a,b)=>a.dias-b.dias).map(e=>{
+              const cat = CAT_CORES[e.categoria]||CAT_CORES.amigavel;
+              return(
+                <div key={e.id} style={{...card,opacity:e.ativo?1:.6,border:`1.5px solid ${e.ativo?"#e2e8f0":"#f1f5f9"}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                    <div style={{display:"flex",gap:14,alignItems:"flex-start",flex:1}}>
+                      {/* Dias badge */}
+                      <div style={{width:56,height:56,borderRadius:14,background:cat.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0,border:`2px solid ${cat.cor}`}}>
+                        <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,color:cat.cor,lineHeight:1}}>{e.dias}</span>
+                        <span style={{fontSize:8,color:cat.cor,opacity:.8}}>dias</span>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
+                          <span style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{e.titulo}</span>
+                          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cat.bg,color:cat.cor}}>{cat.l}</span>
+                          <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"#f1f5f9",color:"#475569"}}>{CANAL_ICONS[e.canal]} {e.canal}</span>
+                        </div>
+                        <p style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,WebkitLineClamp:2,overflow:"hidden",display:"-webkit-box",WebkitBoxOrient:"vertical"}}>{e.mensagem}</p>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexShrink:0}}>
+                      {/* Toggle ativo */}
+                      <button onClick={()=>toggleEtapa(e.id)}
+                        style={{background:e.ativo?"#dcfce7":"#f1f5f9",color:e.ativo?"#16a34a":"#94a3b8",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                        {e.ativo?"✓ Ativa":"○ Inativa"}
+                      </button>
+                      <button onClick={()=>{setNovaEtapa(false);setModalEtapa({...e});}}
+                        style={{background:"#ede9fe",color:"#6366f1",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>✏️ Editar</button>
+                      <button onClick={()=>excluirEtapa(e.id)}
+                        style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── AÇÕES DO DIA ── */}
+      {abaAtiva==="acoes"&&(
+        <div>
+          <div style={{...card,marginBottom:16,background:"linear-gradient(135deg,#ede9fe,#fce7f3)",border:"none"}}>
+            <p style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:14,color:"#6366f1",marginBottom:4}}>🎯 Plano de Ação do Dia — {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}</p>
+            <p style={{fontSize:12,color:"#64748b"}}>{filtrados.length} devedor{filtrados.length!==1?"es":""} aguardando ação hoje</p>
+          </div>
+
+          {filtrados.length===0&&(
+            <div style={{textAlign:"center",padding:48,...card}}>
+              <div style={{fontSize:48,marginBottom:12}}>🎉</div>
+              <p style={{fontWeight:700,color:"#16a34a",fontSize:16}}>Parabéns! Nenhuma ação pendente.</p>
+              <p style={{color:"#94a3b8",fontSize:13,marginTop:6}}>Todos os devedores estão dentro do prazo ou já foram contatados.</p>
+            </div>
+          )}
+
+          {/* Agrupar por categoria */}
+          {["judicial","rigido","moderado","amigavel"].map(cat=>{
+            const grupo = filtrados.filter(a=>a.etapa.categoria===cat);
+            if(!grupo.length) return null;
+            const cc = CAT_CORES[cat];
+            return(
+              <div key={cat} style={{marginBottom:20}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <div style={{width:12,height:12,borderRadius:99,background:cc.cor}}/>
+                  <p style={{fontWeight:700,color:cc.cor,fontSize:13}}>{cc.l} — {grupo.length} devedor{grupo.length!==1?"es":""}</p>
+                </div>
+                {grupo.map(({dev,diasAtraso,valorTotal,etapa,dataVenc})=>{
+                  const msg = renderMsg(etapa.mensagem,dev,diasAtraso,valorTotal,dataVenc);
+                  return(
+                    <div key={dev.id} style={{...card,marginBottom:8,borderLeft:`4px solid ${cc.cor}`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+                        <div>
+                          <p style={{fontWeight:700,color:"#0f172a",fontSize:13,marginBottom:2}}>{dev.nome}</p>
+                          <p style={{fontSize:11,color:"#64748b"}}>
+                            R$ {valorTotal.toFixed(2).replace(".",",")} · {diasAtraso} dias · {CANAL_ICONS[etapa.canal]} {etapa.titulo}
+                          </p>
+                        </div>
+                        <div style={{display:"flex",gap:6}}>
+                          {etapa.canal==="whatsapp"&&dev.telefone&&(
+                            <a href={`https://wa.me/55${dev.telefone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`}
+                              target="_blank" rel="noreferrer"
+                              style={{background:"#16a34a",color:"#fff",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
+                              📱 WhatsApp
+                            </a>
+                          )}
+                          {etapa.canal==="email"&&dev.email&&(
+                            <a href={`mailto:${dev.email}?subject=${encodeURIComponent("Pendência - "+etapa.titulo)}&body=${encodeURIComponent(msg)}`}
+                              style={{background:"#2563eb",color:"#fff",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,textDecoration:"none"}}>
+                              📧 E-mail
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal edição de etapa */}
+      {modalEtapa&&(
+        <Modal title={novaEtapa?"Nova Etapa":"Editar Etapa"} onClose={()=>{setModalEtapa(null);setNovaEtapa(false);}}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Título da Etapa</label>
+                <input value={modalEtapa.titulo||""} onChange={e=>NE("titulo",e.target.value)}
+                  placeholder="Ex: 1º Lembrete Amigável"
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Disparar no dia (de atraso)</label>
+                <input type="number" min="0" value={modalEtapa.dias||0} onChange={e=>NE("dias",parseInt(e.target.value)||0)}
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Canal</label>
+                <select value={modalEtapa.canal||"whatsapp"} onChange={e=>NE("canal",e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  {[["whatsapp","📱 WhatsApp"],["email","📧 E-mail"],["sms","💬 SMS"],["ligacao","📞 Ligação"],["sistema","⚙️ Alerta Sistema"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Categoria / Tom</label>
+                <select value={modalEtapa.categoria||"amigavel"} onChange={e=>NE("categoria",e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                  {Object.entries(CAT_CORES).map(([v,{l}])=><option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Mensagem</label>
+              <div style={{fontSize:10,color:"#94a3b8",marginBottom:6}}>
+                Variáveis: <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{nome}}"}</code> <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{valor}}"}</code> <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{vencimento}}"}</code> <code style={{background:"#f1f5f9",padding:"1px 5px",borderRadius:4}}>{"{{diasAtraso}}"}</code>
+              </div>
+              <textarea value={modalEtapa.mensagem||""} onChange={e=>NE("mensagem",e.target.value)}
+                rows={6} placeholder="Digite a mensagem..."
+                style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif",resize:"vertical",lineHeight:1.6}}/>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={salvarEdicaoEtapa} color="#6366f1">💾 Salvar Etapa</Btn>
+              <Btn onClick={()=>{setModalEtapa(null);setNovaEtapa(false);}} outline color="#64748b">Cancelar</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// GESTÃO DE USUÁRIOS (só para admin: advairvieira@gmail.com)
+// ═══════════════════════════════════════════════════════════════
+const ADMIN_EMAIL   = "advairvieira@gmail.com";
+const ADMIN_SENHA   = "010789wi";
+const USERS_KEY     = "mr_users_extra";
+
+function GestaoUsuarios({ user }) {
+  const [usuarios, setUsuarios] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem(USERS_KEY)||"[]"); }catch{ return []; }
+  });
+  const [modal, setModal] = useState(false);
+  const [form, setForm]   = useState({nome:"",email:"",senha:"",oab:"",role:"advogado"});
+  const F = (k,v) => setForm(f=>({...f,[k]:v}));
+  const [showSenhas, setShowSenhas] = useState({});
+
+  function salvar() {
+    if(!form.nome.trim()||!form.email.trim()||!form.senha.trim()) return alert("Preencha nome, e-mail e senha.");
+    if(form.senha.length<6) return alert("Senha deve ter no mínimo 6 caracteres.");
+    const existe = [...USERS,...usuarios].find(u=>u.email===form.email);
+    if(existe) return alert("Já existe um usuário com este e-mail.");
+    const novo = {...form, id:Date.now(), criado_em:new Date().toISOString(), criado_por:user.nome };
+    const novos = [...usuarios, novo];
+    setUsuarios(novos);
+    localStorage.setItem(USERS_KEY, JSON.stringify(novos));
+    setModal(false);
+    setForm({nome:"",email:"",senha:"",oab:"",role:"advogado"});
+    alert(`✅ Usuário "${novo.nome}" cadastrado! Ele já pode fazer login com as credenciais informadas.`);
+  }
+
+  function excluir(id) {
+    if(!window.confirm("Excluir este usuário?")) return;
+    const novos = usuarios.filter(u=>u.id!==id);
+    setUsuarios(novos);
+    localStorage.setItem(USERS_KEY, JSON.stringify(novos));
+  }
+
+  const todosUsers = [
+    ...USERS.map(u=>({...u,_sistema:true})),
+    ...usuarios,
+  ];
+
+  const roleCor = { admin:["#7c3aed","#ede9fe"], advogado:["#2563eb","#dbeafe"], assistente:["#d97706","#fef3c7"], estagiario:["#64748b","#f1f5f9"] };
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div>
+          <h2 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,color:"#0f172a",letterSpacing:"-.5px"}}>👥 Gestão de Usuários</h2>
+          <p style={{fontSize:13,color:"#64748b",marginTop:2}}>Controle de acesso ao sistema — apenas você pode gerenciar usuários</p>
+        </div>
+        <button onClick={()=>setModal(true)}
+          style={{background:"#6366f1",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",display:"flex",alignItems:"center",gap:8}}>
+          + Novo Usuário
+        </button>
+      </div>
+
+      {/* Aviso admin */}
+      <div style={{background:"linear-gradient(135deg,#ede9fe,#fce7f3)",borderRadius:14,padding:"14px 18px",marginBottom:20,border:"1px solid #ddd6fe",display:"flex",gap:12,alignItems:"center"}}>
+        <span style={{fontSize:24}}>🔐</span>
+        <div>
+          <p style={{fontWeight:700,color:"#6366f1",fontSize:13}}>Área Restrita — Administrador</p>
+          <p style={{fontSize:12,color:"#64748b",marginTop:2}}>Esta seção só aparece para você. Os usuários cadastrados aqui poderão acessar o sistema com os dados informados.</p>
+        </div>
+      </div>
+
+      {/* Lista de usuários */}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {todosUsers.map(u=>{
+          const [cor,bg] = roleCor[u.role]||roleCor.assistente;
+          return(
+            <div key={u.id} style={{background:"#fff",borderRadius:14,padding:"16px 20px",border:"1.5px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12,boxShadow:"0 1px 4px rgba(0,0,0,.05)"}}>
+              <div style={{display:"flex",gap:14,alignItems:"center"}}>
+                <div style={{width:44,height:44,borderRadius:13,background:`linear-gradient(135deg,${cor},${cor}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#fff",fontWeight:700,fontFamily:"'Space Grotesk',sans-serif",flexShrink:0}}>
+                  {u.nome[0]?.toUpperCase()}
+                </div>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                    <p style={{fontWeight:700,color:"#0f172a",fontSize:14}}>{u.nome}</p>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:bg,color:cor}}>{u.role}</span>
+                    {u._sistema&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"#f1f5f9",color:"#94a3b8",fontWeight:600}}>SISTEMA</span>}
+                  </div>
+                  <p style={{fontSize:12,color:"#64748b"}}>{u.email}{u.oab?` · ${u.oab}`:""}</p>
+                  {!u._sistema&&(
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4}}>
+                      <span style={{fontSize:11,color:"#94a3b8"}}>Senha:</span>
+                      <span style={{fontSize:11,fontFamily:"monospace",color:"#475569",letterSpacing:showSenhas[u.id]?".05em":"2px"}}>
+                        {showSenhas[u.id]?u.senha:"••••••••"}
+                      </span>
+                      <button onClick={()=>setShowSenhas(s=>({...s,[u.id]:!s[u.id]}))}
+                        style={{fontSize:10,color:"#6366f1",background:"none",border:"none",cursor:"pointer",padding:0}}>
+                        {showSenhas[u.id]?"ocultar":"mostrar"}
+                      </button>
+                    </div>
+                  )}
+                  {u.criado_em&&<p style={{fontSize:10,color:"#94a3b8",marginTop:2}}>Cadastrado em {new Date(u.criado_em).toLocaleDateString("pt-BR")} por {u.criado_por}</p>}
+                </div>
+              </div>
+              {!u._sistema&&(
+                <button onClick={()=>excluir(u.id)}
+                  style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:9,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                  🗑 Excluir
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal novo usuário */}
+      {modal&&(
+        <Modal title="➕ Novo Usuário" onClose={()=>setModal(false)}>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div style={{background:"#fef3c7",borderRadius:10,padding:"10px 14px",border:"1px solid #fde68a"}}>
+              <p style={{fontSize:12,color:"#92400e",fontWeight:600}}>⚠️ A senha será visível para você gerenciar. O usuário deve alterá-la após o primeiro acesso.</p>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Nome Completo *</label>
+                <input value={form.nome} onChange={e=>F("nome",e.target.value)} placeholder="Ex: João da Silva"
+                  style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>E-mail *</label>
+                <input type="email" value={form.email} onChange={e=>F("email",e.target.value)} placeholder="usuario@email.com"
+                  style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>Senha *</label>
+                <input type="text" value={form.senha} onChange={e=>F("senha",e.target.value)} placeholder="Mínimo 6 caracteres"
+                  style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"monospace"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:4,textTransform:"uppercase"}}>OAB (opcional)</label>
+                <input value={form.oab} onChange={e=>F("oab",e.target.value)} placeholder="OAB/GO 00.000"
+                  style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Plus Jakarta Sans',sans-serif"}}/>
+              </div>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:6,textTransform:"uppercase"}}>Perfil de Acesso</label>
+                <div style={{display:"flex",gap:8}}>
+                  {[["advogado","Advogado"],["assistente","Assistente"],["estagiario","Estagiário"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>F("role",v)}
+                      style={{flex:1,padding:"9px",border:`1.5px solid ${form.role===v?"#6366f1":"#e2e8f0"}`,borderRadius:9,background:form.role===v?"#ede9fe":"#fff",color:form.role===v?"#6366f1":"#64748b",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={salvar} color="#6366f1">✅ Criar Usuário</Btn>
+              <Btn onClick={()=>setModal(false)} outline color="#64748b">Cancelar</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser]             = useState(null);
   const [tab, setTab]               = useState("dashboard");
@@ -5105,13 +5651,16 @@ export default function App() {
 
   if(!user) return <Login onLogin={setUser}/>;
 
+  const isAdmin = user?.email===ADMIN_EMAIL||user?.role==="admin";
   const NAV = [
-    { id:"dashboard",  label:"Dashboard",   icon: I.dash, color:"#6366f1", bg:"rgba(99,102,241,.18)"  },
-    { id:"devedores",  label:"Devedores",   icon: I.dev,  color:"#ec4899", bg:"rgba(236,72,153,.18)"  },
-    { id:"credores",   label:"Credores",    icon: I.cred, color:"#14b8a6", bg:"rgba(20,184,166,.18)"  },
-    { id:"calculadora",label:"Calculadora", icon: I.calc, color:"#f59e0b", bg:"rgba(245,158,11,.18)"  },
-    { id:"relatorios", label:"Relatórios",  icon: I.rel,  color:"#10b981", bg:"rgba(16,185,129,.18)"  },
-    { id:"lembretes",  label:"Lembretes",   icon: I.bell, color:"#ef4444", bg:"rgba(239,68,68,.18)"   },
+    { id:"dashboard",  label:"Dashboard",   icon: I.dash,   color:"#6366f1", bg:"rgba(99,102,241,.18)"  },
+    { id:"devedores",  label:"Devedores",   icon: I.dev,    color:"#ec4899", bg:"rgba(236,72,153,.18)"  },
+    { id:"credores",   label:"Credores",    icon: I.cred,   color:"#14b8a6", bg:"rgba(20,184,166,.18)"  },
+    { id:"calculadora",label:"Calculadora", icon: I.calc,   color:"#f59e0b", bg:"rgba(245,158,11,.18)"  },
+    { id:"relatorios", label:"Relatórios",  icon: I.rel,    color:"#10b981", bg:"rgba(16,185,129,.18)"  },
+    { id:"lembretes",  label:"Lembretes",   icon: I.bell,   color:"#ef4444", bg:"rgba(239,68,68,.18)"   },
+    { id:"regua",      label:"Régua",       icon: I.regua2, color:"#0891b2", bg:"rgba(8,145,178,.18)"   },
+    ...(isAdmin?[{ id:"usuarios", label:"Usuários", icon: I.users2, color:"#7c3aed", bg:"rgba(124,58,237,.18)" }]:[]),
   ];
 
   const PAGE = {
@@ -5121,6 +5670,8 @@ export default function App() {
     calculadora: <Calculadora devedores={devedores}/>,
     relatorios:  <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>,
     lembretes:   <Lembretes   devedores={devedores} credores={credores} user={user}/>,
+    regua:       <Regua       devedores={devedores} credores={credores} user={user}/>,
+    ...(isAdmin?{usuarios:<GestaoUsuarios user={user}/>}:{}),
   };
 
   return (
