@@ -4998,29 +4998,6 @@ const ETAPAS_PADRAO = [
 const CANAL_ICONS = { whatsapp:"📱", email:"📧", sms:"💬", ligacao:"📞", sistema:"⚙️" };
 const CAT_CORES   = { amigavel:{cor:"#16a34a",bg:"#dcfce7",l:"Amigável"}, moderado:{cor:"#d97706",bg:"#fef3c7",l:"Moderado"}, rigido:{cor:"#dc2626",bg:"#fee2e2",l:"Rígido"}, judicial:{cor:"#7c3aed",bg:"#ede9fe",l:"Judicial"} };
 
-class ReguaErrorBoundary extends React.Component {
-  constructor(props){ super(props); this.state={erro:null}; }
-  static getDerivedStateFromError(e){ return {erro:e}; }
-  render(){
-    if(this.state.erro) return(
-      <div style={{padding:32,textAlign:"center",color:"#64748b"}}>
-        <div style={{fontSize:36,marginBottom:12}}>⚠️</div>
-        <p style={{fontWeight:700,color:"#dc2626",fontSize:15,marginBottom:8}}>Erro ao carregar a Régua</p>
-        <p style={{fontSize:12,color:"#94a3b8",marginBottom:16}}>{this.state.erro?.message||"Erro desconhecido"}</p>
-        <button onClick={()=>this.setState({erro:null})}
-          style={{background:"#6366f1",color:"#fff",border:"none",borderRadius:9,padding:"9px 20px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-          🔄 Tentar novamente
-        </button>
-      </div>
-    );
-    return this.props.children;
-  }
-}
-
-function ReguaWrapper(props){
-  return <ReguaErrorBoundary><Regua {...props}/></ReguaErrorBoundary>;
-}
-
 function Regua({ devedores, credores, user }) {
   const hoje = new Date().toISOString().slice(0,10);
   const regKey      = "mr_regua_etapas";
@@ -5844,7 +5821,7 @@ export default function App() {
       case "calculadora": return <Calculadora devedores={devedores}/>;
       case "relatorios":  return <Relatorios  devedores={devedores} processos={processos} andamentos={andamentos} credores={credores}/>;
       case "lembretes":   return <Lembretes   devedores={devedores} credores={credores} user={user}/>;
-      case "regua":       return <ReguaWrapper devedores={devedores} credores={credores} user={user}/>;
+      case "regua":       return <Regua devedores={devedores} credores={credores} user={user}/>;
       case "usuarios":    return isAdmin ? <GestaoUsuarios user={user}/> : null;
       default:            return null;
     }
