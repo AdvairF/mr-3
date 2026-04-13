@@ -4786,7 +4786,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
                       <tr key={d.id} style={{ borderTop: "1px solid #f8fafc" }}>
                         <td style={{ padding: "10px 12px", fontWeight: 700, color: "#0f172a" }}>{d.nome}</td>
                         <td style={{ padding: "10px 12px", fontSize: 11, color: "#64748b" }}>{(credor?.nome || "—").split(" ").slice(0, 2).join(" ")}</td>
-                        <td style={{ padding: "10px 12px" }}><Badge s={d.status || "ativo"} /></td>
+                        <td style={{ padding: "10px 12px" }}><BadgeDev status={d.status || "ativo"} /></td>
                         <td style={{ padding: "10px 12px", color: "#0f172a", fontWeight: 600 }}>{fmt(s.totalNominal)}</td>
                         <td style={{ padding: "10px 12px", color: "#059669", fontWeight: 700 }}>{fmt(s.pago)}</td>
                         <td style={{ padding: "10px 12px", color: "#dc2626", fontWeight: 700 }}>{fmt(s.aberto)}</td>
@@ -4866,7 +4866,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
                         <td style={{ padding: "9px 12px", color: "#475569" }}>{div.descricao}</td>
                         <td style={{ padding: "9px 12px", color: "#d97706", fontWeight: 700 }}>{fmt(div.despesas || 0)}</td>
                         <td style={{ padding: "9px 12px", color: "#6d28d9", fontWeight: 700 }}>{fmt((div.valor_total || 0) * (div.honorarios_pct || 0) / 100)}</td>
-                        <td style={{ padding: "9px 12px" }}><Badge s={d.status || "ativo"} /></td>
+                        <td style={{ padding: "9px 12px" }}><BadgeDev status={d.status || "ativo"} /></td>
                       </tr>
                     ));
                   })}
