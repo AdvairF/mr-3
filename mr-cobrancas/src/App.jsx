@@ -1932,7 +1932,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     try {
       const payload = {
         nome: form.nome, cpf_cnpj: form.cpf_cnpj, tipo: form.tipo, email: form.email || null,
-        telefone: form.telefone || null, cidade: form.cidade || "GoiÃ¢nia",
+        telefone: form.telefone || null, cidade: form.cidade || "Goiânia",
         credor_id: form.credor_id ? parseInt(form.credor_id) : null,
         valor_original: valorNominal, status: form.status || "novo", dividas: JSON.stringify([]),
         rg: form.rg || null, profissao: form.profissao || null, socio_nome: form.socio_nome || null,
@@ -1955,7 +1955,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
           telefone2: form.telefone2, cep: form.cep,
           logradouro: form.logradouro, numero: form.numero,
           complemento: form.complemento, bairro: form.bairro, uf: form.uf,
-          cidade: form.cidade || "GoiÃ¢nia",
+          cidade: form.cidade || "Goiânia",
           credor_id: form.credor_id ? parseInt(form.credor_id) : null,
           descricao_divida: form.descricao_divida,
           observacoes: form.observacoes,
@@ -3027,11 +3027,70 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
 // CREDORES
 // ═══════════════════════════════════════════════════════════════
 function Credores({ credores, setCredores }) {
+  const FORM_VAZIO = {
+    nome: "", cpf_cnpj: "", tipo: "PJ", responsavel: "", contato: "", ativo: true,
+    email: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
+    profissao: "", rg: "", estado_civil: "", nacionalidade: "Brasileiro(a)",
+  };
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ nome: "", cpf_cnpj: "", tipo: "PJ", responsavel: "", contato: "", ativo: true });
+  const [abaModal, setAbaModal] = useState("dados"); // "dados" | "peticao"
+  const [editando, setEditando] = useState(null);
+  const [form, setForm] = useState(FORM_VAZIO);
   const [buscandoCNPJCred, setBuscandoCNPJCred] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erroSave, setErroSave] = useState("");
   const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  function save() { setCredores(p => [...p, { ...form, id: Date.now() }]); setModal(false); }
+
+  function abrirNovo() { setEditando(null); setForm(FORM_VAZIO); setAbaModal("dados"); setErroSave(""); setModal(true); }
+  function abrirEditar(c) {
+    setEditando(c);
+    setForm({
+      nome: c.nome || "", cpf_cnpj: c.cpf_cnpj || "", tipo: c.tipo || "PJ",
+      responsavel: c.responsavel || "", contato: c.contato || "", ativo: c.ativo ?? true,
+      email: c.email || "", logradouro: c.logradouro || "", numero: c.numero || "",
+      complemento: c.complemento || "", bairro: c.bairro || "", cidade: c.cidade || "", uf: c.uf || "",
+      profissao: c.profissao || "", rg: c.rg || "", estado_civil: c.estado_civil || "",
+      nacionalidade: c.nacionalidade || "Brasileiro(a)",
+    });
+    setAbaModal("dados"); setErroSave(""); setModal(true);
+  }
+
+  async function save() {
+    if (!form.nome.trim()) { setErroSave("Informe o nome do credor."); return; }
+    setErroSave(""); setSalvando(true);
+    try {
+      if (editando) {
+        const res = await dbUpdate("credores", editando.id, form);
+        const atualizado = Array.isArray(res) ? res[0] : res;
+        setCredores(p => p.map(c => c.id === editando.id ? (atualizado || { ...c, ...form }) : c));
+      } else {
+        const res = await dbInsert("credores", form);
+        const novo = Array.isArray(res) ? res[0] : res;
+        if (!novo?.id) throw new Error("Banco não retornou o credor salvo.");
+        setCredores(p => [...p, novo]);
+      }
+      setModal(false); setForm(FORM_VAZIO); setEditando(null);
+    } catch (e) {
+      setErroSave("Erro ao salvar: " + (e?.message || String(e)));
+    }
+    setSalvando(false);
+  }
+
+  async function excluir(c) {
+    if (!window.confirm(`Excluir o credor "${c.nome}"? Devedores vinculados perderão o vínculo.`)) return;
+    try {
+      await dbDelete("credores", c.id);
+      setCredores(p => p.filter(x => x.id !== c.id));
+    } catch (e) { alert("Erro ao excluir: " + (e?.message || e)); }
+  }
+
+  async function toggleAtivo(c) {
+    try {
+      await dbUpdate("credores", c.id, { ativo: !c.ativo });
+      setCredores(p => p.map(x => x.id === c.id ? { ...x, ativo: !c.ativo } : x));
+    } catch (e) { alert("Erro: " + (e?.message || e)); }
+  }
+
   async function buscarCNPJCred() {
     const c = form.cpf_cnpj.replace(/\D/g, "");
     if (c.length !== 14) return alert("CNPJ inválido. Digite os 14 dígitos.");
@@ -3044,53 +3103,104 @@ function Credores({ credores, setCredores }) {
         ...f,
         nome: d.razao_social || f.nome,
         contato: d.ddd_telefone_1 ? d.ddd_telefone_1.replace(/\D/g, "").replace(/^(\d{2})(\d)/g, "($1) $2") : f.contato,
+        logradouro: d.logradouro ? `${d.descricao_tipo_de_logradouro || ""} ${d.logradouro}`.trim() : f.logradouro,
+        numero: d.numero || f.numero,
+        complemento: d.complemento || f.complemento,
+        bairro: d.bairro || f.bairro,
+        cidade: d.municipio || f.cidade,
+        uf: d.uf || f.uf,
       }));
     } catch (e) { alert("CNPJ não encontrado ou erro na consulta."); }
     setBuscandoCNPJCred(false);
   }
 
+  const UFS = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
+  const ESTADOS_CIVIS = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União Estável"];
+  const secTitle = (txt) => (
+    <div style={{ gridColumn: "1/-1", borderBottom: "1.5px solid #f1f5f9", paddingBottom: 6, marginTop: 8, marginBottom: 2 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{txt}</span>
+    </div>
+  );
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 22, color: "#0f172a" }}>Credores</h2>
-        <Btn onClick={() => setModal(true)}>{I.plus} Novo Credor</Btn>
+        <Btn onClick={abrirNovo}>{I.plus} Novo Credor</Btn>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 16 }}>
         {credores.map(c => (
           <div key={c.id} style={{ background: "#fff", borderRadius: 18, padding: 22, border: "1px solid #e8edf2", boxShadow: "0 1px 6px rgba(0,0,0,.05)", borderTop: `4px solid ${c.ativo ? "#4f46e5" : "#e2e8f0"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{c.nome}</p>
                 <p style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", marginTop: 2 }}>{c.cpf_cnpj}</p>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: c.ativo ? "#ede9fe" : "#f1f5f9", color: c.ativo ? "#6d28d9" : "#94a3b8" }}>{c.ativo ? "Ativo" : "Inativo"}</span>
+              <button onClick={() => toggleAtivo(c)} title={c.ativo ? "Clique para inativar" : "Clique para ativar"} style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 99, background: c.ativo ? "#ede9fe" : "#f1f5f9", color: c.ativo ? "#6d28d9" : "#94a3b8", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>{c.ativo ? "Ativo" : "Inativo"}</button>
             </div>
-            <div style={{ fontSize: 12, color: "#64748b", display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ fontSize: 12, color: "#64748b", display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
               <span><b>Tipo:</b> {c.tipo}</span>
-              <span><b>Responsável:</b> {c.responsavel}</span>
-              <span><b>Contato:</b> {c.contato}</span>
+              <span><b>Responsável:</b> {c.responsavel || "—"}</span>
+              <span><b>Contato:</b> {c.contato || "—"}</span>
+              {c.cidade && <span><b>Cidade:</b> {c.cidade}{c.uf ? `/${c.uf}` : ""}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => abrirEditar(c)} style={{ flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#475569", cursor: "pointer" }}>✏️ Editar</button>
+              <button onClick={() => excluir(c)} style={{ padding: "7px 12px", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #fee2e2", background: "#fff5f5", color: "#ef4444", cursor: "pointer" }}>🗑️</button>
             </div>
           </div>
         ))}
       </div>
       {modal && (
-        <Modal title="Novo Credor" onClose={() => setModal(false)}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Inp label="Nome / Razão Social" value={form.nome} onChange={v => F("nome", v)} span={2} />
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>CPF / CNPJ</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={form.cpf_cnpj} onChange={e => F("cpf_cnpj", form.tipo === "PF" ? maskCPF(e.target.value) : maskCNPJ(e.target.value))} placeholder={form.tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} style={{ flex: 1, padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
-                {form.tipo === "PJ" && <button onClick={buscarCNPJCred} disabled={buscandoCNPJCred} style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{buscandoCNPJCred ? "⏳" : "🔍 Buscar"}</button>}
-              </div>
-            </div>
-            <Inp label="Tipo" value={form.tipo} onChange={v => F("tipo", v)} options={["PF", "PJ"]} />
-            <Inp label="Responsável" value={form.responsavel} onChange={v => F("responsavel", v)} />
-            <Inp label="Contato" value={form.contato} onChange={v => F("contato", v)} />
+        <Modal title={editando ? "Editar Credor" : "Novo Credor"} onClose={() => { setModal(false); setEditando(null); setForm(FORM_VAZIO); }}>
+          {/* Abas */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "2px solid #f1f5f9", paddingBottom: 0 }}>
+            {[["dados", "📋 Dados Gerais"], ["peticao", "⚖️ Dados para Petição"]].map(([id, lbl]) => (
+              <button key={id} onClick={() => setAbaModal(id)} style={{ padding: "8px 16px", fontSize: 12, fontWeight: 700, border: "none", background: "none", cursor: "pointer", color: abaModal === id ? "#4f46e5" : "#94a3b8", borderBottom: `2px solid ${abaModal === id ? "#4f46e5" : "transparent"}`, marginBottom: -2 }}>{lbl}</button>
+            ))}
           </div>
+
+          {abaModal === "dados" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Inp label="Nome / Razão Social" value={form.nome} onChange={v => F("nome", v)} span={2} />
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>CPF / CNPJ</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={form.cpf_cnpj} onChange={e => F("cpf_cnpj", form.tipo === "PF" ? maskCPF(e.target.value) : maskCNPJ(e.target.value))} placeholder={form.tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} style={{ flex: 1, padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+                  {form.tipo === "PJ" && <button onClick={buscarCNPJCred} disabled={buscandoCNPJCred} style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{buscandoCNPJCred ? "⏳" : "🔍 Buscar"}</button>}
+                </div>
+              </div>
+              <Inp label="Tipo" value={form.tipo} onChange={v => F("tipo", v)} options={["PF", "PJ"]} />
+              <Inp label="Responsável" value={form.responsavel} onChange={v => F("responsavel", v)} />
+              <Inp label="Telefone / Contato" value={form.contato} onChange={v => F("contato", v)} />
+              <Inp label="E-mail" value={form.email} onChange={v => F("email", v)} span={2} />
+            </div>
+          )}
+
+          {abaModal === "peticao" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {secTitle("Endereço (para qualificação na petição)")}
+              <Inp label="Logradouro" value={form.logradouro} onChange={v => F("logradouro", v)} span={2} />
+              <Inp label="Número" value={form.numero} onChange={v => F("numero", v)} />
+              <Inp label="Complemento" value={form.complemento} onChange={v => F("complemento", v)} />
+              <Inp label="Bairro" value={form.bairro} onChange={v => F("bairro", v)} />
+              <Inp label="Cidade" value={form.cidade} onChange={v => F("cidade", v)} />
+              <Inp label="UF" value={form.uf} onChange={v => F("uf", v)} options={UFS} />
+
+              {form.tipo === "PF" && (<>
+                {secTitle("Qualificação Pessoal (Pessoa Física)")}
+                <Inp label="Profissão" value={form.profissao} onChange={v => F("profissao", v)} />
+                <Inp label="RG" value={form.rg} onChange={v => F("rg", v)} />
+                <Inp label="Estado Civil" value={form.estado_civil} onChange={v => F("estado_civil", v)} options={ESTADOS_CIVIS} />
+                <Inp label="Nacionalidade" value={form.nacionalidade} onChange={v => F("nacionalidade", v)} />
+              </>)}
+            </div>
+          )}
+
+          {erroSave && <div style={{ marginTop: 12, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 9, fontSize: 13, color: "#dc2626" }}>{erroSave}</div>}
           <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-            <Btn onClick={save}>Salvar</Btn>
-            <Btn onClick={() => setModal(false)} outline>Cancelar</Btn>
+            <Btn onClick={save} disabled={salvando}>{salvando ? "Salvando..." : "Salvar"}</Btn>
+            <Btn onClick={() => { setModal(false); setEditando(null); setForm(FORM_VAZIO); }} outline>Cancelar</Btn>
           </div>
         </Modal>
       )}
@@ -3117,7 +3227,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState({ ...FORM_PROC_VAZIO });
   const [formEdit, setFormEdit] = useState({});
-  const [andForm, setAndForm] = useState({ tipo: "Citação", descricao: "", data: hoje, prazo: "", responsavel: user?.nome || "" });
+  const [andForm, setAndForm] = useState({ tipo: "Citação", descricao: "", data: hoje, prazo: "", usuario: user?.nome || "" });
   const [loading, setLoading] = useState(false);
   const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const FE = (k, v) => setFormEdit(f => ({ ...f, [k]: v }));
@@ -3209,9 +3319,12 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
   async function addAnd() {
     if (!sel || !andForm.descricao.trim()) return alert("Informe a descrição do andamento.");
     const novoAnd = {
-      ...andForm, id: Date.now(), processo_id: sel.id,
-      responsavel: user?.nome || "Sistema",
+      processo_id: sel.id,
+      tipo: andForm.tipo,
+      descricao: andForm.descricao,
       data: andForm.data || hoje,
+      prazo: andForm.prazo || null,
+      usuario: user?.nome || "Sistema",
     };
     // Atualizar proximo_prazo do processo se houver prazo no andamento
     if (andForm.prazo) {
@@ -3225,7 +3338,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
     } catch (e) {
       setAndamentos(p => [...p, novoAnd]);
     }
-    setAndForm({ tipo: "Citação", descricao: "", data: hoje, prazo: "", responsavel: user?.nome || "" });
+    setAndForm({ tipo: "Citação", descricao: "", data: hoje, prazo: "", usuario: user?.nome || "" });
   }
 
   async function excluirProcesso(id) {
@@ -3419,7 +3532,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Responsável</label>
-                    <input value={andForm.responsavel || user?.nome || ""} onChange={e => setAndForm(f => ({ ...f, responsavel: e.target.value }))} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "Plus Jakarta Sans" }} />
+                    <input value={andForm.usuario || user?.nome || ""} onChange={e => setAndForm(f => ({ ...f, usuario: e.target.value }))} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "Plus Jakarta Sans" }} />
                   </div>
                 </div>
                 <div style={{ marginTop: 12 }}>
@@ -3454,7 +3567,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
                           </div>
                           <div style={{ display: "flex", gap: 8, fontSize: 11, color: "#94a3b8" }}>
                             <span>{fmtDate(a.data)}</span>
-                            {a.responsavel && <span>· {a.responsavel}</span>}
+                            {a.usuario && <span>· {a.usuario}</span>}
                           </div>
                         </div>
                         <p style={{ fontSize: 13, color: "#0f172a", lineHeight: 1.6 }}>{a.descricao}</p>

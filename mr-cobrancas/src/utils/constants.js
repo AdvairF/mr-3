@@ -25,7 +25,7 @@ export const FORM_DEV_VAZIO = {
 
 export const DIVIDA_VAZIA = {
   descricao: "", valor_total: "", data_origem: "", data_primeira_parcela: "", qtd_parcelas: "1",
-  parcelas: [], indexador: "igpm", juros_tipo: "fixo_1", multa_pct: "2", juros_am: "1", honorarios_pct: "20",
+  parcelas: [], indexador: "igpm", juros_tipo: "fixo_1", multa_pct: "0", juros_am: "0", honorarios_pct: "0",
   data_inicio_atualizacao: "", despesas: "0", observacoes: "", custas: [],
 };
 
