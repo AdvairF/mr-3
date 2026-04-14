@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 
 // ─── IMPORTS DOS MÓDULOS ──────────────────────────────────────
 // Config / Auth
-import { sb, dbGet, dbInsert, dbUpdate, dbDelete } from "./config/supabase.js";
+import { sb, dbGet, dbInsert, dbUpdate, dbDelete, signOut, setAuthToken } from "./config/supabase.js";
 import { authenticateUser, fetchSystemUsers } from "./auth/users.js";
 
 // Utils
@@ -31,6 +31,9 @@ import Modal from "./components/ui/Modal.jsx";
 import Btn from "./components/ui/Btn.jsx";
 import { Inp, INP } from "./components/ui/Inp.jsx";
 import { BadgeDev, BadgeProc } from "./components/ui/Badge.jsx";
+
+// Módulo de Petições
+import GerarPeticao from "./components/GerarPeticao.jsx";
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -72,7 +75,7 @@ const I = {
   calc: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="3" /><rect x="7" y="5" width="10" height="4" rx="1" /><circle cx="8" cy="14" r="1" fill="currentColor" /><circle cx="12" cy="14" r="1" fill="currentColor" /><circle cx="16" cy="14" r="1" fill="currentColor" /><circle cx="8" cy="18" r="1" fill="currentColor" /><circle cx="12" cy="18" r="1" fill="currentColor" /><circle cx="16" cy="18" r="1" fill="currentColor" /></svg>,
   // Relatórios — gráfico de tendência
   rel: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /><path d="M5 20H2v-3" /><path d="M19 4h3v3" /></svg>,
-  wp: <svg viewBox="0 0 24 24" fill="currentColor" className="w-[18px] h-[18px]"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>,
+  wp: <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 17, height: 17, flexShrink: 0 }}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>,
   plus: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
   search: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>,
   eye: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>,
@@ -90,6 +93,8 @@ const I = {
   users2: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>,
   // Plus moderno
   plus2: <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
+  // Petição — balança da justiça
+  peticao: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18" /><path d="M3 6l4 8c0 1.1 0 2-1.5 2S4 14.1 4 13" /><path d="M3 6c0-1.1.9-2 2-2h2" /><path d="M21 6l-4 8c0 1.1 0 2 1.5 2s1.5-1.1 1.5-2" /><path d="M21 6c0-1.1-.9-2-2-2h-2" /><path d="M7 21h10" /></svg>,
 };
 // ═══════════════════════════════════════════════════════════════
 // LOGIN SCREEN
@@ -1506,7 +1511,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       const i = (parseFloat(div.juros_am) || 0) / 100;
       const juros = PC * (Math.pow(1 + i, meses) - 1);
       const multaVal = PC * ((parseFloat(div.multa_pct) || 0) / 100);
-      const honPct = parseFloat(div.honorarios_pct || 20) / 100;
+      const honPct = parseFloat(div.honorarios_pct ?? 0) / 100;
       const subtotal = PC + juros + multaVal;
       const hon = subtotal * honPct;
       const total = subtotal + hon;
@@ -1537,7 +1542,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
         `${idxMap[div.indexador] || "IGP-M"}`,
         `Juros: ${div.juros_am || 0}%am`,
         `Multa: ${div.multa_pct || 0}%`,
-        `Hon: ${div.honorarios_pct || 20}%`,
+        ...(honPct > 0 ? [`Hon: ${div.honorarios_pct}%`] : []),
       ].join("  ·  ");
       doc.text(det, ML + 2, y);
       y += 7;
@@ -1549,7 +1554,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
         { l: "Princ. Corrigido", v: fmt(PC), x: ML + 67, w: 35, cor: azul },
         { l: "Juros", v: fmt(juros), x: ML + 103, w: 28, cor: [217, 119, 6] },
         { l: "Multa", v: fmt(multaVal), x: ML + 132, w: 25, cor: [220, 38, 38] },
-        { l: "Honorários", v: fmt(hon), x: ML + 158, w: 28, cor: [180, 83, 9] },
+        ...(hon > 0 ? [{ l: "Honorários", v: fmt(hon), x: ML + 158, w: 28, cor: [180, 83, 9] }] : []),
       ];
 
       // Fundo da tabela
@@ -1636,7 +1641,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       doc.text(`Correção: ${fmt(totalGeralCorr)}`, ML + 40, y + 7);
       doc.text(`Juros: ${fmt(totalGeralJuros)}`, ML + 80, y + 7);
       doc.text(`Multa: ${fmt(totalGeralMulta)}`, ML + 110, y + 7);
-      doc.text(`Hon: ${fmt(totalGeralHon)}`, ML + 140, y + 7);
+      if (totalGeralHon > 0) doc.text(`Hon: ${fmt(totalGeralHon)}`, ML + 140, y + 7);
       doc.setFontSize(9); doc.setTextColor(74, 222, 128);
       doc.text(`TOTAL: ${fmt(totalGeralDiv + totalGeralCorr + totalGeralJuros + totalGeralMulta + totalGeralHon)}`, MR - 2, y + 5.5, { align: "right" });
       y += 16;
@@ -1849,13 +1854,17 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [buscandoCEPEdit, setBuscandoCEPEdit] = useState(false);
+  const [buscandoCNPJ, setBuscandoCNPJ] = useState(false);
   const [nd, setNd] = useState(DIVIDA_VAZIA);
+  const [editDivId, setEditDivId] = useState(null);
+  const [ndEdit, setNdEdit] = useState(DIVIDA_VAZIA);
   const [wp, setWp] = useState(null);
   const [novoContato, setNovoContato] = useState({ tipo: "ligacao", resultado: "sem_resposta", obs: "" });
 
   const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const FE = (k, v) => setFormEdit(f => ({ ...f, [k]: v }));
-  const ND = (k, v) => setNd(d => ({ ...d, [k]: v }));
+  const ND  = (k, v) => setNd(d => ({ ...d, [k]: v }));
+  const NDE = (k, v) => setNdEdit(d => ({ ...d, [k]: v }));
 
   function abrirModal(tipo, dev = null) {
     setModal(tipo);
@@ -1888,6 +1897,31 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     setBuscandoCEPEdit(true);
     try { const r = await fetch(`https://viacep.com.br/ws/${c}/json/`); const d = await r.json(); if (d.erro) return alert("CEP não encontrado."); setFormEdit(f => ({ ...f, logradouro: d.logradouro || "", bairro: d.bairro || "", cidade: d.localidade || "", uf: d.uf || "GO" })); } catch (e) { }
     setBuscandoCEPEdit(false);
+  }
+  async function buscarCNPJ() {
+    const c = form.cpf_cnpj.replace(/\D/g, "");
+    if (c.length !== 14) return alert("CNPJ inválido. Digite os 14 dígitos.");
+    setBuscandoCNPJ(true);
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${c}`);
+      if (!r.ok) { alert("CNPJ não encontrado na Receita Federal."); setBuscandoCNPJ(false); return; }
+      const d = await r.json();
+      setForm(f => ({
+        ...f,
+        nome: d.razao_social || f.nome,
+        socio_nome: d.qsa?.[0]?.nome_socio || f.socio_nome,
+        email: d.email || f.email,
+        telefone: d.ddd_telefone_1 ? d.ddd_telefone_1.replace(/\D/g, "").replace(/^(\d{2})(\d)/g, "($1) $2") : f.telefone,
+        cep: d.cep ? maskCEP(d.cep.replace(/\D/g, "")) : f.cep,
+        logradouro: d.logradouro || f.logradouro,
+        numero: d.numero || f.numero,
+        complemento: d.complemento || f.complemento,
+        bairro: d.bairro || f.bairro,
+        cidade: d.municipio || f.cidade,
+        uf: d.uf || f.uf,
+      }));
+    } catch (e) { alert("CNPJ não encontrado ou erro na consulta."); }
+    setBuscandoCNPJ(false);
   }
 
   // ── Salvar devedor (fallback progressivo) ────────────────────
@@ -2053,7 +2087,10 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
     try {
       const res = await dbUpdate("devedores", sel.id, { contatos: JSON.stringify(contatos) });
       const atu = Array.isArray(res) ? res[0] : res;
-      if (atu) { const parsed = { ...atu, dividas: sel.dividas || [], contatos, acordos: sel.acordos || [] }; setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed); setNovoContato({ tipo: "ligacao", resultado: "sem_resposta", obs: "" }); }
+      const parsed = atu ? { ...atu, dividas: sel.dividas || [], contatos, acordos: sel.acordos || [] } : { ...sel, contatos };
+      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
+      setSel(parsed);
+      setNovoContato({ tipo: "ligacao", resultado: "sem_resposta", obs: "" });
     } catch (e) { alert("Erro: " + e.message); }
   }
 
@@ -2184,6 +2221,73 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       const parsed = montarDevAtualizado(null, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed);
     }
+  }
+
+  function abrirEdicaoDivida(div) {
+    setEditDivId(div.id);
+    const dataBase = div.data_origem || div.data_vencimento || "";
+    setNdEdit({
+      descricao: div.descricao || "",
+      valor_total: String(div.valor_total || ""),
+      data_origem: dataBase,
+      data_vencimento: div.data_vencimento || dataBase,
+      data_inicio_atualizacao: div.data_inicio_atualizacao || dataBase,
+      indexador: div.indexador || "igpm",
+      juros_tipo: div.juros_tipo || "fixo_1",
+      juros_am: String(div.juros_am ?? "1"),
+      multa_pct: String(div.multa_pct ?? "2"),
+      honorarios_pct: String(div.honorarios_pct ?? "20"),
+      despesas: String(div.despesas ?? "0"),
+      observacoes: div.observacoes || "",
+      parcelas: div.parcelas || [],
+      custas: div.custas || [],
+    });
+  }
+
+  async function salvarEdicaoDivida() {
+    if (!sel || !editDivId) return;
+    const total = parseFloat(ndEdit.valor_total) || 0;
+    if (!total) { alert("Informe o valor da dívida."); return; }
+    const dataRef = ndEdit.data_origem || ndEdit.data_vencimento;
+    if (!dataRef) { alert("Informe a data de vencimento."); return; }
+    const dividas = (sel.dividas || []).map(d => {
+      if (String(d.id) !== String(editDivId)) return d;
+      return {
+        ...d,
+        descricao: ndEdit.descricao || "Dívida",
+        valor_total: total,
+        data_origem: dataRef,
+        data_vencimento: ndEdit.data_vencimento || dataRef,
+        data_inicio_atualizacao: ndEdit.data_inicio_atualizacao || dataRef,
+        indexador: ndEdit.indexador,
+        juros_tipo: ndEdit.juros_tipo,
+        juros_am: parseFloat(ndEdit.juros_am || "0"),
+        multa_pct: parseFloat(ndEdit.multa_pct || "0"),
+        honorarios_pct: parseFloat(ndEdit.honorarios_pct || "0"),
+        despesas: parseFloat(ndEdit.despesas || "0"),
+        observacoes: ndEdit.observacoes || "",
+      };
+    });
+    const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
+    try {
+      const res = await dbUpdate("devedores", sel.id, { dividas: JSON.stringify(dividas), valor_original });
+      const atu = Array.isArray(res) ? res[0] : res;
+      const parsed = montarDevAtualizado(atu, dividas);
+      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
+      setSel(parsed);
+      if (!atu) {
+        alert("⚠️ Dívida salva localmente, mas não foi possível confirmar a sincronização com o banco.\nSe o problema persistir, faça logout e login novamente.");
+      } else {
+        alert("✅ Dívida atualizada com sucesso!");
+      }
+    } catch (e) {
+      alert("Erro ao salvar no Supabase: " + e.message + "\nAs alterações foram salvas localmente.");
+      const parsed = montarDevAtualizado(null, dividas);
+      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
+      setSel(parsed);
+    }
+    setEditDivId(null);
+    setNdEdit(DIVIDA_VAZIA);
   }
 
   async function atualizarStatus(novoStatus) {
@@ -2431,15 +2535,15 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                 const bordaColor = ehSoCustas ? "#fed7aa" : "#e2e8f0";
                 const bgColor = ehSoCustas ? "#fffbf7" : "#fff";
                 return (
-                  <div key={div.id} style={{ border: `1.5px solid ${bordaColor}`, borderRadius: 14, padding: 14, marginBottom: 12, background: bgColor }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div key={div.id} style={{ border: `1.5px solid ${editDivId === div.id ? "#6366f1" : bordaColor}`, borderRadius: 14, padding: 14, marginBottom: 12, background: bgColor }}>
+                    {/* ── Cabeçalho do card ── */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: editDivId === div.id ? 12 : 8 }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                           {ehSoCustas && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "#fed7aa", color: "#c2410c" }}>🏛 CUSTAS</span>}
                           <p style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{div.descricao}</p>
                         </div>
                         {ehSoCustas ? (
-                          // Exibição especial para custas
                           <div>
                             <p style={{ fontSize: 11, color: "#c2410c", fontWeight: 600 }}>
                               {custas.length} item{custas.length > 1 ? "s" : ""} · Total: <b>{fmt(totalCustas)}</b> · Só correção monetária
@@ -2453,7 +2557,6 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                             ))}
                           </div>
                         ) : (
-                          // Exibição normal para dívidas
                           <div>
                             <p style={{ fontSize: 11, color: "#64748b" }}>
                               {div.parcelas?.length > 0
@@ -2465,9 +2568,46 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                           </div>
                         )}
                       </div>
-                      <button onClick={() => excluirDivida(div.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "3px 8px", cursor: "pointer", fontSize: 10, marginLeft: 8 }}>🗑</button>
+                      {/* Botões Editar / Excluir */}
+                      {!ehSoCustas && editDivId !== div.id && (
+                        <div style={{ display: "flex", gap: 5, marginLeft: 8, flexShrink: 0 }}>
+                          <button onClick={() => abrirEdicaoDivida(div)} style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️ Editar</button>
+                          <button onClick={() => excluirDivida(div.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>🗑️ Excluir</button>
+                        </div>
+                      )}
+                      {ehSoCustas && (
+                        <button onClick={() => excluirDivida(div.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700, marginLeft: 8 }}>🗑️ Excluir</button>
+                      )}
                     </div>
-                    {!ehSoCustas && (
+
+                    {/* ── Formulário de edição inline ── */}
+                    {editDivId === div.id && (
+                      <div style={{ borderTop: "1.5px solid #e0e7ff", paddingTop: 12 }}>
+                        <p style={{ fontSize: 11, fontWeight: 800, color: "#4f46e5", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 10 }}>✏️ Editando dívida</p>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                          <Inp label="Descrição" value={ndEdit.descricao} onChange={v => NDE("descricao", v)} span={2} />
+                          <Inp label="Valor Total (R$)" value={ndEdit.valor_total} onChange={v => NDE("valor_total", v)} type="number" />
+                          <Inp label="Data de Vencimento" value={ndEdit.data_origem} onChange={v => NDE("data_origem", v)} type="date" />
+                        </div>
+                        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: "#4f46e5", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>📋 Diretrizes do Contrato</p>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            <Inp label="Índice" value={ndEdit.indexador} onChange={v => NDE("indexador", v)} options={INDICE_OPTIONS} />
+                            <Inp label="Data Início Atualização" value={ndEdit.data_inicio_atualizacao} onChange={v => NDE("data_inicio_atualizacao", v)} type="date" />
+                            <Inp label="Multa (%)" value={ndEdit.multa_pct} onChange={v => NDE("multa_pct", v)} type="number" />
+                            <Inp label="Taxa de Juros" value={ndEdit.juros_tipo} onChange={v => NDE("juros_tipo", v)} options={JUROS_OPTIONS} />
+                            <Inp label="Juros (% a.m.)" value={ndEdit.juros_am} onChange={v => NDE("juros_am", v)} type="number" disabled={ndEdit.juros_tipo !== "outros"} />
+                            <Inp label="Honorários (%)" value={ndEdit.honorarios_pct} onChange={v => NDE("honorarios_pct", v)} type="number" />
+                            <Inp label="Despesas (R$)" value={ndEdit.despesas} onChange={v => NDE("despesas", v)} type="number" />
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <Btn onClick={salvarEdicaoDivida} color="#4f46e5">✅ Salvar alterações</Btn>
+                          <Btn onClick={() => { setEditDivId(null); setNdEdit(DIVIDA_VAZIA); }} outline color="#64748b">Cancelar</Btn>
+                        </div>
+                      </div>
+                    )}
+                    {!ehSoCustas && editDivId !== div.id && (
                       <>
                         {div.parcelas?.length > 0 && (
                           <div style={{ height: 4, background: "#f1f5f9", borderRadius: 99, marginBottom: 10 }}>
@@ -2739,9 +2879,17 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
                     {acordosDev.length > 0 ? <span style={{ background: "#ede9fe", color: "#4f46e5", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{acordosDev.length} acordo{acordosDev.length > 1 ? "s" : ""}</span> : "—"}
                   </td>
                   <td style={{ padding: "12px 16px" }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {d.telefone && <button onClick={() => abrirWp(d)} style={{ background: "#dcfce7", color: "#16a34a", border: "none", borderRadius: 7, padding: "5px 8px", cursor: "pointer", fontSize: 12 }} title="WhatsApp">{I.wp}</button>}
-                      <button onClick={() => abrirModal("ficha", d)} style={{ background: "#ede9fe", color: "#4f46e5", border: "none", borderRadius: 7, padding: "5px 8px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Ver →</button>
+                    <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                      {d.telefone && (
+                        <button onClick={() => abrirWp(d)} title="Enviar WhatsApp"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#25D366", color: "#fff", border: "none", borderRadius: 8, padding: "6px 11px", cursor: "pointer", fontSize: 12, fontWeight: 700, boxShadow: "0 2px 6px rgba(37,211,102,.30)" }}>
+                          {I.wp} <span>WA</span>
+                        </button>
+                      )}
+                      <button onClick={() => abrirModal("ficha", d)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 13px", cursor: "pointer", fontSize: 12, fontWeight: 700, boxShadow: "0 2px 8px rgba(79,70,229,.28)" }}>
+                        {I.eye} <span>Ver</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -2777,7 +2925,10 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>CPF / CNPJ</label>
-                <input value={form.cpf_cnpj} onChange={e => F("cpf_cnpj", form.tipo === "PF" ? maskCPF(e.target.value) : maskCNPJ(e.target.value))} placeholder={form.tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={form.cpf_cnpj} onChange={e => F("cpf_cnpj", form.tipo === "PF" ? maskCPF(e.target.value) : maskCNPJ(e.target.value))} placeholder={form.tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} style={{ flex: 1, padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+                  {form.tipo === "PJ" && <button onClick={buscarCNPJ} disabled={buscandoCNPJ} style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{buscandoCNPJ ? "⏳" : "🔍 Buscar"}</button>}
+                </div>
               </div>
               {form.tipo === "PF" ? (<><INP label="RG" value={form.rg} onChange={v => F("rg", v)} /><INP label="Data de Nascimento" value={form.data_nascimento} onChange={v => F("data_nascimento", v)} type="date" /><INP label="Profissão" value={form.profissao} onChange={v => F("profissao", v)} span={2} /></>) : (<><INP label="Sócio / Responsável" value={form.socio_nome} onChange={v => F("socio_nome", v)} span={2} /><INP label="CPF do Sócio" value={form.socio_cpf} onChange={v => F("socio_cpf", maskCPF(v))} /></>)}
               <INP label="E-mail" value={form.email} onChange={v => F("email", v)} type="email" />
@@ -2878,8 +3029,25 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
 function Credores({ credores, setCredores }) {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ nome: "", cpf_cnpj: "", tipo: "PJ", responsavel: "", contato: "", ativo: true });
+  const [buscandoCNPJCred, setBuscandoCNPJCred] = useState(false);
   const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
   function save() { setCredores(p => [...p, { ...form, id: Date.now() }]); setModal(false); }
+  async function buscarCNPJCred() {
+    const c = form.cpf_cnpj.replace(/\D/g, "");
+    if (c.length !== 14) return alert("CNPJ inválido. Digite os 14 dígitos.");
+    setBuscandoCNPJCred(true);
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${c}`);
+      if (!r.ok) { alert("CNPJ não encontrado na Receita Federal."); setBuscandoCNPJCred(false); return; }
+      const d = await r.json();
+      setForm(f => ({
+        ...f,
+        nome: d.razao_social || f.nome,
+        contato: d.ddd_telefone_1 ? d.ddd_telefone_1.replace(/\D/g, "").replace(/^(\d{2})(\d)/g, "($1) $2") : f.contato,
+      }));
+    } catch (e) { alert("CNPJ não encontrado ou erro na consulta."); }
+    setBuscandoCNPJCred(false);
+  }
 
   return (
     <div>
@@ -2909,7 +3077,13 @@ function Credores({ credores, setCredores }) {
         <Modal title="Novo Credor" onClose={() => setModal(false)}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <Inp label="Nome / Razão Social" value={form.nome} onChange={v => F("nome", v)} span={2} />
-            <Inp label="CPF / CNPJ" value={form.cpf_cnpj} onChange={v => F("cpf_cnpj", v)} />
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>CPF / CNPJ</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={form.cpf_cnpj} onChange={e => F("cpf_cnpj", form.tipo === "PF" ? maskCPF(e.target.value) : maskCNPJ(e.target.value))} placeholder={form.tipo === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} style={{ flex: 1, padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+                {form.tipo === "PJ" && <button onClick={buscarCNPJCred} disabled={buscandoCNPJCred} style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{buscandoCNPJCred ? "⏳" : "🔍 Buscar"}</button>}
+              </div>
+            </div>
             <Inp label="Tipo" value={form.tipo} onChange={v => F("tipo", v)} options={["PF", "PJ"]} />
             <Inp label="Responsável" value={form.responsavel} onChange={v => F("responsavel", v)} />
             <Inp label="Contato" value={form.contato} onChange={v => F("contato", v)} />
@@ -5961,7 +6135,7 @@ function __old_broken_backup() {
               </div>
             </div>
             <button
-              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
+              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(220,38,38,.15)", color: "#fca5a5", border: "1px solid rgba(220,38,38,.25)", cursor: "pointer", padding: "10px", borderRadius: 11, transition: "all .18s", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", marginTop: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,38,38,.3)"; e.currentTarget.style.color = "#fff"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(220,38,38,.15)"; e.currentTarget.style.color = "#fca5a5"; }}>
@@ -6056,7 +6230,13 @@ function __old_broken_backup() {
 }
 
 export default function App() {
-  const [user, setUser] = useState(() => { try { return JSON.parse(sessionStorage.getItem("mr_user") || "null"); } catch { return null; } });
+  const [user, setUser] = useState(() => {
+    try {
+      const u = JSON.parse(sessionStorage.getItem("mr_user") || "null");
+      if (u?._token) setAuthToken(u._token); // restaura JWT ao recarregar a página
+      return u;
+    } catch { return null; }
+  });
   const [tab, setTab] = useState("dashboard");
   const [tabKey, setTabKey] = useState(0);
   const [sideOpen, setSideOpen] = useState(false);
@@ -6134,7 +6314,7 @@ export default function App() {
     return () => clearInterval(iv);
   }, [user, carregarTudo, modalAberto]);
 
-  if (!user) return <Login onLogin={u => { setUser(u); try { sessionStorage.setItem("mr_user", JSON.stringify(u)); } catch { } }} />;
+  if (!user) return <Login onLogin={u => { if (u?._token) setAuthToken(u._token); setUser(u); try { sessionStorage.setItem("mr_user", JSON.stringify(u)); } catch { } }} />;
 
   const isAdmin = user?.role === "admin";
   const NAV = [
@@ -6145,6 +6325,7 @@ export default function App() {
     { id: "relatorios", label: "Relatórios", icon: I.rel, color: "#10b981", bg: "rgba(16,185,129,.18)" },
     { id: "lembretes", label: "Lembretes", icon: I.bell, color: "#ef4444", bg: "rgba(239,68,68,.18)" },
     { id: "regua", label: "Régua", icon: I.regua2, color: "#0891b2", bg: "rgba(8,145,178,.18)" },
+    { id: "peticao", label: "Petições", icon: I.peticao, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
     ...(isAdmin ? [{ id: "usuarios", label: "Usuários", icon: I.users2, color: "#7c3aed", bg: "rgba(124,58,237,.18)" }] : []),
   ];
 
@@ -6157,6 +6338,7 @@ export default function App() {
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;
       case "lembretes": return <Lembretes devedores={devedores} credores={credores} user={user} />;
       case "regua": return <Regua devedores={devedores} credores={credores} user={user} />;
+      case "peticao": return <GerarPeticao devedores={devedores} credores={credores} />;
       case "usuarios": return isAdmin ? <GestaoUsuarios user={user} /> : null;
       default: return null;
     }
@@ -6314,7 +6496,7 @@ export default function App() {
               </div>
             </div>
             <button
-              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
+              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
               style={{ background: "#fff", color: "#b91c1c", border: "1px solid #fecaca", cursor: "pointer", padding: "8px 10px", borderRadius: 10, transition: "all .18s", fontSize: 12, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
               Sair
             </button>

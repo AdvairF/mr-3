@@ -1,6 +1,7 @@
-import { dbGet } from "../config/supabase.js";
+import { dbGet, signIn, setAuthToken } from "../config/supabase.js";
 
-const LEGACY_LOCAL_USERS = [
+// Usuários locais — garantem acesso mesmo sem conexão com o banco
+const LOCAL_USERS = [
   {
     id: 1,
     nome: "Advair Freitas Vieira",
@@ -29,7 +30,34 @@ export async function authenticateUser(email, senha) {
   const senhaNorm = normSenha(senha);
   if (!emailNorm || !senhaNorm) return null;
 
-  // 1) Tentativa direta (mais performática)
+  // 1) Supabase Auth — autenticação oficial com JWT
+  try {
+    const authData = await signIn(emailNorm, senhaNorm);
+    if (authData?.user) {
+      const token = authData.access_token;
+      // Busca o perfil completo (nome, oab, role) da tabela de usuários
+      const emailQuery = encodeURIComponent(emailNorm);
+      const perfil = await dbGet(
+        "usuarios_sistema",
+        `select=*&email=eq.${emailQuery}&limit=1`
+      ).catch(() => []);
+      if (Array.isArray(perfil) && perfil[0]) return { ...perfil[0], _token: token };
+      // Fallback: monta perfil mínimo a partir dos dados do Supabase Auth
+      const meta = authData.user.user_metadata || {};
+      return {
+        id: authData.user.id,
+        nome: meta.nome || meta.full_name || authData.user.email,
+        oab: meta.oab || "",
+        email: authData.user.email,
+        role: meta.role || "user",
+        _token: token,
+      };
+    }
+  } catch (_) {
+    // Supabase Auth falhou — tenta métodos legados
+  }
+
+  // 2) Fallback legado: busca direta na tabela
   try {
     const emailQuery = encodeURIComponent(emailNorm);
     const senhaQuery = encodeURIComponent(senhaNorm);
@@ -39,20 +67,13 @@ export async function authenticateUser(email, senha) {
     );
     if (Array.isArray(res) && res[0]) return res[0];
   } catch (_) {
-    // continua no fallback
+    // sem acesso ao banco — continua
   }
 
-  // 2) Fallback robusto: compara localmente para evitar falhas por casing/espacos
-  const users = await fetchSystemUsers();
-  const fromSupabase = users.find(
-    (u) => normEmail(u.email) === emailNorm && normSenha(u.senha) === senhaNorm
-  );
-  if (fromSupabase) return fromSupabase;
-
-  // 3) Fallback local: garante acesso do admin legado mesmo se a consulta remota falhar
+  // 3) Fallback local — garante acesso mesmo offline ou sem tabela
   return (
-    LEGACY_LOCAL_USERS.find(
-      (u) => normEmail(u.email) === emailNorm && normSenha(u.senha) === senhaNorm
+    LOCAL_USERS.find(
+      (u) => normEmail(u.email) === emailNorm && u.senha === senhaNorm
     ) || null
   );
 }
