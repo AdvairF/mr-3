@@ -12,6 +12,7 @@ import {
   calcularFatorCorrecao,
   calcularJurosAcumulados,
   obterTaxaJurosMes,
+  setIndicesOverride,
   INDICES,
   TAXA_MEDIA,
   INDICE_OPTIONS,
@@ -20,6 +21,12 @@ import {
   JUROS_LABEL,
   ULTIMA_COMPETENCIA_INDICES,
 } from "./utils/correcao.js";
+import {
+  buscarIndicesBCB,
+  salvarCacheIndices,
+  carregarCacheIndices,
+  obterInfoCache,
+} from "./utils/bcbApi.js";
 import {
   STATUS_DEV, UFS, FORM_DEV_VAZIO, DIVIDA_VAZIA, SECOES,
   TIPOS_LEM, PRIOR,
@@ -3766,10 +3773,8 @@ function Calculadora({ devedores }) {
   const [devId, setDevId] = useState("");
   const [nomeDevedor, setNomeDevedor] = useState("");
   const [valorOriginal, setValorOriginal] = useState("");
-  const [dataVencimento, setDataVencimento] = useState("");
   const [dataCalculo, setDataCalculo] = useState(hoje);
-  const [indexador, setIndexador] = useState("igpm");
-  const [regimeJuros, setRegimeJuros] = useState("composto");
+  const [indexador, setIndexador] = useState("inpc");
   const [jurosTipo, setJurosTipo] = useState("fixo_1");
   const [jurosAM, setJurosAM] = useState("1");
   const [multa, setMulta] = useState("2");
@@ -3783,6 +3788,37 @@ function Calculadora({ devedores }) {
   // Resultado
   const [resultado, setResultado] = useState(null);
   const [dividasSel, setDividasSel] = useState([]);
+
+  // ── Índices BCB ────────────────────────────────────────────────
+  const [atualizandoIndices, setAtualizandoIndices] = useState(false);
+  const [statusIndices, setStatusIndices] = useState(null); // { ok, msg, em }
+
+  // Carregar cache do localStorage no mount
+  useEffect(() => {
+    const cache = carregarCacheIndices();
+    if (cache) {
+      setIndicesOverride(cache);
+      const info = obterInfoCache();
+      const em = info?.atualizadoEm ? new Date(info.atualizadoEm).toLocaleString("pt-BR") : "desconhecido";
+      setStatusIndices({ ok: true, msg: `Índices BCB carregados do cache (${em})`, em });
+    }
+  }, []);
+
+  async function handleAtualizarIndices() {
+    setAtualizandoIndices(true);
+    setStatusIndices(null);
+    try {
+      const dados = await buscarIndicesBCB(10);
+      salvarCacheIndices(dados);
+      setIndicesOverride(dados);
+      const em = new Date(dados.atualizadoEm).toLocaleString("pt-BR");
+      setStatusIndices({ ok: true, msg: `Índices atualizados com sucesso (${em})`, em });
+    } catch (err) {
+      setStatusIndices({ ok: false, msg: `Erro ao buscar índices: ${err.message}` });
+    } finally {
+      setAtualizandoIndices(false);
+    }
+  }
 
   // Labels de índice
   const IDX_LABEL = { igpm: "IGP-M", ipca: "IPCA", selic: "SELIC/CDI", inpc: "INPC", nenhum: "Sem correção" };
@@ -3802,7 +3838,6 @@ function Calculadora({ devedores }) {
       const totalDiv = dividas.reduce((s, div) => s + (div.valor_total || 0), 0) || d.valor_original || 0;
       const datas = dividas.map(div => div.data_inicio_atualizacao || div.data_vencimento || div.data_origem).filter(Boolean).sort();
       setValorOriginal(String(totalDiv));
-      setDataVencimento(datas[0] || "");
     }
   }
 
@@ -3828,20 +3863,20 @@ function Calculadora({ devedores }) {
     // Se não tiver devedor, usa os campos manuais como uma dívida única
     if (!dividasParaCalc || dividasParaCalc.length === 0) {
       const PV = parseFloat(valorOriginal) || 0;
-      if (!PV || !dataVencimento || !dataCalculo) return alert("Preencha valor, data de vencimento e data de cálculo.");
-      const dIni = new Date(dataVencimento + "T12:00:00");
-      const meses = Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()));
-      const dias = Math.max(0, Math.floor((dFim - dIni) / 86400000));
-      const fatorCorrecao = calcularFatorCorrecao(indexador, dataVencimento, dataCalculo);
-      const correcao = PV * fatorCorrecao - PV;
-      const principalCorrigido = PV + correcao;
+      if (!PV || !dataCalculo) return alert("Preencha valor original e data de cálculo.");
+      const dIni = dFim; // sem data de início: sem período de correção
+      const meses = 0;
+      const dias = 0;
+      const fatorCorrecao = 1;
+      const correcao = 0;
+      const principalCorrigido = PV;
       const jurosCalc = calcularJurosAcumulados({
         principal: principalCorrigido,
-        dataInicio: dataVencimento,
+        dataInicio: dataCalculo,
         dataFim: dataCalculo,
         jurosTipo,
         jurosAM,
-        regime: regimeJuros,
+        regime: "simples",
       });
       const juros = jurosCalc.juros;
       const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
@@ -3849,18 +3884,12 @@ function Calculadora({ devedores }) {
       const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
       const honorariosVal = subtotal * honPct / 100;
       const total = subtotal + honorariosVal;
-      const linhasMes = calcularLinhasDivida({
-        valor_total: PV,
-        data_inicio_atualizacao: dataVencimento,
-        data_vencimento: dataVencimento,
-        indexador, juros_tipo: jurosTipo, juros_am: parseFloat(jurosAM), multa_pct: parseFloat(multa),
-        honorarios_pct: honPct
-      }, dataCalculo, baseMulta, encargosVal, bonificacaoVal, regimeJuros);
+      const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
         juros, multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
-        meses: jurosCalc.meses || meses, dias, fatorCorrecao, linhasMes, jurosTipo,
+        meses, dias, fatorCorrecao, linhasMes, jurosTipo,
         dividasDetalhe: [],
       });
     }
@@ -3879,11 +3908,11 @@ function Calculadora({ devedores }) {
       const dataIni = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
       if (!dataIni) continue;
 
-      const idxDiv = div.indexador || indexador;
-      const jTipo = div.juros_tipo || (div.juros_am != null ? "outros" : jurosTipo);
-      const jAM = parseFloat(div.juros_am ?? jurosAM);
-      const mPct = parseFloat(div.multa_pct ?? multa);
-      const hPct = incluirHonorarios ? parseFloat(div.honorarios_pct ?? honorariosPct) : 0;
+      const idxDiv = indexador;
+      const jTipo = jurosTipo;
+      const jAM = parseFloat(jurosAM);
+      const mPct = parseFloat(multa);
+      const hPct = incluirHonorarios ? parseFloat(honorariosPct) : 0;
 
       const dIni = new Date(dataIni + "T12:00:00");
       const meses = Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()));
@@ -3901,7 +3930,7 @@ function Calculadora({ devedores }) {
         dataFim: dataCalculo,
         jurosTipo: jTipo,
         jurosAM: jAM,
-        regime: regimeJuros,
+        regime: "simples",
       }).juros;
 
       // Multa usando % da dívida
@@ -3921,7 +3950,7 @@ function Calculadora({ devedores }) {
       // Linhas mensais desta dívida
       const linhas = calcularLinhasDivida(
         { ...div, indexador: idxDiv, juros_am: jAM, multa_pct: mPct, honorarios_pct: hPct },
-        dataCalculo, baseMulta, 0, 0, regimeJuros
+        dataCalculo, baseMulta, 0, 0
       );
       todasLinhas = [...todasLinhas, ...linhas];
 
@@ -3965,7 +3994,7 @@ function Calculadora({ devedores }) {
   }
 
   // ── Calcular linhas mensais de UMA dívida individual ─────────
-  function calcularLinhasDivida(div, dataCalcStr, baseMultaParam, encargosExtra, bonificacaoExtra, regimeJurosParam) {
+  function calcularLinhasDivida(div, dataCalcStr, baseMultaParam, encargosExtra, bonificacaoExtra) {
     const PV = div.valor_total || 0;
     const dataIni = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
     if (!PV || !dataIni) return [];
@@ -3994,10 +4023,8 @@ function Calculadora({ devedores }) {
       const pcAcum = PV * fatorAcum; // principal corrigido acumulado
       const corrAcum = pcAcum - PV;
 
-      // Juros ACUMULADOS até este mês (sobre principal corrigido acumulado)
-      let jurosAcum = 0;
-      if (regimeJurosParam === "simples") jurosAcum = pcAcum * i * (mesNum + 1);
-      else jurosAcum = pcAcum * (Math.pow(1 + i, mesNum + 1) - 1);
+      // Juros ACUMULADOS até este mês (sobre principal corrigido acumulado) — juros simples
+      const jurosAcum = pcAcum * i * (mesNum + 1);
 
       // Multa: apenas no primeiro mês (mês do vencimento)
       const baseM = baseMultaParam === "corrigido" ? pcAcum : PV;
@@ -4117,7 +4144,7 @@ function Calculadora({ devedores }) {
         ? resultado.dividasDetalhe
         : [{
           descricao: nomeDevedor || "Dívida",
-          dataIni: dataVencimento,
+          dataIni: dataCalculo,
           valor: resultado.valorOriginal,
           valorAtualizado: resultado.principalCorrigido,
           principalCorrigido: resultado.principalCorrigido,
@@ -4185,7 +4212,7 @@ function Calculadora({ devedores }) {
         ["Valor Original", fmt(resultado.valorOriginal)],
         ["Correção Monetária (" + IDX_LABEL[indexador] + ")", fmt(resultado.correcao)],
         ["Principal Corrigido", fmt(resultado.principalCorrigido)],
-        ["Juros (" + (regimeJuros === "composto" ? "compostos" : "simples") + " " + jurosAM + "%am)", fmt(resultado.juros)],
+        ["Juros (simples " + jurosAM + "%am)", fmt(resultado.juros)],
         ["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", fmt(resultado.multa)],
         ...(resultado.encargos > 0 ? [["Encargos", fmt(resultado.encargos)]] : []),
         ...(resultado.bonificacao > 0 ? [["Bonificação (-)", fmt(resultado.bonificacao)]] : []),
@@ -4208,8 +4235,45 @@ function Calculadora({ devedores }) {
 
   return (
     <div>
-      <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 22, color: "#0f172a", marginBottom: 4 }}>Calculadora</h2>
-      <p style={{ fontSize: 13, color: "#64748b", marginBottom: 18 }}>Atualização monetária com honorários integrados — Resumo de Débito.</p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 22, color: "#0f172a", marginBottom: 2 }}>Calculadora</h2>
+          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 0 }}>Atualização monetária com honorários integrados — Resumo de Débito.</p>
+        </div>
+        {/* ── Botão Atualizar Índices BCB ── */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+          <button
+            onClick={handleAtualizarIndices}
+            disabled={atualizandoIndices}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: atualizandoIndices ? "#e2e8f0" : "#4f46e5",
+              color: atualizandoIndices ? "#94a3b8" : "#fff",
+              border: "none", borderRadius: 10, padding: "8px 14px",
+              fontSize: 12, fontWeight: 700, cursor: atualizandoIndices ? "not-allowed" : "pointer",
+              fontFamily: "Plus Jakarta Sans", transition: "background .2s",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, animation: atualizandoIndices ? "spin 1s linear infinite" : "none" }}>
+              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            {atualizandoIndices ? "Buscando..." : "Atualizar Índices BCB"}
+          </button>
+          {statusIndices && (
+            <span style={{
+              fontSize: 11, color: statusIndices.ok ? "#16a34a" : "#dc2626",
+              background: statusIndices.ok ? "#f0fdf4" : "#fef2f2",
+              border: `1px solid ${statusIndices.ok ? "#bbf7d0" : "#fecaca"}`,
+              borderRadius: 6, padding: "3px 8px", maxWidth: 280, textAlign: "right",
+            }}>
+              {statusIndices.ok ? "✓" : "✗"} {statusIndices.msg}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{ marginBottom: 18 }} />
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
 
@@ -4252,12 +4316,8 @@ function Calculadora({ devedores }) {
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Valor Original (R$)</label>
               <input type="number" value={valorOriginal} onChange={e => setValorOriginal(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 14, fontWeight: 700, color: "#4f46e5", outline: "none", boxSizing: "border-box" }} />
             </div>
-            {/* Datas */}
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Data de Vencimento</label>
-              <input type="date" value={dataVencimento} onChange={e => setDataVencimento(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div>
+            {/* Data de cálculo */}
+            <div style={{ gridColumn: "1/-1" }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Data de Cálculo</label>
               <input type="date" value={dataCalculo} onChange={e => setDataCalculo(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
@@ -4272,16 +4332,6 @@ function Calculadora({ devedores }) {
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Juros (% ao mês)</label>
               <input type="number" value={jurosAM} onChange={e => setJurosAM(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-            </div>
-          </div>
-
-          {/* Regime de juros */}
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 6, textTransform: "uppercase" }}>Regime de Juros</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              {[["composto", "Juros Compostos"], ["simples", "Juros Simples"]].map(([v, l]) => (
-                <button key={v} onClick={() => setRegimeJuros(v)} style={{ flex: 1, padding: "7px", border: `1.5px solid ${regimeJuros === v ? "#4f46e5" : "#e2e8f0"}`, borderRadius: 9, background: regimeJuros === v ? "#4f46e5" : "#fff", color: regimeJuros === v ? "#fff" : "#64748b", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "Plus Jakarta Sans" }}>{l}</button>
-              ))}
             </div>
           </div>
 
@@ -4353,7 +4403,7 @@ function Calculadora({ devedores }) {
                   <div>
                     <p style={{ color: "rgba(255,255,255,.5)", fontSize: 11, marginBottom: 2 }}>Total Atualizado</p>
                     <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 30, color: "#fff" }}>{fmt(resultado.total)}</p>
-                    <p style={{ color: "rgba(255,255,255,.4)", fontSize: 11 }}>{resultado.meses} meses · {IDX_LABEL[indexador]} · {regimeJuros === "composto" ? "J. Compostos" : "J. Simples"}</p>
+                    <p style={{ color: "rgba(255,255,255,.4)", fontSize: 11 }}>{resultado.meses} meses · {IDX_LABEL[indexador]} · J. Simples</p>
                   </div>
                   <button onClick={exportarPDF} style={{ background: "rgba(255,255,255,.1)", color: "#a5f3fc", border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "Plus Jakarta Sans", whiteSpace: "nowrap" }}>
                     📄 Exportar PDF
@@ -4365,7 +4415,7 @@ function Calculadora({ devedores }) {
                     ["Valor Original", resultado.valorOriginal, "#94a3b8"],
                     ["Correção (" + IDX_LABEL[indexador] + ")", resultado.correcao, "#818cf8"],
                     ["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"],
-                    ["Juros (" + jurosAM + "%am " + (regimeJuros === "composto" ? "comp." : "simples") + ")", resultado.juros, "#fbbf24"],
+                    ["Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"],
                     ["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", resultado.multa, "#f87171"],
                     ...(resultado.encargos > 0 ? [["Encargos", resultado.encargos, "#f97316"]] : []),
                     ...(resultado.bonificacao > 0 ? [["Bonificação (-)", resultado.bonificacao, "#34d399"]] : []),
@@ -4403,7 +4453,7 @@ function Calculadora({ devedores }) {
                         const fCorr = calcularFatorCorrecao(div.indexador, dataVenc, dataCalculo);
                         const corrP = p.valor * (fCorr - 1);
                         const pcP = p.valor + corrP;
-                        const jP = regimeJuros === "simples" ? pcP * (parseFloat(div.jurosAM) / 100) * mesesP : pcP * (Math.pow(1 + parseFloat(div.jurosAM) / 100, mesesP) - 1);
+                        const jP = pcP * (parseFloat(div.jurosAM) / 100) * mesesP;
                         const bMul = baseMulta === "corrigido" ? pcP : p.valor;
                         const mP = bMul * (parseFloat(div.multaPct) / 100);
                         const sub = pcP + jP + mP;
@@ -4439,7 +4489,7 @@ function Calculadora({ devedores }) {
                   // Modo manual — uma linha única
                   linhasParcelas.push({
                     descricao: nomeDevedor || "Dívida",
-                    vencimento: dataVencimento,
+                    vencimento: "",
                     valor: resultado.valorOriginal,
                     valorAtualizado: resultado.principalCorrigido,
                     juros: resultado.juros,

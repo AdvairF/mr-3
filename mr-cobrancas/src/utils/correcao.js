@@ -1,3 +1,26 @@
+// ─── OVERRIDE DINÂMICO (BCB API) ─────────────────────────────
+// Mescla com INDICES estáticos quando disponível.
+let _overrides = {};
+
+export function setIndicesOverride(data) {
+  _overrides = data || {};
+}
+
+export function getIndicesOverride() {
+  return _overrides;
+}
+
+// Retorna INDICES mesclado com overrides da API (override tem prioridade)
+export function getIndicesMerged() {
+  if (!_overrides || Object.keys(_overrides).length === 0) return INDICES;
+  return {
+    igpm:  { ...INDICES.igpm,  ..._overrides.igpm  },
+    ipca:  { ...INDICES.ipca  },                        // IPCA não buscado via API (manter estático)
+    selic: { ...INDICES.selic, ..._overrides.selic },
+    inpc:  { ...INDICES.inpc,  ..._overrides.inpc  },
+  };
+}
+
 // ─── ÍNDICES MENSAIS REAIS (2020-2024) ───────────────────────
 export const INDICES = {
   igpm: {
@@ -92,7 +115,7 @@ export function obterTaxaJurosMes(chaveMes, jurosTipo = "fixo_1", jurosAM = 1) {
     case "fixo_1":
       return 0.01;
     case "selic":
-      return INDICES.selic[chaveMes] ?? TAXA_MEDIA.selic;
+      return getIndicesMerged().selic[chaveMes] ?? TAXA_MEDIA.selic;
     case "sem_juros":
       return 0;
     case "outros":
@@ -127,7 +150,7 @@ export function calcularJurosAcumulados({ principal = 0, dataInicio, dataFim, ju
 
 export function calcularFatorCorrecao(indexador, dataInicio, dataFim) {
   if(indexador==="nenhum") return 1;
-  const tabela = INDICES[indexador];
+  const tabela = getIndicesMerged()[indexador];
   let fator = 1;
   let atual = new Date(dataInicio+"T12:00:00");
   const fim  = new Date(dataFim+"T12:00:00");
