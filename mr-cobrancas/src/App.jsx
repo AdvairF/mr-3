@@ -3865,15 +3865,22 @@ function Calculadora({ devedores }) {
     if (!dividasParaCalc || dividasParaCalc.length === 0) {
       const PV = parseFloat(valorOriginal) || 0;
       if (!PV || !dataCalculo) return alert("Preencha valor original e data de cálculo.");
-      const dIni = dFim; // sem data de início: sem período de correção
-      const meses = 0;
-      const dias = 0;
-      const fatorCorrecao = 1;
-      const correcao = 0;
-      const principalCorrigido = PV;
+
+      // Usa dataVencimento como data de início quando informada e há índice de correção
+      const dataIniStr = dataVencimento && indexador !== "nenhum" ? dataVencimento : null;
+      const dIni = dataIniStr ? new Date(dataIniStr + "T12:00:00") : dFim;
+      const meses = dataIniStr
+        ? Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()))
+        : 0;
+      const dias = dataIniStr ? Math.max(0, Math.floor((dFim - dIni) / 86400000)) : 0;
+      const fatorCorrecao = dataIniStr && indexador !== "nenhum"
+        ? calcularFatorCorrecao(indexador, dataIniStr, dataCalculo)
+        : 1;
+      const correcao = PV * fatorCorrecao - PV;
+      const principalCorrigido = PV + correcao;
       const jurosCalc = calcularJurosAcumulados({
         principal: principalCorrigido,
-        dataInicio: dataCalculo,
+        dataInicio: dataIniStr || dataCalculo,
         dataFim: dataCalculo,
         jurosTipo,
         jurosAM,
