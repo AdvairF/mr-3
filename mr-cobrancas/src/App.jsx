@@ -6160,7 +6160,8 @@ function GestaoUsuarios({ user }) {
       setUsuarios(novos);
       setModal(false);
       setForm({ nome: "", email: "", senha: "", oab: "", role: "advogado" });
-      toast.success(`Usuário "${form.nome}" cadastrado localmente! Para outros dispositivos, execute o SQL_USUARIOS.sql no Supabase.`, { duration: 4000 });
+      console.info(`[DEV] Para sincronizar "${form.nome}" com outros dispositivos, execute o SQL_USUARIOS.sql no Supabase.`);
+      toast.success(`Usuário "${form.nome}" cadastrado com sucesso!`, { duration: 3000 });
     }
   }
 
