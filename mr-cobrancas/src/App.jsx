@@ -126,20 +126,30 @@ function useConfirm() {
     setState({ open: false, message: '' });
   }
   const ConfirmModal = state.open ? (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(0,0,0,0.45)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}>
-      <div style={{
-        background: '#fff', borderRadius: 14, padding: '28px 32px',
-        maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
-      }}>
-        <p style={{ margin: '0 0 24px', fontSize: 15, color: '#1e293b', lineHeight: 1.5 }}>
+    <div
+      role="presentation"
+      tabIndex={-1}
+      onKeyDown={(e) => { if (e.key === 'Escape') handleCancel(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        style={{
+          background: '#fff', borderRadius: 14, padding: '28px 32px',
+          maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+        }}
+      >
+        <p id="confirm-modal-title" style={{ margin: '0 0 24px', fontSize: 15, color: '#1e293b', lineHeight: 1.5 }}>
           {state.message}
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button aria-label="Cancelar" onClick={handleCancel}
+          <button autoFocus aria-label="Cancelar" onClick={handleCancel}
             style={{ padding: '8px 18px', borderRadius: 8, border: '1.5px solid #e2e8f0',
                      background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontWeight: 600 }}>
             Cancelar
