@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 // ─── IMPORTS DOS MÓDULOS ──────────────────────────────────────
 // Config / Auth
@@ -8,6 +8,7 @@ import { authenticateUser, fetchSystemUsers } from "./auth/users.js";
 // Utils
 import { fmt, fmtDate, phoneFmt } from "./utils/formatters.js";
 import { maskCPF, maskCNPJ, maskTel, maskCEP } from "./utils/masks.js";
+import { setAuditUser, logAudit } from "./utils/auditLog.js";
 import {
   calcularFatorCorrecao,
   calcularJurosAcumulados,
@@ -1970,6 +1971,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
           status: form.status || "novo",
         };
         setDevedores(p => [...p, local]);
+        logAudit("Criou devedor", "devedores", { id: novo.id, nome: novo.nome, cpf_cnpj: novo.cpf_cnpj, status: novo.status });
         fecharModal();
         setForm({ ...FORM_DEV_VAZIO, responsavel: user?.nome || "" });
         alert(`âœ… Devedor "${novo.nome}" cadastrado com sucesso!`);
@@ -2079,6 +2081,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
           credor_id: formEdit.credor_id ? parseInt(formEdit.credor_id) : sel.credor_id,
         };
         setDevedores(prev => prev.map(d => d.id === sel.id ? atualizado : d));
+        logAudit("Editou devedor", "devedores", { id: sel.id, nome: atualizado.nome, cpf_cnpj: atualizado.cpf_cnpj, status: atualizado.status });
         setSel(atualizado); setEditando(false);
         alert("✅ Cadastro atualizado!");
       }
@@ -2313,6 +2316,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   async function excluirDevedor(d) {
     if (!window.confirm(`Excluir "${d.nome}"?`)) return;
     await dbDelete("devedores", d.id);
+    logAudit("Excluiu devedor", "devedores", { id: d.id, nome: d.nome, cpf_cnpj: d.cpf_cnpj });
     setDevedores(prev => prev.filter(x => x.id !== d.id));
     fecharModal();
   }
@@ -3070,11 +3074,13 @@ function Credores({ credores, setCredores }) {
         const res = await dbUpdate("credores", editando.id, form);
         const atualizado = Array.isArray(res) ? res[0] : res;
         setCredores(p => p.map(c => c.id === editando.id ? (atualizado || { ...c, ...form }) : c));
+        logAudit("Editou credor", "credores", { id: editando.id, nome: form.nome });
       } else {
         const res = await dbInsert("credores", form);
         const novo = Array.isArray(res) ? res[0] : res;
         if (!novo?.id) throw new Error("Banco não retornou o credor salvo.");
         setCredores(p => [...p, novo]);
+        logAudit("Criou credor", "credores", { id: novo.id, nome: novo.nome });
       }
       setModal(false); setForm(FORM_VAZIO); setEditando(null);
     } catch (e) {
@@ -3087,6 +3093,7 @@ function Credores({ credores, setCredores }) {
     if (!window.confirm(`Excluir o credor "${c.nome}"? Devedores vinculados perderão o vínculo.`)) return;
     try {
       await dbDelete("credores", c.id);
+      logAudit("Excluiu credor", "credores", { id: c.id, nome: c.nome });
       setCredores(p => p.filter(x => x.id !== c.id));
     } catch (e) { alert("Erro ao excluir: " + (e?.message || e)); }
   }
@@ -3281,6 +3288,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
       const novo = Array.isArray(res) ? res[0] : res;
       if (novo?.id) {
         setProcessos(p => [...p, novo]);
+        logAudit("Criou processo", "processos", { id: novo.id, numero: novo.numero, tipo: novo.tipo, status: novo.status });
         setModal(false);
         setForm({ ...FORM_PROC_VAZIO });
         alert("✅ Processo cadastrado!");
@@ -3313,6 +3321,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
       const atu = Array.isArray(res) ? res[0] : res;
       const atualizado = atu?.id ? atu : { ...sel, ...payload };
       setProcessos(prev => prev.map(p => p.id === sel.id ? atualizado : p));
+      logAudit("Editou processo", "processos", { id: sel.id, numero: atualizado.numero, status: atualizado.status });
       setFichaId(atualizado.id);
       setEditando(false);
       alert("Processo atualizado!");
@@ -3342,6 +3351,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
       const res = await dbInsert("andamentos", novoAnd);
       const salvo = Array.isArray(res) ? res[0] : res;
       setAndamentos(p => [...p, salvo?.id ? salvo : novoAnd]);
+      logAudit("Registrou andamento", "processos", { processo_id: sel.id, tipo: novoAnd.tipo, descricao: novoAnd.descricao.slice(0, 100) });
     } catch (e) {
       setAndamentos(p => [...p, novoAnd]);
     }
@@ -3350,7 +3360,9 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
 
   async function excluirProcesso(id) {
     if (!window.confirm("Excluir este processo?")) return;
+    const proc = processos.find(p => p.id === id);
     try { await dbDelete("processos", id); } catch (e) { }
+    logAudit("Excluiu processo", "processos", { id, numero: proc?.numero });
     setProcessos(prev => prev.filter(p => p.id !== id));
     setFichaId(null);
   }
@@ -4003,6 +4015,7 @@ function Calculadora({ devedores, credores = [] }) {
       linhasMes: todasLinhas,
       dividasDetalhe,
     });
+    logAudit("Executou cálculo de correção", "calculadora", { devedor: nomeDevedor || "Manual", indexador, total: Math.round(total * 100) / 100, dataCalculo });
   }
 
   // ── Calcular linhas mensais de UMA dívida individual ─────────
@@ -4215,6 +4228,7 @@ function Calculadora({ devedores, credores = [] }) {
       });
 
       doc.save("resumo_debito_" + (nomeDevedor || "devedor").replace(/ /g, "_") + ".pdf");
+      logAudit("Exportou PDF de cálculo", "calculadora", { devedor: nomeDevedor || "Manual", total: resultado?.total });
     } catch (e) {
       alert("Erro ao gerar PDF: " + e.message);
     }
@@ -5091,6 +5105,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
       };
     });
     exportCSV(rows, "carteira_devedores.csv");
+    logAudit("Exportou relatório de devedores (CSV)", "relatorios", { registros: rows.length });
   }
 
   function exportRelatorioCredor() {
@@ -5100,6 +5115,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
       Atrasadas: c.atrasadas, Taxa_Recuperacao: c.taxa + "%",
       Despesas: c.despesas, Honorarios: c.honorarios,
     })), "carteira_por_credor.csv");
+    logAudit("Exportou relatório por credor (CSV)", "relatorios", { credores: porCredor.length });
   }
 
   const KPI = ({ l, v, c, sub }) => (
@@ -6057,6 +6073,7 @@ function GestaoUsuarios({ user }) {
       const novo = Array.isArray(res) ? res[0] : res;
       const novos = [...usuarios, novo];
       setUsuarios(novos);
+      logAudit("Criou usuário do sistema", "usuarios", { id: novo?.id, nome: form.nome, email: form.email, role: form.role });
       setModal(false);
       setForm({ nome: "", email: "", senha: "", oab: "", role: "advogado" });
       alert(`✅ Usuário "${form.nome}" cadastrado! Ele já pode fazer login em qualquer dispositivo.`);
@@ -6077,7 +6094,9 @@ function GestaoUsuarios({ user }) {
 
   async function excluir(id) {
     if (!window.confirm("Excluir este usuário? Ele perderá o acesso imediatamente.")) return;
+    const alvo = usuarios.find(u => u.id === id);
     try { await dbDelete("usuarios_sistema", id); } catch (e) { alert("Nao foi possivel excluir o usuario no Supabase: " + e.message); return; }
+    logAudit("Excluiu usuário do sistema", "usuarios", { id, nome: alvo?.nome, email: alvo?.email });
     const novos = usuarios.filter(u => u.id !== id);
     setUsuarios(novos);
   }
@@ -6192,6 +6211,154 @@ function GestaoUsuarios({ user }) {
             </div>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUDITORIA — Trilha de Auditoria (admin only)
+// ═══════════════════════════════════════════════════════════════
+function AuditoriaLog({ user }) {
+  const [logs, setLogs] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [filtroModulo, setFiltroModulo] = useState("");
+  const [filtroUsuario, setFiltroUsuario] = useState("");
+  const [filtroData, setFiltroData] = useState("");
+  const [expandido, setExpandido] = useState(null);
+
+  const MODULOS = ["", "auth", "devedores", "processos", "credores", "calculadora", "relatorios", "lembretes", "usuarios", "regua"];
+  const MODULO_LABEL = {
+    auth: "Autenticação", devedores: "Devedores", processos: "Processos",
+    credores: "Credores", calculadora: "Calculadora", relatorios: "Relatórios",
+    lembretes: "Lembretes", usuarios: "Usuários", regua: "Régua",
+  };
+  const MODULO_COR = {
+    auth: "#6366f1", devedores: "#ec4899", processos: "#f59e0b",
+    credores: "#14b8a6", calculadora: "#f59e0b", relatorios: "#10b981",
+    lembretes: "#ef4444", usuarios: "#7c3aed", regua: "#0891b2",
+  };
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      const res = await dbGet("audit_log", "order=criado_em.desc&limit=500");
+      setLogs(Array.isArray(res) ? res : []);
+    } catch (e) {
+      setLogs([]);
+    }
+    setCarregando(false);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  const filtrados = logs.filter(l => {
+    if (filtroModulo && l.modulo !== filtroModulo) return false;
+    if (filtroUsuario && !(l.usuario_nome || "").toLowerCase().includes(filtroUsuario.toLowerCase())) return false;
+    if (filtroData && !(l.criado_em || "").startsWith(filtroData)) return false;
+    return true;
+  });
+
+  function fmtTs(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function parseDados(dados) {
+    if (!dados) return null;
+    try { return typeof dados === "string" ? JSON.parse(dados) : dados; } catch { return null; }
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 22, color: "#0f172a", letterSpacing: "-.5px" }}>🔍 Trilha de Auditoria</h2>
+          <p style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>Registro de todas as ações realizadas pelos usuários — {filtrados.length} evento{filtrados.length !== 1 ? "s" : ""}</p>
+        </div>
+        <button onClick={carregar} style={{ background: "#f1f5f9", color: "#374151", border: "1px solid #e2e8f0", borderRadius: 10, padding: "9px 18px", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+          🔄 Atualizar
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <select value={filtroModulo} onChange={e => setFiltroModulo(e.target.value)}
+          style={{ padding: "9px 14px", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 13, color: "#374151", background: "#fff", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+          <option value="">Todos os módulos</option>
+          {MODULOS.filter(Boolean).map(m => <option key={m} value={m}>{MODULO_LABEL[m] || m}</option>)}
+        </select>
+        <input value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)} placeholder="Filtrar por usuário..."
+          style={{ padding: "9px 14px", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 13, color: "#374151", background: "#fff", fontFamily: "'Plus Jakarta Sans',sans-serif", minWidth: 200 }} />
+        <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)}
+          style={{ padding: "9px 14px", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 13, color: "#374151", background: "#fff", fontFamily: "'Plus Jakarta Sans',sans-serif" }} />
+        {(filtroModulo || filtroUsuario || filtroData) && (
+          <button onClick={() => { setFiltroModulo(""); setFiltroUsuario(""); setFiltroData(""); }}
+            style={{ padding: "9px 14px", border: "1.5px solid #fecaca", borderRadius: 10, fontSize: 13, color: "#dc2626", background: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 600 }}>
+            ✕ Limpar filtros
+          </button>
+        )}
+      </div>
+
+      {carregando ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Carregando logs...</div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8", background: "#f8fafc", borderRadius: 16, border: "1px solid #f1f5f9" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+          <p style={{ fontWeight: 600 }}>Nenhum registro encontrado</p>
+          <p style={{ fontSize: 13, marginTop: 4 }}>Os eventos aparecerão aqui conforme os usuários realizarem ações no sistema.</p>
+        </div>
+      ) : (
+        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #f1f5f9", overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc", borderBottom: "2px solid #f1f5f9" }}>
+                {["Data/Hora", "Usuário", "Módulo", "Ação", "Detalhes"].map(h => (
+                  <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#374151", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map((l, i) => {
+                const dados = parseDados(l.dados);
+                const isExp = expandido === l.id;
+                const cor = MODULO_COR[l.modulo] || "#64748b";
+                return (
+                  <React.Fragment key={l.id}>
+                    <tr style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
+                      <td style={{ padding: "10px 16px", color: "#64748b", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtTs(l.criado_em)}</td>
+                      <td style={{ padding: "10px 16px", fontWeight: 600, color: "#0f172a" }}>{l.usuario_nome || "—"}</td>
+                      <td style={{ padding: "10px 16px" }}>
+                        <span style={{ background: `${cor}15`, color: cor, borderRadius: 6, padding: "3px 8px", fontWeight: 700, fontSize: 11 }}>
+                          {MODULO_LABEL[l.modulo] || l.modulo}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px 16px", color: "#374151" }}>{l.acao}</td>
+                      <td style={{ padding: "10px 16px" }}>
+                        {dados && Object.keys(dados).length > 0 ? (
+                          <button onClick={() => setExpandido(isExp ? null : l.id)}
+                            style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, color: "#64748b", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                            {isExp ? "▲ Ocultar" : "▼ Ver dados"}
+                          </button>
+                        ) : <span style={{ color: "#cbd5e1", fontSize: 11 }}>—</span>}
+                      </td>
+                    </tr>
+                    {isExp && dados && (
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                        <td colSpan={5} style={{ padding: "12px 16px" }}>
+                          <pre style={{ margin: 0, fontSize: 11, color: "#374151", fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px" }}>
+                            {JSON.stringify(dados, null, 2)}
+                          </pre>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -6341,7 +6508,7 @@ function __old_broken_backup() {
               </div>
             </div>
             <button
-              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
+              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; logAudit("Logout do sistema", "auth", {}); setAuditUser(null); signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(220,38,38,.15)", color: "#fca5a5", border: "1px solid rgba(220,38,38,.25)", cursor: "pointer", padding: "10px", borderRadius: 11, transition: "all .18s", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", marginTop: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,38,38,.3)"; e.currentTarget.style.color = "#fff"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(220,38,38,.15)"; e.currentTarget.style.color = "#fca5a5"; }}>
@@ -6520,7 +6687,7 @@ export default function App() {
     return () => clearInterval(iv);
   }, [user, carregarTudo, modalAberto]);
 
-  if (!user) return <Login onLogin={u => { if (u?._token) setAuthToken(u._token); setUser(u); try { sessionStorage.setItem("mr_user", JSON.stringify(u)); } catch { } }} />;
+  if (!user) return <Login onLogin={u => { if (u?._token) setAuthToken(u._token); setAuditUser(u); setUser(u); try { sessionStorage.setItem("mr_user", JSON.stringify(u)); } catch { } logAudit("Login no sistema", "auth", { email: u.email, nome: u.nome }); }} />;
 
   const isAdmin = user?.role === "admin";
   const NAV = [
@@ -6532,7 +6699,10 @@ export default function App() {
     { id: "lembretes", label: "Lembretes", icon: I.bell, color: "#ef4444", bg: "rgba(239,68,68,.18)" },
     { id: "regua", label: "Régua", icon: I.regua2, color: "#0891b2", bg: "rgba(8,145,178,.18)" },
     { id: "peticao", label: "Petições", icon: I.peticao, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
-    ...(isAdmin ? [{ id: "usuarios", label: "Usuários", icon: I.users2, color: "#7c3aed", bg: "rgba(124,58,237,.18)" }] : []),
+    ...(isAdmin ? [
+      { id: "usuarios", label: "Usuários", icon: I.users2, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
+      { id: "auditoria", label: "Auditoria", icon: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h3"/></svg>, color: "#0891b2", bg: "rgba(8,145,178,.18)" },
+    ] : []),
   ];
 
   function renderPage(t) {
@@ -6546,6 +6716,7 @@ export default function App() {
       case "regua": return <Regua devedores={devedores} credores={credores} user={user} />;
       case "peticao": return <GerarPeticao devedores={devedores} credores={credores} />;
       case "usuarios": return isAdmin ? <GestaoUsuarios user={user} /> : null;
+      case "auditoria": return isAdmin ? <AuditoriaLog user={user} /> : null;
       default: return null;
     }
   }
@@ -6702,7 +6873,7 @@ export default function App() {
               </div>
             </div>
             <button
-              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
+              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; logAudit("Logout do sistema", "auth", {}); setAuditUser(null); signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
               style={{ background: "#fff", color: "#b91c1c", border: "1px solid #fecaca", cursor: "pointer", padding: "8px 10px", borderRadius: 10, transition: "all .18s", fontSize: 12, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
               Sair
             </button>
