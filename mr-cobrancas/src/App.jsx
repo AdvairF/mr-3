@@ -3766,7 +3766,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
 // ═══════════════════════════════════════════════════════════════
 // CALCULADORA — Atualização Monetária com Honorários integrados
 // ═══════════════════════════════════════════════════════════════
-function Calculadora({ devedores }) {
+function Calculadora({ devedores, credores = [] }) {
   const hoje = new Date().toISOString().slice(0, 10);
 
   // Parâmetros da dívida
@@ -4071,6 +4071,155 @@ function Calculadora({ devedores }) {
     return linhas;
   }
 
+  // ── Exportar PDF — Resumo de Débito ──────────────────────────
+  async function exportarPDF() {
+    if (!resultado) return;
+    const devSel = devedores.find(x => x.id == devId);
+    const credorSel = credores.find(c => String(c.id) === String(devSel?.credor_id));
+    const nomeCredorPDF = credorSel?.nome || "Não informado";
+    try {
+      let jsPDF;
+      if (window.jspdf?.jsPDF) {
+        jsPDF = window.jspdf.jsPDF;
+      } else {
+        await new Promise((resolve, reject) => {
+          if (document.querySelector('script[data-jspdf]')) { setTimeout(resolve, 500); return; }
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          s.setAttribute('data-jspdf', '1');
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        jsPDF = window.jspdf?.jsPDF;
+      }
+      if (!jsPDF) throw new Error("Não foi possível carregar o jsPDF. Verifique sua conexão.");
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const W = doc.internal.pageSize.getWidth();
+      const W2 = W - 28;
+
+      // ── Cabeçalho colorido ──
+      doc.setFillColor(79, 70, 229);
+      doc.rect(0, 0, W, 20, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13); doc.setFont("helvetica", "bold");
+      doc.text("RESUMO DE DÉBITO", 14, 13);
+      doc.setFontSize(8); doc.setFont("helvetica", "normal");
+      doc.text("MR COBRANÇAS", W - 14, 13, { align: "right" });
+      doc.setTextColor(0, 0, 0);
+
+      // ── Credor / Devedor ──
+      let y = 28;
+      const half = W2 / 2 - 3;
+      doc.setFillColor(243, 244, 246); doc.rect(14, y - 5, half, 16, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+      doc.text("CREDOR", 16, y - 1);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+      doc.text(nomeCredorPDF, 16, y + 6);
+
+      const x2 = 14 + half + 6;
+      doc.setFillColor(243, 244, 246); doc.rect(x2, y - 5, half, 16, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+      doc.text("DEVEDOR", x2 + 2, y - 1);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+      doc.text(nomeDevedor || "Não informado", x2 + 2, y + 6);
+
+      y += 20;
+
+      // ── Índices utilizados ──
+      doc.setFillColor(237, 233, 254); doc.rect(14, y - 5, W2, 14, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(79, 70, 229);
+      doc.text("ÍNDICES DE ATUALIZAÇÃO UTILIZADOS", 16, y - 1);
+      const idxLabel = IDX_LABEL[indexador] || indexador;
+      const idxComp = ULTIMA_COMPETENCIA_INDICES[indexador] ? `última competência: ${ULTIMA_COMPETENCIA_INDICES[indexador]}` : "";
+      const idxInfo = indexador !== "nenhum"
+        ? `${idxLabel}${idxComp ? " · " + idxComp : ""} · Juros: ${jurosAM}% a.m. · Multa: ${multa}%`
+        : `Sem correção monetária · Juros: ${jurosAM}% a.m. · Multa: ${multa}%`;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(15, 23, 42);
+      doc.text(idxInfo, 16, y + 5);
+      y += 18;
+
+      // ── Tabela ──
+      const honPdf = resultado.honorarios > 0;
+      const cols = ["ITEM / DESCRIÇÃO", "VENCIMENTO", "VALOR SINGELO", "VALOR ATUALIZADO", "JUROS MORAT.", "MULTA",
+        ...(honPdf ? ["HONORÁRIOS"] : []), "TOTAL"];
+      const colW = honPdf ? [42, 22, 22, 26, 22, 18, 22, 22] : [50, 22, 24, 28, 24, 20, 22];
+      let x = 14;
+      doc.setFillColor(220, 220, 240); doc.rect(14, y - 4, W2, 7, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(0, 0, 0);
+      cols.forEach((c, ci) => {
+        if (ci === 0) doc.text(c, x + 1, y); else doc.text(c, x + colW[ci] - 1, y, { align: "right" });
+        x += colW[ci];
+      });
+      y += 6;
+
+      const divDetalhes = resultado.dividasDetalhe?.length > 0
+        ? resultado.dividasDetalhe
+        : [{ descricao: nomeDevedor || "Dívida", dataIni: dataVencimento || dataCalculo,
+             valor: resultado.valorOriginal, principalCorrigido: resultado.principalCorrigido,
+             juros: resultado.juros, multa: resultado.multa, honorarios: resultado.honorarios, total: resultado.total }];
+
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+      divDetalhes.forEach((d, di) => {
+        if (di % 2 === 0) { doc.setFillColor(250, 250, 252); doc.rect(14, y - 3.5, W2, 5.5, "F"); }
+        x = 14;
+        const honDiv = honPdf ? (d.honorarios || 0) : 0;
+        const totDiv = (d.principalCorrigido || d.valor || 0) + (d.juros || 0) + (d.multa || 0) + honDiv;
+        const vals = [d.descricao, fmtDate(d.dataIni), fmt(d.valor), fmt(d.principalCorrigido || 0),
+          fmt(d.juros || 0), fmt(d.multa || 0), ...(honPdf ? [fmt(honDiv)] : []), fmt(totDiv)];
+        vals.forEach((v, vi) => {
+          const mw = colW[vi] - 2;
+          if (vi === 0) doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + 1, y);
+          else doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + colW[vi] - 1, y, { align: "right" });
+          x += colW[vi];
+        });
+        y += 5.5; if (y > 185) { doc.addPage(); y = 15; }
+      });
+
+      // Totais
+      y += 2; doc.setDrawColor(0); doc.line(14, y, W - 14, y); y += 4;
+      doc.setFillColor(79, 70, 229); doc.rect(14, y - 4, W2, 8, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+      doc.text("TOTAIS", 15, y);
+      x = 14 + colW[0];
+      [fmt(divDetalhes.reduce((s, d) => s + (d.valor || 0), 0)),
+       fmt(divDetalhes.reduce((s, d) => s + (d.principalCorrigido || 0), 0)),
+       fmt(divDetalhes.reduce((s, d) => s + (d.juros || 0), 0)),
+       fmt(divDetalhes.reduce((s, d) => s + (d.multa || 0), 0)),
+       ...(honPdf ? [fmt(divDetalhes.reduce((s, d) => s + (d.honorarios || 0), 0))] : []),
+       fmt(resultado.total),
+      ].forEach((v, vi) => { doc.text(v, x + colW[vi + 1] - 1, y, { align: "right" }); x += colW[vi + 1]; });
+      doc.setTextColor(0, 0, 0);
+      y += 12;
+
+      // Memória de cálculo
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text("MEMÓRIA DE CÁLCULO", 14, y); y += 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      const mem = [
+        ["Valor Original", fmt(resultado.valorOriginal)],
+        ...(resultado.correcao > 0 ? [["Correção Monetária (" + idxLabel + ")", fmt(resultado.correcao)]] : []),
+        ...(resultado.correcao > 0 ? [["Principal Corrigido", fmt(resultado.principalCorrigido)]] : []),
+        ...(resultado.juros > 0 ? [["Juros (simples " + jurosAM + "% a.m.)", fmt(resultado.juros)]] : []),
+        ...(resultado.multa > 0 ? [["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", fmt(resultado.multa)]] : []),
+        ...(resultado.encargos > 0 ? [["Encargos", fmt(resultado.encargos)]] : []),
+        ...(resultado.bonificacao > 0 ? [["Bonificação (-)", fmt(resultado.bonificacao)]] : []),
+        ...(resultado.honorarios > 0 ? [["Honorários Advocatícios (" + honorariosPct + "%)", fmt(resultado.honorarios)]] : []),
+        ["TOTAL ATUALIZADO", fmt(resultado.total)],
+      ];
+      mem.forEach(([k, v], mi) => {
+        const isTotal = mi === mem.length - 1;
+        if (isTotal) { doc.setFillColor(79, 70, 229); doc.rect(14, y - 3.5, 110, 5.5, "F"); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); }
+        else { doc.setFillColor(mi % 2 === 0 ? 255 : 248, mi % 2 === 0 ? 255 : 248, mi % 2 === 0 ? 255 : 252); doc.rect(14, y - 3.5, 110, 5.5, "F"); doc.setTextColor(0, 0, 0); doc.setFont("helvetica", "normal"); }
+        doc.text(k, 16, y); doc.text(v, 122, y, { align: "right" }); y += 5.5;
+      });
+
+      doc.save("resumo_debito_" + (nomeDevedor || "devedor").replace(/ /g, "_") + ".pdf");
+    } catch (e) {
+      alert("Erro ao gerar PDF: " + e.message);
+    }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 10 }}>
@@ -4282,13 +4431,18 @@ function Calculadora({ devedores }) {
             <>
               {/* Totalizador escuro */}
               <div style={{ background: "linear-gradient(135deg,#0f172a,#1e1b4b)", borderRadius: 18, padding: 20 }}>
-                <div style={{ marginBottom: 12 }}>
-                  {nomeDevedor && (
-                    <p style={{ color: "rgba(255,255,255,.45)", fontSize: 11, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".06em" }}>Devedor: <span style={{ color: "#a5f3fc", fontWeight: 700 }}>{nomeDevedor}</span></p>
-                  )}
-                  <p style={{ color: "rgba(255,255,255,.5)", fontSize: 11, marginBottom: 2 }}>Total Atualizado</p>
-                  <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 30, color: "#fff" }}>{fmt(resultado.total)}</p>
-                  <p style={{ color: "rgba(255,255,255,.4)", fontSize: 11 }}>{resultado.meses} meses · {IDX_LABEL[indexador]} · J. Simples</p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div>
+                    {nomeDevedor && (
+                      <p style={{ color: "rgba(255,255,255,.45)", fontSize: 11, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".06em" }}>Devedor: <span style={{ color: "#a5f3fc", fontWeight: 700 }}>{nomeDevedor}</span></p>
+                    )}
+                    <p style={{ color: "rgba(255,255,255,.5)", fontSize: 11, marginBottom: 2 }}>Total Atualizado</p>
+                    <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 30, color: "#fff" }}>{fmt(resultado.total)}</p>
+                    <p style={{ color: "rgba(255,255,255,.4)", fontSize: 11 }}>{resultado.meses} meses · {IDX_LABEL[indexador]} · J. Simples</p>
+                  </div>
+                  <button onClick={exportarPDF} style={{ background: "rgba(255,255,255,.1)", color: "#a5f3fc", border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "Plus Jakarta Sans", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    📄 Exportar PDF
+                  </button>
                 </div>
                 {/* Discriminação */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -6049,7 +6203,7 @@ function __old_broken_backup() {
       case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} />;
       case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} />;
       case "credores": return <Credores credores={credores} setCredores={setCredores} />;
-      case "calculadora": return <Calculadora devedores={devedores} />;
+      case "calculadora": return <Calculadora devedores={devedores} credores={credores} />;
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;
       case "lembretes": return <Lembretes devedores={devedores} credores={credores} user={user} />;
       case "regua": return <Regua devedores={devedores} credores={credores} user={user} />;
@@ -6386,7 +6540,7 @@ export default function App() {
       case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} />;
       case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} />;
       case "credores": return <Credores credores={credores} setCredores={setCredores} />;
-      case "calculadora": return <Calculadora devedores={devedores} />;
+      case "calculadora": return <Calculadora devedores={devedores} credores={credores} />;
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;
       case "lembretes": return <Lembretes devedores={devedores} credores={credores} user={user} />;
       case "regua": return <Regua devedores={devedores} credores={credores} user={user} />;
