@@ -645,7 +645,7 @@ function FormNovoAcordo({ devedor, credores, user, onSalvar, onCancelar }) {
     <div style={{ background: "#f1f5f9", borderRadius: 14, padding: 16, border: "2px solid #4f46e5" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 14, color: "#4f46e5" }}>🤝 Novo Acordo</p>
-        <button onClick={onCancelar} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 18 }}>✕</button>
+        <button aria-label="Fechar" onClick={onCancelar} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 18 }}>✕</button>
       </div>
 
       {/* Valores */}
@@ -1200,7 +1200,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 99, background: resBg, color: resCor }}>{resLabel}</span>
                   <span style={{ fontSize: 10, color: "#94a3b8" }}>por {r.criado_por}</span>
                 </div>
-                <button onClick={() => excluirRegistro(r.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "4px 8px", cursor: "pointer", fontSize: 11, flexShrink: 0 }}>🗑</button>
+                <button aria-label="Excluir registro de contato" onClick={() => excluirRegistro(r.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "4px 8px", cursor: "pointer", fontSize: 11, flexShrink: 0 }}>🗑</button>
               </div>
 
               {/* Relatório */}
@@ -1246,7 +1246,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
           <div style={{ background: "#fff", borderRadius: 14, padding: 18, border: "2px solid #4f46e5" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 14, color: "#4f46e5" }}>🔔 Novo Lembrete — {sel.nome.split(" ")[0]}</p>
-              <button onClick={() => setShowForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20 }}>✕</button>
+              <button aria-label="Fechar formulário" onClick={() => setShowForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 20 }}>✕</button>
             </div>
 
             {/* Tipo */}
@@ -1330,8 +1330,8 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                   {l.observacoes && <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, fontStyle: "italic" }}>{l.observacoes}</p>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <button onClick={() => concluirLem(l.id)} style={{ background: "#dcfce7", color: "#15803d", border: "none", borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✅</button>
-                  <button onClick={() => excluirLem(l.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "5px 8px", cursor: "pointer", fontSize: 11 }}>🗑</button>
+                  <button aria-label="Concluir lembrete" onClick={() => concluirLem(l.id)} style={{ background: "#dcfce7", color: "#15803d", border: "none", borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✅</button>
+                  <button aria-label="Excluir lembrete" onClick={() => excluirLem(l.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "5px 8px", cursor: "pointer", fontSize: 11 }}>🗑</button>
                 </div>
               </div>
             );
@@ -1878,7 +1878,7 @@ function CustasAvulsasForm({ onSalvar }) {
             style={{ padding: "7px 9px", border: "1.5px solid #fed7aa", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "Plus Jakarta Sans" }} />
           <input type="date" value={c.data} onChange={e => upd(ci, "data", e.target.value)}
             style={{ padding: "7px 9px", border: "1.5px solid #fed7aa", borderRadius: 8, fontSize: 12, outline: "none" }} />
-          <button onClick={() => rem(ci)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 6, padding: "5px 9px", cursor: "pointer", fontSize: 12 }}>✕</button>
+          <button aria-label="Remover custa" onClick={() => rem(ci)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 6, padding: "5px 9px", cursor: "pointer", fontSize: 12 }}>✕</button>
         </div>
       ))}
       {custas.length > 0 && (
@@ -2522,7 +2522,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               )}
               {secaoForm === "end" && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-                  <div><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>CEP</label><div style={{ display: "flex", gap: 8 }}><input value={formEdit.cep || ""} onChange={e => FE("cep", maskCEP(e.target.value))} placeholder="00000-000" style={{ flex: 1, padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", fontFamily: "monospace" }} /><button onClick={buscarCEPEdit} disabled={buscandoCEPEdit} style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{buscandoCEPEdit ? "⏳" : "🔍"}</button></div></div>
+                  <div><label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>CEP</label><div style={{ display: "flex", gap: 8 }}><input value={formEdit.cep || ""} onChange={e => FE("cep", maskCEP(e.target.value))} placeholder="00000-000" style={{ flex: 1, padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", fontFamily: "monospace" }} /><button aria-label="Buscar CEP" onClick={buscarCEPEdit} disabled={buscandoCEPEdit} style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 9, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{buscandoCEPEdit ? "⏳" : "🔍"}</button></div></div>
                   <INP label="UF" value={formEdit.uf || "GO"} onChange={v => FE("uf", v)} opts={UFS.map(u => ({ v: u, l: u }))} />
                   <INP label="Logradouro" value={formEdit.logradouro || ""} onChange={v => FE("logradouro", v)} span={2} />
                   <INP label="Número" value={formEdit.numero || ""} onChange={v => FE("numero", v)} />
@@ -2693,7 +2693,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                                     <td style={{ padding: "5px 8px", color: "#4f46e5", fontWeight: 700 }}>{fmt(p.valor)}</td>
                                     <td style={{ padding: "5px 8px", color: "#64748b" }}>{fmtDate(p.venc || p.vencimento)}</td>
                                     <td style={{ padding: "5px 8px" }}><span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 99, background: bS[sR] || "#f1f5f9", color: cS[sR] || "#64748b" }}>{sR === "pago" ? "Pago" : sR === "atrasado" ? "Atrasado" : "Pendente"}</span></td>
-                                    <td style={{ padding: "5px 8px" }}>{p.status !== "pago" ? <button onClick={() => toggleParcela(div.id, p.id, "pago")} style={{ background: "#dcfce7", color: "#16a34a", border: "none", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>✓</button> : <button onClick={() => toggleParcela(div.id, p.id, "pendente")} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontSize: 10 }}>↩</button>}</td>
+                                    <td style={{ padding: "5px 8px" }}>{p.status !== "pago" ? <button aria-label="Marcar como pago" onClick={() => toggleParcela(div.id, p.id, "pago")} style={{ background: "#dcfce7", color: "#16a34a", border: "none", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>✓</button> : <button aria-label="Marcar como pendente" onClick={() => toggleParcela(div.id, p.id, "pendente")} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: 5, padding: "2px 7px", cursor: "pointer", fontSize: 10 }}>↩</button>}</td>
                                   </tr>
                                 );
                               })}</tbody>
@@ -2777,7 +2777,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                             <td style={{ padding: "5px 9px", fontWeight: 700 }}>{i + 1}</td>
                             <td style={{ padding: "5px 9px" }}><input type="number" value={p.valor} onChange={e => editParc(p.id, "valor", e.target.value)} style={{ width: 85, padding: "3px 6px", border: "1.5px solid #e2e8f0", borderRadius: 6, fontSize: 12, fontWeight: 700, color: "#4f46e5", outline: "none" }} /></td>
                             <td style={{ padding: "5px 9px" }}><input type="date" value={p.venc} onChange={e => editParc(p.id, "venc", e.target.value)} style={{ padding: "3px 6px", border: "1.5px solid #e2e8f0", borderRadius: 6, fontSize: 11, outline: "none" }} /></td>
-                            <td style={{ padding: "5px 9px" }}><button onClick={() => remParc(p.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "2px 6px", cursor: "pointer", fontSize: 10 }}>✕</button></td>
+                            <td style={{ padding: "5px 9px" }}><button aria-label="Remover parcela" onClick={() => remParc(p.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "2px 6px", cursor: "pointer", fontSize: 10 }}>✕</button></td>
                           </tr>
                         ))}</tbody>
                       </table>
@@ -3216,7 +3216,7 @@ function Credores({ credores, setCredores }) {
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => abrirEditar(c)} style={{ flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#475569", cursor: "pointer" }}>✏️ Editar</button>
-              <button onClick={() => excluir(c)} style={{ padding: "7px 12px", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #fee2e2", background: "#fff5f5", color: "#ef4444", cursor: "pointer" }}>🗑️</button>
+              <button aria-label="Excluir credor" onClick={() => excluir(c)} style={{ padding: "7px 12px", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #fee2e2", background: "#fff5f5", color: "#ef4444", cursor: "pointer" }}>🗑️</button>
             </div>
           </div>
         ))}
@@ -5906,7 +5906,7 @@ function Regua({ devedores, credores, user }) {
                         style={{ background: e.ativo ? "#dcfce7" : "#f1f5f9", color: e.ativo ? "#16a34a" : "#94a3b8", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: fam }}>
                         {e.ativo ? "✓ Ativa" : "○ Inativa"}
                       </button>
-                      <button onClick={() => { setIsNova(false); setEditando({ ...e }); }}
+                      <button aria-label="Editar etapa" onClick={() => { setIsNova(false); setEditando({ ...e }); }}
                         style={{ background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️</button>
                       <button aria-label="Excluir etapa" onClick={async () => { if (!await confirm("Excluir esta etapa?")) return; se(etapas.filter(x => x.id !== e.id)); }}
                         style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "6px 9px", cursor: "pointer", fontSize: 11 }}>🗑</button>
