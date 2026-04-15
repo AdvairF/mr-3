@@ -3779,6 +3779,7 @@ function Calculadora({ devedores }) {
   const [jurosAM, setJurosAM] = useState("1");
   const [multa, setMulta] = useState("2");
   const [baseMulta, setBaseMulta] = useState("original");
+  const [dataVencimento, setDataVencimento] = useState("");
   // Honorários integrados
   const [honorariosPct, setHonorariosPct] = useState("20");
   const [incluirHonorarios, setIncluirHonorarios] = useState(true);
@@ -4321,6 +4322,31 @@ function Calculadora({ devedores }) {
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Data de Cálculo</label>
               <input type="date" value={dataCalculo} onChange={e => setDataCalculo(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
+            {/* Vencimento da Dívida */}
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: indexador === "nenhum" ? "#94a3b8" : "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
+                Vencimento da Dívida
+                {indexador === "nenhum" && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#f59e0b", background: "#fef3c7", border: "1px solid #fcd34d", borderRadius: 4, padding: "1px 6px" }}>
+                    🔒 Selecione um índice de correção
+                  </span>
+                )}
+              </label>
+              <input
+                type="date"
+                value={dataVencimento}
+                onChange={e => setDataVencimento(e.target.value)}
+                disabled={indexador === "nenhum"}
+                style={{
+                  width: "100%", padding: "8px 10px", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box",
+                  border: indexador === "nenhum" ? "1.5px solid #e2e8f0" : "1.5px solid #818cf8",
+                  background: indexador === "nenhum" ? "#f8fafc" : "#fff",
+                  color: indexador === "nenhum" ? "#94a3b8" : "#0f172a",
+                  cursor: indexador === "nenhum" ? "not-allowed" : "text",
+                  transition: "border .2s, background .2s",
+                }}
+              />
+            </div>
             {/* Indexador */}
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Indexador</label>
@@ -4378,10 +4404,30 @@ function Calculadora({ devedores }) {
             {incluirHonorarios && valorOriginal && <p style={{ fontSize: 11, color: "#7c3aed", marginTop: 6 }}>≈ {fmt(parseFloat(valorOriginal || 0) * (parseFloat(honorariosPct) || 0) / 100)} estimado sobre o valor original</p>}
           </div>
 
-          {/* Alerta */}
+          {/* Painel de última atualização dos índices */}
+          <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "#0369a1", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>📅 Última Atualização dos Índices</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 12px" }}>
+              {[["IGP-M", ULTIMA_COMPETENCIA_INDICES.igpm], ["IPCA", ULTIMA_COMPETENCIA_INDICES.ipca], ["INPC", ULTIMA_COMPETENCIA_INDICES.inpc], ["SELIC", ULTIMA_COMPETENCIA_INDICES.selic]].map(([nome, comp]) => (
+                <div key={nome} style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                  <span style={{ fontWeight: 700, color: "#0369a1" }}>{nome}</span>
+                  <span style={{ color: "#0c4a6e" }}>{comp}</span>
+                </div>
+              ))}
+            </div>
+            {statusIndices?.ok && statusIndices.em && (
+              <p style={{ fontSize: 10, color: "#0369a1", marginTop: 5, borderTop: "1px solid #bae6fd", paddingTop: 5 }}>
+                ✓ BCB ao vivo atualizado em: <b>{statusIndices.em}</b>
+              </p>
+            )}
+          </div>
+
+          {/* Alerta de validade */}
           <div style={{ background: "#FEF3C7", borderLeft: "4px solid #F59E0B", borderRadius: "0 8px 8px 0", padding: "10px 12px", marginBottom: 12 }}>
             <p style={{ fontSize: 10, fontWeight: 700, color: "#92400E", marginBottom: 2 }}>⚠️ ATENÇÃO — VALIDADE DOS ÍNDICES</p>
-            <p style={{ fontSize: 10, color: "#78350F", lineHeight: 1.6 }}>Índices históricos embutidos (2020–2024). Para uso processual utilize planilha oficial TJGO/STJ.</p>
+            <p style={{ fontSize: 10, color: "#78350F", lineHeight: 1.6 }}>
+              Os índices exibidos podem não refletir os valores mais recentes. Para uso processual, utilize a planilha oficial do TJGO/STJ ou clique em <b>"Atualizar Índices BCB"</b> para carregar dados em tempo real.
+            </p>
           </div>
 
           <Btn onClick={calcular}>🧮 Calcular →</Btn>
