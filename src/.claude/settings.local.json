@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ':*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(curl -s \"https://nzzimacvelxzstarwqty.supabase.co/rest/v1/?apikey=sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k\\) for k in d.get\\('definitions',{}\\).keys\\(\\)]\")",
+      "Bash(python3 -c \"import sys,json; print\\(list\\(json.load\\(sys.stdin\\).get\\('definitions',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(curl -s \"https://nzzimacvelxzstarwqty.supabase.co/rest/v1/?apikey=sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr\" -o C:/tmp_supa.json)",
+      "Bash(node -e \"const j=require\\('C:/tmp_supa.json'\\); console.log\\(Object.keys\\(j.definitions||{}\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"const j=require\\('./supa_schema.json'\\); console.log\\(Object.keys\\(j.definitions||{}\\).join\\('\\\\n'\\)\\)\")",
+      "WebSearch",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:github.com)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Read(//c/Users/advai/Downloads/mr-cobrancas-vercel_1/mr-cobrancas/**)",
+      "Bash(npm start:*)",
+      "Bash(npx vercel:*)",
+      "Bash(curl -s 'https://nzzimacvelxzstarwqty.supabase.co/rest/v1/credores?limit=1' -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Authorization: Bearer sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr')",
+      "Bash(curl -s -X POST https://nzzimacvelxzstarwqty.supabase.co/rest/v1/credores -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Authorization: Bearer sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"nome\":\"__TESTE_TEMP__\",\"cpf_cnpj\":\"\",\"tipo\":\"PJ\",\"responsavel\":\"\",\"contato\":\"\",\"ativo\":true}')",
+      "Bash(curl -s -X DELETE 'https://nzzimacvelxzstarwqty.supabase.co/rest/v1/credores?id=eq.3' -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Authorization: Bearer sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr')",
+      "Bash(curl -s -X PATCH 'https://nzzimacvelxzstarwqty.supabase.co/rest/v1/credores?id=eq.1' -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Authorization: Bearer sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"ativo\":true}')",
+      "Bash(grep -n \"dbInsert\\\\|save\\(\\)\\\\|function save\" \"c:/Users/advai/Downloads/mr-cobrancas-vercel_1/mr-cobrancas/src/mr-3/mr-cobrancas/build/assets/\"*.js)",
+      "Bash(grep -o \"function save.\\\\{0,100\\\\}\" \"c:/Users/advai/Downloads/mr-cobrancas-vercel_1/mr-cobrancas/src/mr-3/mr-cobrancas/build/assets/index-CyUTQ2G2.js\")",
+      "Bash(curl -s 'https://nzzimacvelxzstarwqty.supabase.co/rest/v1/credores?limit=5' -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Authorization: Bearer sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr')",
+      "Read(//c/Users/advai/Downloads/mr-cobrancas-vercel_1/**)",
+      "Bash(curl -sv https://nzzimacvelxzstarwqty.supabase.co/rest/v1/credores -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr' -H 'Authorization: Bearer sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr')",
+      "Bash(curl -s 'https://nzzimacvelxzstarwqty.supabase.co/rest/v1/?select=credores' -H 'apikey: sb_publishable_8CYgd-tfvqnCo_O8XCuQhw_mMJmeCZr')"
+    ]
+  }
+}
