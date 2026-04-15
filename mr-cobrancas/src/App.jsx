@@ -4071,180 +4071,6 @@ function Calculadora({ devedores }) {
     return linhas;
   }
 
-  // ── Exportar PDF — Resumo de Débito ──────────────────────────
-  async function exportarPDF() {
-    if (!resultado) return;
-    try {
-      // Tenta window.jspdf (carregado pelo index.html), senão carrega dinamicamente
-      let jsPDF;
-      if (window.jspdf?.jsPDF) {
-        jsPDF = window.jspdf.jsPDF;
-      } else {
-        // Carregar script dinamicamente
-        await new Promise((resolve, reject) => {
-          if (document.querySelector('script[data-jspdf]')) {
-            // já tentou carregar, aguardar um pouco
-            setTimeout(resolve, 500);
-            return;
-          }
-          const s = document.createElement('script');
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-          s.setAttribute('data-jspdf', '1');
-          s.onload = resolve;
-          s.onerror = reject;
-          document.head.appendChild(s);
-        });
-        jsPDF = window.jspdf?.jsPDF;
-      }
-      if (!jsPDF) throw new Error("Não foi possível carregar o jsPDF. Verifique sua conexão e tente novamente.");
-      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      const W = doc.internal.pageSize.getWidth();
-
-      // Cabeçalho estilo Resumo de Débito
-      doc.setFillColor(255, 255, 255);
-      doc.rect(0, 0, W, 297, "F");
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(16); doc.setFont("helvetica", "bold");
-      doc.text("RESUMO DE DÉBITO", 14, 18);
-      doc.setFontSize(8); doc.setFont("helvetica", "normal");
-      doc.text("IMPRESSO POR MR COBRANÇAS", W - 14, 10, { align: "right" });
-
-      // Dados do cliente
-      const d1 = [
-        ["CLIENTE DO", nomeDevedor || "Não informado"],
-        ["ENDEREÇO :", "—"],
-        ["NOME", ""],
-      ];
-      const d2 = [
-        ["CNPJ :", "—"],
-        ["BLOCO/APTO", ""],
-      ];
-      let y = 28;
-      d1.forEach(([k, v]) => { doc.setFont("helvetica", "bold"); doc.text(k, 14, y); doc.setFont("helvetica", "normal"); doc.text(v, 45, y); y += 5; });
-      y = 28;
-      d2.forEach(([k, v]) => { doc.setFont("helvetica", "bold"); doc.text(k, 160, y); doc.setFont("helvetica", "normal"); doc.text(v, 180, y); y += 5; });
-
-      // Linha separadora
-      y = 47;
-      doc.setDrawColor(0); doc.setLineWidth(0.3);
-      doc.line(14, y, W - 14, y); y += 6;
-
-      // Cabeçalho tabela — uma linha por dívida
-      const honPdf = incluirHonorarios;
-      const cols = ["ITEM DESCRIÇÃO", "VENCIMENTO", "VALOR SINGELO", "VALOR ATUALIZADO", "JUROS MORAT.", "MULTA",
-        ...(honPdf ? ["HONORÁRIOS"] : []),
-        "TOTAL"];
-      // Larguras proporcional — total = W-28
-      const W2 = W - 28;
-      const colW = honPdf
-        ? [42, 22, 22, 26, 22, 18, 22, 22]
-        : [50, 22, 24, 28, 24, 20, 22];
-      let x = 14;
-      doc.setFillColor(220, 220, 240);
-      doc.rect(14, y - 4, W2, 7, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
-      cols.forEach((c, ci) => {
-        if (ci === 0) doc.text(c, x + 1, y);
-        else doc.text(c, x + colW[ci] - 1, y, { align: "right" });
-        x += colW[ci];
-      });
-      y += 6;
-
-      // Linhas — uma por dívida
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-      const divDetalhes = resultado.dividasDetalhe?.length > 0
-        ? resultado.dividasDetalhe
-        : [{
-          descricao: nomeDevedor || "Dívida",
-          dataIni: dataCalculo,
-          valor: resultado.valorOriginal,
-          valorAtualizado: resultado.principalCorrigido,
-          principalCorrigido: resultado.principalCorrigido,
-          juros: resultado.juros,
-          multa: resultado.multa,
-          honorarios: resultado.honorarios,
-          total: resultado.total,
-        }];
-
-      divDetalhes.forEach((d, di) => {
-        if (di % 2 === 0) { doc.setFillColor(250, 250, 252); doc.rect(14, y - 3.5, W2, 5.5, "F"); }
-        x = 14;
-        // Subtotal da dívida (sem honorários) + honorários separados
-        const subDiv = d.principalCorrigido + (d.juros || 0) + (d.multa || 0);
-        const honDiv = honPdf ? (d.honorarios || 0) : 0;
-        const totDiv = subDiv + honDiv;
-        const vals = [
-          d.descricao,
-          fmtDate(d.dataIni),
-          fmt(d.valor),
-          fmt(d.principalCorrigido || d.valorAtualizado || 0),
-          fmt(d.juros || 0),
-          fmt(d.multa || 0),
-          ...(honPdf ? [fmt(honDiv)] : []),
-          fmt(totDiv),
-        ];
-        vals.forEach((v, vi) => {
-          const rightAlign = vi > 0;
-          const maxW = colW[vi] - 2;
-          const txt = doc.splitTextToSize(String(v), maxW)[0] || "";
-          if (rightAlign) doc.text(txt, x + colW[vi] - 1, y, { align: "right" });
-          else { const t = doc.splitTextToSize(v, colW[vi] - 2); doc.text(t[0], x + 1, y); }
-          x += colW[vi];
-        });
-        y += 5.5;
-        if (y > 185) { doc.addPage(); y = 15; }
-      });
-
-      // Linha de totais
-      y += 2;
-      doc.setDrawColor(0); doc.line(14, y, W - 14, y); y += 4;
-      doc.setFillColor(79, 70, 229);
-      doc.rect(14, y - 4, W2, 8, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-      doc.text("TOTAIS", 15, y);
-      x = 14 + colW[0];
-      const totCols = [
-        fmt(divDetalhes.reduce((s, d) => s + d.valor, 0)),
-        fmt(divDetalhes.reduce((s, d) => s + (d.principalCorrigido || d.valorAtualizado || 0), 0)),
-        fmt(divDetalhes.reduce((s, d) => s + (d.juros || 0), 0)),
-        fmt(divDetalhes.reduce((s, d) => s + (d.multa || 0), 0)),
-        ...(honPdf ? [fmt(divDetalhes.reduce((s, d) => s + (d.honorarios || 0), 0))] : []),
-        fmt(resultado.total),
-      ];
-      totCols.forEach((v, vi) => { doc.text(v, x + colW[vi + 1] - 1, y, { align: "right" }); x += colW[vi + 1]; });
-      doc.setTextColor(0, 0, 0);
-      y += 10;
-
-      // Memória de cálculo resumida
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-      doc.text("MEMÓRIA DE CÁLCULO", 14, y); y += 5;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-      const mem = [
-        ["Valor Original", fmt(resultado.valorOriginal)],
-        ["Correção Monetária (" + IDX_LABEL[indexador] + ")", fmt(resultado.correcao)],
-        ["Principal Corrigido", fmt(resultado.principalCorrigido)],
-        ["Juros (simples " + jurosAM + "%am)", fmt(resultado.juros)],
-        ["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", fmt(resultado.multa)],
-        ...(resultado.encargos > 0 ? [["Encargos", fmt(resultado.encargos)]] : []),
-        ...(resultado.bonificacao > 0 ? [["Bonificação (-)", fmt(resultado.bonificacao)]] : []),
-        ...(incluirHonorarios ? [["Honorários Advocatícios (" + honorariosPct + "%)", fmt(resultado.honorarios)]] : []),
-        ["TOTAL ATUALIZADO", fmt(resultado.total)],
-      ];
-      mem.forEach(([k, v], mi) => {
-        const isTotal = mi === mem.length - 1;
-        if (isTotal) { doc.setFillColor(79, 70, 229); doc.rect(14, y - 3.5, 90, 5.5, "F"); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); }
-        else { doc.setFillColor(mi % 2 === 0 ? 255 : 248, mi % 2 === 0 ? 255 : 248, mi % 2 === 0 ? 255 : 252); doc.rect(14, y - 3.5, 90, 5.5, "F"); doc.setTextColor(0, 0, 0); doc.setFont("helvetica", "normal"); }
-        doc.text(k, 16, y); doc.text(v, 102, y, { align: "right" }); y += 5.5;
-      });
-      doc.setTextColor(0, 0, 0);
-
-      doc.save("resumo_debito_" + (nomeDevedor || "devedor").replace(/ /g, "_") + ".pdf");
-    } catch (e) {
-      alert("Erro ao gerar PDF: " + e.message);
-    }
-  }
-
   return (
     <div>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 10 }}>
@@ -4456,15 +4282,13 @@ function Calculadora({ devedores }) {
             <>
               {/* Totalizador escuro */}
               <div style={{ background: "linear-gradient(135deg,#0f172a,#1e1b4b)", borderRadius: 18, padding: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div>
-                    <p style={{ color: "rgba(255,255,255,.5)", fontSize: 11, marginBottom: 2 }}>Total Atualizado</p>
-                    <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 30, color: "#fff" }}>{fmt(resultado.total)}</p>
-                    <p style={{ color: "rgba(255,255,255,.4)", fontSize: 11 }}>{resultado.meses} meses · {IDX_LABEL[indexador]} · J. Simples</p>
-                  </div>
-                  <button onClick={exportarPDF} style={{ background: "rgba(255,255,255,.1)", color: "#a5f3fc", border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "Plus Jakarta Sans", whiteSpace: "nowrap" }}>
-                    📄 Exportar PDF
-                  </button>
+                <div style={{ marginBottom: 12 }}>
+                  {nomeDevedor && (
+                    <p style={{ color: "rgba(255,255,255,.45)", fontSize: 11, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".06em" }}>Devedor: <span style={{ color: "#a5f3fc", fontWeight: 700 }}>{nomeDevedor}</span></p>
+                  )}
+                  <p style={{ color: "rgba(255,255,255,.5)", fontSize: 11, marginBottom: 2 }}>Total Atualizado</p>
+                  <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 30, color: "#fff" }}>{fmt(resultado.total)}</p>
+                  <p style={{ color: "rgba(255,255,255,.4)", fontSize: 11 }}>{resultado.meses} meses · {IDX_LABEL[indexador]} · J. Simples</p>
                 </div>
                 {/* Discriminação */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -4588,9 +4412,17 @@ function Calculadora({ devedores }) {
                 return (
                   <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
                     {/* Cabeçalho */}
-                    <div style={{ padding: "12px 18px", borderBottom: "2px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f1f5f9" }}>
-                      <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 14, color: "#0f172a" }}>📋 Planilha de Atualização</p>
-                      <p style={{ fontSize: 11, color: "#94a3b8" }}>{linhasParcelas.length} prestação{linhasParcelas.length > 1 ? "ões" : ""}{todasCustas.length > 0 ? ` + ${todasCustas.length} custa${todasCustas.length > 1 ? "s" : ""}` : ""}</p>
+                    <div style={{ padding: "12px 18px", borderBottom: "2px solid #e2e8f0", background: "#f1f5f9" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <p style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 14, color: "#0f172a" }}>📋 Planilha de Atualização</p>
+                        <p style={{ fontSize: 11, color: "#94a3b8" }}>{linhasParcelas.length} prestação{linhasParcelas.length > 1 ? "ões" : ""}{todasCustas.length > 0 ? ` + ${todasCustas.length} custa${todasCustas.length > 1 ? "s" : ""}` : ""}</p>
+                      </div>
+                      {nomeDevedor && (
+                        <p style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                          <span style={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Devedor:</span>{" "}
+                          <span style={{ color: "#0f172a", fontWeight: 600 }}>{nomeDevedor}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div style={{ overflowX: "auto" }}>
