@@ -183,7 +183,7 @@ function Login({ onLogin }) {
       if (user) onLogin(user);
       else { setErr("E-mail ou senha incorretos."); setLoading(false); }
     } catch (e) {
-      setErr("Nao foi possivel validar o acesso no Supabase.");
+      setErr("Não foi possível validar o acesso no Supabase.");
       setLoading(false);
     }
   }
@@ -790,7 +790,7 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
       toast.success("Acordo salvo! Status do devedor atualizado para Acordo Firmado.");
     } catch (e) {
       setAcordosLocal(acordosLocal);
-      toast.error("Nao foi possivel salvar o acordo no Supabase: " + e.message);
+      toast.error("Não foi possível salvar o acordo no Supabase:" + e.message);
     }
   }
 
@@ -2045,7 +2045,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         toast.error("Erro ao salvar no Supabase.");
       }
     } catch (e) {
-      toast.error("Nao foi possivel salvar o devedor no Supabase: " + e.message);
+      toast.error("Não foi possível salvar o devedor no Supabase:" + e.message);
     }
     setLoading(false);
     return;
@@ -2216,7 +2216,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       setSel(parsed); setNd(DIVIDA_VAZIA);
       toast.success("Dívida adicionada com sucesso!");
     } catch (e) {
-      toast.error("Nao foi possivel salvar a divida no Supabase: " + e.message);
+      toast.error("Não foi possível salvar a dívida no Supabase:" + e.message);
       return;
       // Salvar localmente mesmo sem banco
       const parsed = montarDevAtualizado(null, dividas);
@@ -2254,7 +2254,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       setSel(parsed);
       toast.success("Custas lançadas com sucesso!");
     } catch (e) {
-      toast.error("Nao foi possivel salvar as custas no Supabase: " + e.message);
+      toast.error("Não foi possível salvar as custas no Supabase:" + e.message);
       return;
       const parsed = montarDevAtualizado(null, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
@@ -3360,10 +3360,10 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
         setForm({ ...FORM_PROC_VAZIO });
         toast.success("Processo cadastrado!");
       } else {
-        toast.error("Nao foi possivel cadastrar o processo no Supabase.");
+        toast.error("Não foi possível cadastrar o processo no Supabase.");
       }
     } catch (e) {
-      toast.error("Nao foi possivel cadastrar o processo no Supabase: " + e.message);
+      toast.error("Não foi possível cadastrar o processo no Supabase: " + e.message);
     }
     setLoading(false);
   }
@@ -6130,7 +6130,7 @@ function GestaoUsuarios({ user }) {
       setUsuarios(res);
       // Sincronizar no localStorage para o login funcionar offline/rápido
     } catch (e) {
-      toast.error("Nao foi possivel carregar usuarios do Supabase.");
+      toast.error("Não foi possível carregar usuários do Supabase.");
     }
     setCarregando(false);
   }
@@ -6153,7 +6153,7 @@ function GestaoUsuarios({ user }) {
       toast.success(`Usuário "${form.nome}" cadastrado! Ele já pode fazer login em qualquer dispositivo.`);
     } catch (e) {
       // Fallback local se tabela não existir ainda
-      toast.error("Nao foi possivel cadastrar o usuario no Supabase: " + e.message);
+      toast.error("Não foi possível cadastrar o usuário no Supabase:" + e.message);
       return;
       const novo = { ...payload, id: Date.now() };
       const novos = [...usuarios, novo];
@@ -6168,7 +6168,7 @@ function GestaoUsuarios({ user }) {
   async function excluir(id) {
     if (!await confirm("Excluir este usuário? Ele perderá o acesso imediatamente.")) return;
     const alvo = usuarios.find(u => u.id === id);
-    try { await dbDelete("usuarios_sistema", id); } catch (e) { toast.error("Nao foi possivel excluir o usuario no Supabase: " + e.message); return; }
+    try { await dbDelete("usuarios_sistema", id); } catch (e) { toast.error("Não foi possível excluir o usuário no Supabase:" + e.message); return; }
     logAudit("Excluiu usuário do sistema", "usuarios", { id, nome: alvo?.nome, email: alvo?.email });
     const novos = usuarios.filter(u => u.id !== id);
     setUsuarios(novos);
