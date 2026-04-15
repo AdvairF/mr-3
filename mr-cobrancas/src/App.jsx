@@ -3878,15 +3878,17 @@ function Calculadora({ devedores }) {
         : 1;
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
-      const jurosCalc = calcularJurosAcumulados({
-        principal: principalCorrigido,
-        dataInicio: dataIniStr || dataCalculo,
-        dataFim: dataCalculo,
-        jurosTipo,
-        jurosAM,
-        regime: "simples",
-      });
-      const juros = jurosCalc.juros;
+      const jurosAMNum = parseFloat(jurosAM) || 0;
+      const juros = jurosAMNum > 0
+        ? calcularJurosAcumulados({
+            principal: principalCorrigido,
+            dataInicio: dataIniStr || dataCalculo,
+            dataFim: dataCalculo,
+            jurosTipo: "outros",
+            jurosAM: jurosAMNum,
+            regime: "simples",
+          }).juros
+        : 0;
       const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
       const multaVal = baseParaMulta * (parseFloat(multa) || 0) / 100;
       const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
@@ -3931,15 +3933,17 @@ function Calculadora({ devedores }) {
       const corrDiv = PV * fatorCorr - PV;
       const pcDiv = PV + corrDiv;
 
-      // Juros usando taxa da dívida
-      const jurosDiv = calcularJurosAcumulados({
-        principal: pcDiv,
-        dataInicio: dataIni,
-        dataFim: dataCalculo,
-        jurosTipo: jTipo,
-        jurosAM: jAM,
-        regime: "simples",
-      }).juros;
+      // Juros usando taxa da dívida (zero quando jAM não informado)
+      const jurosDiv = jAM > 0
+        ? calcularJurosAcumulados({
+            principal: pcDiv,
+            dataInicio: dataIni,
+            dataFim: dataCalculo,
+            jurosTipo: "outros",
+            jurosAM: jAM,
+            regime: "simples",
+          }).juros
+        : 0;
 
       // Multa usando % da dívida
       const baseM = baseMulta === "corrigido" ? pcDiv : PV;
@@ -4466,13 +4470,13 @@ function Calculadora({ devedores }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   {[
                     ["Valor Original", resultado.valorOriginal, "#94a3b8"],
-                    ["Correção (" + IDX_LABEL[indexador] + ")", resultado.correcao, "#818cf8"],
-                    ["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"],
-                    ["Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"],
-                    ["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", resultado.multa, "#f87171"],
+                    ...(resultado.correcao > 0 ? [["Correção (" + IDX_LABEL[indexador] + ")", resultado.correcao, "#818cf8"]] : []),
+                    ...(resultado.correcao > 0 ? [["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"]] : []),
+                    ...(resultado.juros > 0 ? [["Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"]] : []),
+                    ...(resultado.multa > 0 ? [["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", resultado.multa, "#f87171"]] : []),
                     ...(resultado.encargos > 0 ? [["Encargos", resultado.encargos, "#f97316"]] : []),
                     ...(resultado.bonificacao > 0 ? [["Bonificação (-)", resultado.bonificacao, "#34d399"]] : []),
-                    ...(incluirHonorarios ? [["Honorários (" + honorariosPct + "%)", resultado.honorarios, "#facc15"]] : []),
+                    ...(resultado.honorarios > 0 ? [["Honorários (" + honorariosPct + "%)", resultado.honorarios, "#facc15"]] : []),
                   ].map(([l, v, c]) => (
                     <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "5px 10px", background: "rgba(255,255,255,.05)", borderRadius: 8 }}>
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>{l}</span>
