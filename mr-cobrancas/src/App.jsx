@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import toast, { Toaster } from 'react-hot-toast';
 
 // ─── IMPORTS DOS MÓDULOS ──────────────────────────────────────
 // Config / Auth
@@ -104,6 +105,57 @@ const I = {
   // Petição — balança da justiça
   peticao: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18" /><path d="M3 6l4 8c0 1.1 0 2-1.5 2S4 14.1 4 13" /><path d="M3 6c0-1.1.9-2 2-2h2" /><path d="M21 6l-4 8c0 1.1 0 2 1.5 2s1.5-1.1 1.5-2" /><path d="M21 6c0-1.1-.9-2-2-2h-2" /><path d="M7 21h10" /></svg>,
 };
+// ═══════════════════════════════════════════════════════════════
+// useConfirm HOOK — modal de confirmação customizado
+// ═══════════════════════════════════════════════════════════════
+function useConfirm() {
+  const [state, setState] = useState({ open: false, message: '' });
+  const resolverRef = useRef(null);
+  const confirm = useCallback((message) => {
+    return new Promise((resolve) => {
+      resolverRef.current = resolve;
+      setState({ open: true, message });
+    });
+  }, []);
+  function handleConfirm() {
+    resolverRef.current?.(true);
+    setState({ open: false, message: '' });
+  }
+  function handleCancel() {
+    resolverRef.current?.(false);
+    setState({ open: false, message: '' });
+  }
+  const ConfirmModal = state.open ? (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.45)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 14, padding: '28px 32px',
+        maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+      }}>
+        <p style={{ margin: '0 0 24px', fontSize: 15, color: '#1e293b', lineHeight: 1.5 }}>
+          {state.message}
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button aria-label="Cancelar" onClick={handleCancel}
+            style={{ padding: '8px 18px', borderRadius: 8, border: '1.5px solid #e2e8f0',
+                     background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontWeight: 600 }}>
+            Cancelar
+          </button>
+          <button aria-label="Confirmar" onClick={handleConfirm}
+            style={{ padding: '8px 18px', borderRadius: 8, border: 'none',
+                     background: '#dc2626', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+  return { confirm, ConfirmModal };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // LOGIN SCREEN
 // ═══════════════════════════════════════════════════════════════
@@ -563,8 +615,8 @@ function FormNovoAcordo({ devedor, credores, user, onSalvar, onCancelar }) {
 
   function gerar() {
     const qtd = parseInt(numParcelas) || 1;
-    if (!dataPrimVenc) return alert("Informe a data do primeiro vencimento.");
-    if (vNeg <= 0) return alert("Informe o valor negociado.");
+    if (!dataPrimVenc) { toast("Informe a data do primeiro vencimento.", { icon: "⚠️" }); return; }
+    if (vNeg <= 0) { toast("Informe o valor negociado.", { icon: "⚠️" }); return; }
     setParcelas(gerarParcelasAcordo(vNeg, qtd, dataPrimVenc));
     setGerado(true);
   }
@@ -574,7 +626,7 @@ function FormNovoAcordo({ devedor, credores, user, onSalvar, onCancelar }) {
   }
 
   function salvar() {
-    if (!gerado || !parcelas.length) return alert("Gere as parcelas antes de salvar.");
+    if (!gerado || !parcelas.length) { toast("Gere as parcelas antes de salvar.", { icon: "⚠️" }); return; }
     const acordo = {
       id: Date.now(),
       devedorId: devedor.id, credorId: devedor.credor_id,
@@ -702,6 +754,7 @@ function FormNovoAcordo({ devedor, credores, user, onSalvar, onCancelar }) {
 // LISTAGEM DE ACORDOS (aba Acordos na ficha do devedor)
 // ═══════════════════════════════════════════════════════════════
 function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const [novoAcordo, setNovoAcordo] = useState(false);
   const [modalPag, setModalPag] = useState(null); // {acordoId, parcela}
   const [acordosLocal, setAcordosLocal] = useState(acordos || []);
@@ -724,10 +777,10 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
         status: "acordo_firmado",
       });
       onAtualizarDevedor({ ...devedor, acordos: novos, status: "acordo_firmado" });
-      alert("✅ Acordo salvo! Status do devedor atualizado para Acordo Firmado.");
+      toast.success("Acordo salvo! Status do devedor atualizado para Acordo Firmado.");
     } catch (e) {
       setAcordosLocal(acordosLocal);
-      alert("Nao foi possivel salvar o acordo no Supabase: " + e.message);
+      toast.error("Nao foi possivel salvar o acordo no Supabase: " + e.message);
     }
   }
 
@@ -769,7 +822,7 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
   }
 
   async function excluirAcordo(acordoId) {
-    if (!window.confirm("Excluir este acordo e todas as parcelas?")) return;
+    if (!await confirm("Excluir este acordo e todas as parcelas?")) return;
     const novos = acordosLocal.filter(a => a.id !== acordoId);
     setAcordosLocal(novos);
     try { await dbUpdate("devedores", devedor.id, { acordos: JSON.stringify(novos) }); } catch (e) { }
@@ -792,6 +845,7 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
 
   return (
     <div>
+      {ConfirmModal}
       {/* Resumo de totais */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 16 }}>
         {[
@@ -937,6 +991,7 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
 // ABA RELATÓRIO DO DEVEDOR — Histórico + Lembrete Rápido
 // ═══════════════════════════════════════════════════════════════
 function AbaRelatorio({ sel, user, setSel, setDevedores }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const hoje = new Date().toISOString().slice(0, 10);
   const [showForm, setShowForm] = useState(false);
   const [formLem, setFormLem] = useState({
@@ -970,7 +1025,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   }, [sel.id]);
 
   async function salvarRegistro() {
-    if (!formReg.relatorio.trim()) return alert("Informe o relatório do contato.");
+    if (!formReg.relatorio.trim()) { toast("Informe o relatório do contato.", { icon: "⚠️" }); return; }
     const payload = {
       devedor_id: sel.id, data: formReg.data, hora: formReg.hora,
       tipo: formReg.tipo, resultado: formReg.resultado,
@@ -989,7 +1044,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
     setFormReg({ data: new Date().toISOString().slice(0, 10), hora: new Date().toTimeString().slice(0, 5), tipo: "ligacao", resultado: "sem_resposta", relatorio: "", mensagem: "" });
   }
   async function excluirRegistro(id) {
-    if (!window.confirm("Excluir este registro?")) return;
+    if (!await confirm("Excluir este registro?")) return;
     try { await dbDelete("registros_contato", id); } catch (e) { }
     setRegistros(r => r.filter(x => x.id !== id));
   }
@@ -1007,8 +1062,8 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   }, [sel.id]);
 
   async function salvarLem() {
-    if (!formLem.data_prometida) return alert("Informe a data prometida.");
-    if (!formLem.descricao.trim()) return alert("Informe a descrição.");
+    if (!formLem.data_prometida) { toast("Informe a data prometida.", { icon: "⚠️" }); return; }
+    if (!formLem.descricao.trim()) { toast("Informe a descrição.", { icon: "⚠️" }); return; }
     const payload = {
       devedor_id: sel.id, tipo: formLem.tipo, descricao: formLem.descricao,
       data_prometida: formLem.data_prometida, hora: formLem.hora,
@@ -1022,7 +1077,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
     } catch (e) { setLemsDevedor(l => [{ ...payload, id: Date.now() }, ...l]); }
     setShowForm(false);
     setFormLem({ tipo: "promessa_pagamento", descricao: "", data_prometida: "", hora: "08:00", prioridade: "normal", observacoes: "" });
-    alert("✅ Lembrete criado e visível para todos!");
+    toast.success("Lembrete criado e visível para todos!");
   }
 
   async function concluirLem(id) {
@@ -1030,7 +1085,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
     setLemsDevedor(l => l.map(x => x.id !== id ? x : { ...x, status: "concluido" }));
   }
   async function excluirLem(id) {
-    if (!window.confirm("Excluir lembrete?")) return;
+    if (!await confirm("Excluir lembrete?")) return;
     try { await dbDelete("lembretes", id); } catch (e) { }
     setLemsDevedor(l => l.filter(x => x.id !== id));
   }
@@ -1052,7 +1107,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
 
   return (
     <div>
-
+      {ConfirmModal}
       {/* ── REGISTROS DE CONTATO ─────────────────────────────── */}
       <div style={{ background: "#fff", borderRadius: 14, border: "1.5px solid #e2e8f0", overflow: "hidden", marginBottom: 18 }}>
         {/* Cabeçalho */}
@@ -1361,7 +1416,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
     });
     jsPDF = window.jspdf?.jsPDF;
   }
-  if (!jsPDF) { alert("Não foi possível carregar o gerador de PDF."); return; }
+  if (!jsPDF) { toast.error("Não foi possível carregar o gerador de PDF."); return; }
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = 210; // largura A4
@@ -1797,7 +1852,7 @@ function CustasAvulsasForm({ onSalvar }) {
   function rem(ci) { setCustas(r => r.filter((_, xi) => xi !== ci)); }
   async function salvar() {
     const ok = custas.filter(c => c.descricao && c.valor && c.data);
-    if (!ok.length) return alert("Preencha descrição, valor e data de ao menos uma custa.");
+    if (!ok.length) { toast("Preencha descrição, valor e data de ao menos uma custa.", { icon: "⚠️" }); return; }
     await onSalvar(ok);
     setCustas([]);
   }
@@ -1839,6 +1894,7 @@ function CustasAvulsasForm({ onSalvar }) {
 }
 
 function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos = [], setTab }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
 
@@ -1894,25 +1950,25 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
 
   async function buscarCep() {
     const c = form.cep.replace(/\D/g, "");
-    if (c.length !== 8) return alert("CEP inválido.");
+    if (c.length !== 8) { toast("CEP inválido.", { icon: "⚠️" }); return; }
     setBuscandoCep(true);
-    try { const r = await fetch(`https://viacep.com.br/ws/${c}/json/`); const d = await r.json(); if (d.erro) return alert("CEP não encontrado."); setForm(f => ({ ...f, logradouro: d.logradouro || "", bairro: d.bairro || "", cidade: d.localidade || "", uf: d.uf || "GO" })); } catch (e) { alert("Erro ao buscar CEP."); }
+    try { const r = await fetch(`https://viacep.com.br/ws/${c}/json/`); const d = await r.json(); if (d.erro) { toast("CEP não encontrado.", { icon: "⚠️" }); setBuscandoCep(false); return; } setForm(f => ({ ...f, logradouro: d.logradouro || "", bairro: d.bairro || "", cidade: d.localidade || "", uf: d.uf || "GO" })); } catch (e) { toast.error("Erro ao buscar CEP."); }
     setBuscandoCep(false);
   }
   async function buscarCEPEdit() {
     const c = (formEdit.cep || "").replace(/\D/g, "");
-    if (c.length !== 8) return alert("CEP inválido.");
+    if (c.length !== 8) { toast("CEP inválido.", { icon: "⚠️" }); return; }
     setBuscandoCEPEdit(true);
-    try { const r = await fetch(`https://viacep.com.br/ws/${c}/json/`); const d = await r.json(); if (d.erro) return alert("CEP não encontrado."); setFormEdit(f => ({ ...f, logradouro: d.logradouro || "", bairro: d.bairro || "", cidade: d.localidade || "", uf: d.uf || "GO" })); } catch (e) { }
+    try { const r = await fetch(`https://viacep.com.br/ws/${c}/json/`); const d = await r.json(); if (d.erro) { toast("CEP não encontrado.", { icon: "⚠️" }); setBuscandoCEPEdit(false); return; } setFormEdit(f => ({ ...f, logradouro: d.logradouro || "", bairro: d.bairro || "", cidade: d.localidade || "", uf: d.uf || "GO" })); } catch (e) { }
     setBuscandoCEPEdit(false);
   }
   async function buscarCNPJ() {
     const c = form.cpf_cnpj.replace(/\D/g, "");
-    if (c.length !== 14) return alert("CNPJ inválido. Digite os 14 dígitos.");
+    if (c.length !== 14) { toast("CNPJ inválido. Digite os 14 dígitos.", { icon: "⚠️" }); return; }
     setBuscandoCNPJ(true);
     try {
       const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${c}`);
-      if (!r.ok) { alert("CNPJ não encontrado na Receita Federal."); setBuscandoCNPJ(false); return; }
+      if (!r.ok) { toast.error("CNPJ não encontrado na Receita Federal."); setBuscandoCNPJ(false); return; }
       const d = await r.json();
       setForm(f => ({
         ...f,
@@ -1928,13 +1984,13 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         cidade: d.municipio || f.cidade,
         uf: d.uf || f.uf,
       }));
-    } catch (e) { alert("CNPJ não encontrado ou erro na consulta."); }
+    } catch (e) { toast.error("CNPJ não encontrado ou erro na consulta."); }
     setBuscandoCNPJ(false);
   }
 
   // ── Salvar devedor (fallback progressivo) ────────────────────
   async function salvarDevedor() {
-    if (!form.nome.trim()) return alert("Informe o nome.");
+    if (!form.nome.trim()) { toast("Informe o nome.", { icon: "⚠️" }); return; }
     setLoading(true);
     const valorNominal = parseFloat(form.valor_nominal) || 0;
     try {
@@ -1974,12 +2030,12 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         logAudit("Criou devedor", "devedores", { id: novo.id, nome: novo.nome, cpf_cnpj: novo.cpf_cnpj, status: novo.status });
         fecharModal();
         setForm({ ...FORM_DEV_VAZIO, responsavel: user?.nome || "" });
-        alert(`âœ… Devedor "${novo.nome}" cadastrado com sucesso!`);
+        toast.success(`Devedor "${novo.nome}" cadastrado com sucesso!`);
       } else {
-        alert("Erro ao salvar no Supabase.");
+        toast.error("Erro ao salvar no Supabase.");
       }
     } catch (e) {
-      alert("Nao foi possivel salvar o devedor no Supabase: " + e.message);
+      toast.error("Nao foi possivel salvar o devedor no Supabase: " + e.message);
     }
     setLoading(false);
     return;
@@ -2047,23 +2103,19 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       fecharModal();
       setForm({ ...FORM_DEV_VAZIO, responsavel: user?.nome || "" });
       if (nivelUsado >= 2) {
-        alert(`✅ Devedor "${novo.nome}" cadastrado!
-
-⚠️ Alguns campos (valor, endereço) não foram salvos no banco porque o SQL ainda não foi executado no Supabase.
-
-Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
+        toast.success(`Devedor "${novo.nome}" cadastrado! Alguns campos extras aguardam migração SQL.`, { duration: 4000 });
       } else {
-        alert(`✅ Devedor "${novo.nome}" cadastrado com sucesso!`);
+        toast.success(`Devedor "${novo.nome}" cadastrado com sucesso!`);
       }
     } else {
-      alert("Erro ao salvar. Verifique a conexão com o Supabase.");
+      toast.error("Erro ao salvar. Verifique a conexão com o Supabase.");
     }
     setLoading(false);
   }
 
   // ── Editar devedor ───────────────────────────────────────────
   async function salvarEdicao() {
-    if (!formEdit.nome?.trim()) return alert("Informe o nome.");
+    if (!formEdit.nome?.trim()) { toast("Informe o nome.", { icon: "⚠️" }); return; }
     setLoadingEdit(true);
     try {
       const payload = { nome: formEdit.nome, cpf_cnpj: formEdit.cpf_cnpj, tipo: formEdit.tipo, email: formEdit.email || null, telefone: formEdit.telefone || null, cidade: formEdit.cidade || "Goiânia", credor_id: formEdit.credor_id ? parseInt(formEdit.credor_id) : null, valor_original: parseFloat(formEdit.valor_nominal) || sel.valor_original || 0, status: formEdit.status || "novo", rg: formEdit.rg || null, profissao: formEdit.profissao || null, socio_nome: formEdit.socio_nome || null, socio_cpf: formEdit.socio_cpf || null, telefone2: formEdit.telefone2 || null, cep: formEdit.cep || null, logradouro: formEdit.logradouro || null, numero: formEdit.numero || null, complemento: formEdit.complemento || null, bairro: formEdit.bairro || null, uf: formEdit.uf || "GO", descricao_divida: formEdit.descricao_divida || null, observacoes: formEdit.observacoes || null, numero_processo: formEdit.numero_processo || null };
@@ -2083,9 +2135,9 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
         setDevedores(prev => prev.map(d => d.id === sel.id ? atualizado : d));
         logAudit("Editou devedor", "devedores", { id: sel.id, nome: atualizado.nome, cpf_cnpj: atualizado.cpf_cnpj, status: atualizado.status });
         setSel(atualizado); setEditando(false);
-        alert("✅ Cadastro atualizado!");
+        toast.success("Cadastro atualizado!");
       }
-    } catch (e) { alert("Erro: " + e.message); }
+    } catch (e) { toast.error("Erro: " + e.message); }
     setLoadingEdit(false);
   }
 
@@ -2101,12 +2153,12 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
       setNovoContato({ tipo: "ligacao", resultado: "sem_resposta", obs: "" });
-    } catch (e) { alert("Erro: " + e.message); }
+    } catch (e) { toast.error("Erro: " + e.message); }
   }
 
   // ── Dívidas/Parcelas ─────────────────────────────────────────
   function gerarParcs(total, qtd, dataInicio) { const arr = []; for (let i = 0; i < qtd; i++) { const d = new Date(dataInicio + "T12:00:00"); d.setMonth(d.getMonth() + i); arr.push({ id: Date.now() + i, num: i + 1, valor: Math.round(total / qtd * 100) / 100, venc: d.toISOString().slice(0, 10), status: "pendente", pago_em: null }); } return arr; }
-  function confirmarParcelas() { const total = parseFloat(nd.valor_total) || 0, qtd = parseInt(nd.qtd_parcelas) || 1; if (!nd.data_primeira_parcela) return alert("Informe a data."); setNd(d => ({ ...d, parcelas: gerarParcs(total, qtd, d.data_primeira_parcela) })); }
+  function confirmarParcelas() { const total = parseFloat(nd.valor_total) || 0, qtd = parseInt(nd.qtd_parcelas) || 1; if (!nd.data_primeira_parcela) { toast("Informe a data.", { icon: "⚠️" }); return; } setNd(d => ({ ...d, parcelas: gerarParcs(total, qtd, d.data_primeira_parcela) })); }
   function editParc(id, campo, val) { setNd(d => ({ ...d, parcelas: d.parcelas.map(p => p.id !== id ? p : { ...p, [campo]: campo === "valor" ? parseFloat(val) || 0 : val }) })); }
   function addParc() { setNd(d => { const ul = d.parcelas[d.parcelas.length - 1]; const pD = ul ? (() => { const dd = new Date(ul.venc + "T12:00:00"); dd.setMonth(dd.getMonth() + 1); return dd.toISOString().slice(0, 10); })() : new Date().toISOString().slice(0, 10); return { ...d, parcelas: [...d.parcelas, { id: Date.now(), num: d.parcelas.length + 1, valor: ul?.valor || 0, venc: pD, status: "pendente", pago_em: null }] }; }); }
   function remParc(id) { setNd(d => ({ ...d, parcelas: d.parcelas.filter(p => p.id !== id) })); }
@@ -2129,8 +2181,8 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   async function adicionarDivida() {
     if (!sel) return;
     const total = parseFloat(nd.valor_total) || 0;
-    if (!total) return alert("Informe o valor da dívida.");
-    if (!nd.data_origem) return alert("Informe a Data de Vencimento.");
+    if (!total) { toast("Informe o valor da dívida.", { icon: "⚠️" }); return; }
+    if (!nd.data_origem) { toast("Informe a Data de Vencimento.", { icon: "⚠️" }); return; }
     // parcelas são OPCIONAIS — dívida pode não ser parcelada
     const dataVenc = nd.parcelas.length > 0 ? (nd.data_primeira_parcela || nd.data_origem) : nd.data_origem;
     const divida = {
@@ -2152,23 +2204,23 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       const parsed = montarDevAtualizado(atu, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed); setNd(DIVIDA_VAZIA);
-      alert("✅ Dívida adicionada com sucesso!");
+      toast.success("Dívida adicionada com sucesso!");
     } catch (e) {
-      alert("Nao foi possivel salvar a divida no Supabase: " + e.message);
+      toast.error("Nao foi possivel salvar a divida no Supabase: " + e.message);
       return;
       // Salvar localmente mesmo sem banco
       const parsed = montarDevAtualizado(null, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed); setNd(DIVIDA_VAZIA);
-      alert("Dívida salva localmente. Erro de sincronização: " + e.message);
+      toast("Dívida salva localmente. Erro de sincronização: " + e.message, { icon: "⚠️" });
     }
   }
 
   // Salvar custas avulsas em uma dívida existente ou criar entrada só de custas
   async function adicionarCustasAvulsas(custasNovas) {
-    if (!sel || !custasNovas.length) return alert("Adicione ao menos uma custa.");
+    if (!sel || !custasNovas.length) { toast("Adicione ao menos uma custa.", { icon: "⚠️" }); return; }
     const validas = custasNovas.filter(c => c.descricao && c.valor && c.data);
-    if (!validas.length) return alert("Preencha descrição, valor e data de todas as custas.");
+    if (!validas.length) { toast("Preencha descrição, valor e data de todas as custas.", { icon: "⚠️" }); return; }
     // Cria uma "dívida" especial só de custas (sem valor principal, só custas)
     const totalCustas = validas.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
     const dividaCustas = {
@@ -2190,14 +2242,14 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       const parsed = montarDevAtualizado(atu, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
-      alert("✅ Custas lançadas com sucesso!");
+      toast.success("Custas lançadas com sucesso!");
     } catch (e) {
-      alert("Nao foi possivel salvar as custas no Supabase: " + e.message);
+      toast.error("Nao foi possivel salvar as custas no Supabase: " + e.message);
       return;
       const parsed = montarDevAtualizado(null, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
-      alert("Custas salvas localmente.");
+      toast("Custas salvas localmente.", { icon: "⚠️" });
     }
   }
 
@@ -2219,7 +2271,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   }
 
   async function excluirDivida(dId) {
-    if (!sel || !window.confirm("Excluir esta dívida?")) return;
+    if (!sel || !await confirm("Excluir esta dívida?")) return;
     const dividas = (sel.dividas || []).filter(d => d.id !== dId);
     const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
     try {
@@ -2257,9 +2309,9 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   async function salvarEdicaoDivida() {
     if (!sel || !editDivId) return;
     const total = parseFloat(ndEdit.valor_total) || 0;
-    if (!total) { alert("Informe o valor da dívida."); return; }
+    if (!total) { toast("Informe o valor da dívida.", { icon: "⚠️" }); return; }
     const dataRef = ndEdit.data_origem || ndEdit.data_vencimento;
-    if (!dataRef) { alert("Informe a data de vencimento."); return; }
+    if (!dataRef) { toast("Informe a data de vencimento.", { icon: "⚠️" }); return; }
     const dividas = (sel.dividas || []).map(d => {
       if (String(d.id) !== String(editDivId)) return d;
       return {
@@ -2286,12 +2338,12 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
       if (!atu) {
-        alert("⚠️ Dívida salva localmente, mas não foi possível confirmar a sincronização com o banco.\nSe o problema persistir, faça logout e login novamente.");
+        toast("Dívida salva localmente, mas não foi possível confirmar a sincronização com o banco.", { icon: "⚠️", duration: 5000 });
       } else {
-        alert("✅ Dívida atualizada com sucesso!");
+        toast.success("Dívida atualizada com sucesso!");
       }
     } catch (e) {
-      alert("Erro ao salvar no Supabase: " + e.message + "\nAs alterações foram salvas localmente.");
+      toast.error("Erro ao salvar no Supabase: " + e.message + " As alterações foram salvas localmente.");
       const parsed = montarDevAtualizado(null, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
@@ -2314,7 +2366,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   }
 
   async function excluirDevedor(d) {
-    if (!window.confirm(`Excluir "${d.nome}"?`)) return;
+    if (!await confirm(`Excluir "${d.nome}"?`)) return;
     await dbDelete("devedores", d.id);
     logAudit("Excluiu devedor", "devedores", { id: d.id, nome: d.nome, cpf_cnpj: d.cpf_cnpj });
     setDevedores(prev => prev.filter(x => x.id !== d.id));
@@ -2354,6 +2406,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
 
     return (
       <div style={{ minHeight: "60vh" }}>
+        {ConfirmModal}
         {/* Cabeçalho */}
         <div style={{ background: "linear-gradient(135deg,#0f172a,#1e1b4b)", borderRadius: 16, padding: "20px 24px", marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -2825,6 +2878,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
   // ─────────────────────────────────────────────────────────────
   return (
     <div>
+      {ConfirmModal}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
         <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 22, color: "#0f172a" }}>Devedores</h2>
         <Btn onClick={() => { setForm({ ...FORM_DEV_VAZIO, responsavel: user?.nome || "" }); setSecaoForm("id"); abrirModal("novo") }}>{I.plus} Novo Devedor</Btn>
@@ -3038,6 +3092,7 @@ Execute o arquivo supabase_prompt3.sql para salvar todos os campos.`);
 // CREDORES
 // ═══════════════════════════════════════════════════════════════
 function Credores({ credores, setCredores }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const FORM_VAZIO = {
     nome: "", cpf_cnpj: "", tipo: "PJ", responsavel: "", contato: "", ativo: true,
     email: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
@@ -3090,28 +3145,28 @@ function Credores({ credores, setCredores }) {
   }
 
   async function excluir(c) {
-    if (!window.confirm(`Excluir o credor "${c.nome}"? Devedores vinculados perderão o vínculo.`)) return;
+    if (!await confirm(`Excluir o credor "${c.nome}"? Devedores vinculados perderão o vínculo.`)) return;
     try {
       await dbDelete("credores", c.id);
       logAudit("Excluiu credor", "credores", { id: c.id, nome: c.nome });
       setCredores(p => p.filter(x => x.id !== c.id));
-    } catch (e) { alert("Erro ao excluir: " + (e?.message || e)); }
+    } catch (e) { toast.error("Erro ao excluir: " + (e?.message || e)); }
   }
 
   async function toggleAtivo(c) {
     try {
       await dbUpdate("credores", c.id, { ativo: !c.ativo });
       setCredores(p => p.map(x => x.id === c.id ? { ...x, ativo: !c.ativo } : x));
-    } catch (e) { alert("Erro: " + (e?.message || e)); }
+    } catch (e) { toast.error("Erro: " + (e?.message || e)); }
   }
 
   async function buscarCNPJCred() {
     const c = form.cpf_cnpj.replace(/\D/g, "");
-    if (c.length !== 14) return alert("CNPJ inválido. Digite os 14 dígitos.");
+    if (c.length !== 14) { toast("CNPJ inválido. Digite os 14 dígitos.", { icon: "⚠️" }); return; }
     setBuscandoCNPJCred(true);
     try {
       const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${c}`);
-      if (!r.ok) { alert("CNPJ não encontrado na Receita Federal."); setBuscandoCNPJCred(false); return; }
+      if (!r.ok) { toast.error("CNPJ não encontrado na Receita Federal."); setBuscandoCNPJCred(false); return; }
       const d = await r.json();
       setForm(f => ({
         ...f,
@@ -3124,7 +3179,7 @@ function Credores({ credores, setCredores }) {
         cidade: d.municipio || f.cidade,
         uf: d.uf || f.uf,
       }));
-    } catch (e) { alert("CNPJ não encontrado ou erro na consulta."); }
+    } catch (e) { toast.error("CNPJ não encontrado ou erro na consulta."); }
     setBuscandoCNPJCred(false);
   }
 
@@ -3138,6 +3193,7 @@ function Credores({ credores, setCredores }) {
 
   return (
     <div>
+      {ConfirmModal}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 22, color: "#0f172a" }}>Credores</h2>
         <Btn onClick={abrirNovo}>{I.plus} Novo Credor</Btn>
@@ -3230,6 +3286,7 @@ function Credores({ credores, setCredores }) {
 
 
 function Processos({ processos, setProcessos, devedores, credores, andamentos, setAndamentos, user }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const hoje = new Date().toISOString().slice(0, 10);
   const [search, setSearch] = useState("");
   const [filtroCredor, setFiltroCredor] = useState("");
@@ -3269,7 +3326,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
 
   // ── Salvar novo processo ──────────────────────────────────────
   async function salvarProcesso() {
-    if (!form.numero.trim()) return alert("Informe o número do processo.");
+    if (!form.numero.trim()) { toast("Informe o número do processo.", { icon: "⚠️" }); return; }
     setLoading(true);
     try {
       const payload = {
@@ -3291,12 +3348,12 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
         logAudit("Criou processo", "processos", { id: novo.id, numero: novo.numero, tipo: novo.tipo, status: novo.status });
         setModal(false);
         setForm({ ...FORM_PROC_VAZIO });
-        alert("✅ Processo cadastrado!");
+        toast.success("Processo cadastrado!");
       } else {
-        alert("Nao foi possivel cadastrar o processo no Supabase.");
+        toast.error("Nao foi possivel cadastrar o processo no Supabase.");
       }
     } catch (e) {
-      alert("Nao foi possivel cadastrar o processo no Supabase: " + e.message);
+      toast.error("Nao foi possivel cadastrar o processo no Supabase: " + e.message);
     }
     setLoading(false);
   }
@@ -3324,7 +3381,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
       logAudit("Editou processo", "processos", { id: sel.id, numero: atualizado.numero, status: atualizado.status });
       setFichaId(atualizado.id);
       setEditando(false);
-      alert("Processo atualizado!");
+      toast.success("Processo atualizado!");
     } catch (e) {
       setProcessos(prev => prev.map(p => p.id === sel.id ? { ...sel, ...formEdit } : p));
       setEditando(false);
@@ -3333,7 +3390,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
 
   // ── Registrar andamento ───────────────────────────────────────
   async function addAnd() {
-    if (!sel || !andForm.descricao.trim()) return alert("Informe a descrição do andamento.");
+    if (!sel || !andForm.descricao.trim()) { toast("Informe a descrição do andamento.", { icon: "⚠️" }); return; }
     const novoAnd = {
       processo_id: sel.id,
       tipo: andForm.tipo,
@@ -3359,7 +3416,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
   }
 
   async function excluirProcesso(id) {
-    if (!window.confirm("Excluir este processo?")) return;
+    if (!await confirm("Excluir este processo?")) return;
     const proc = processos.find(p => p.id === id);
     try { await dbDelete("processos", id); } catch (e) { }
     logAudit("Excluiu processo", "processos", { id, numero: proc?.numero });
@@ -3386,6 +3443,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
 
     return (
       <div>
+        {ConfirmModal}
         {/* Cabeçalho */}
         <div style={{ background: "linear-gradient(135deg,#0f172a,#1e1b4b)", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
           <button onClick={() => { setFichaId(null); setEditando(false); }} style={{ background: "rgba(255,255,255,.1)", color: "rgba(255,255,255,.7)", border: "none", borderRadius: 7, padding: "4px 12px", cursor: "pointer", fontSize: 12, marginBottom: 10 }}>← Voltar</button>
@@ -3607,6 +3665,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
   // ─────────────────────────────────────────────────────────────
   return (
     <div>
+      {ConfirmModal}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
         <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 22, color: "#0f172a" }}>Processos</h2>
         <Btn onClick={() => { setForm({ ...FORM_PROC_VAZIO }); setModal(true) }}>{I.plus} Novo Processo</Btn>
@@ -3876,7 +3935,7 @@ function Calculadora({ devedores, credores = [] }) {
     // Se não tiver devedor, usa os campos manuais como uma dívida única
     if (!dividasParaCalc || dividasParaCalc.length === 0) {
       const PV = parseFloat(valorOriginal) || 0;
-      if (!PV || !dataCalculo) return alert("Preencha valor original e data de cálculo.");
+      if (!PV || !dataCalculo) { toast("Preencha valor original e data de cálculo.", { icon: "⚠️" }); return; }
 
       // Usa dataVencimento como data de início quando informada e há índice de correção
       const dataIniStr = dataVencimento && indexador !== "nenhum" ? dataVencimento : null;
@@ -4230,7 +4289,7 @@ function Calculadora({ devedores, credores = [] }) {
       doc.save("resumo_debito_" + (nomeDevedor || "devedor").replace(/ /g, "_") + ".pdf");
       logAudit("Exportou PDF de cálculo", "calculadora", { devedor: nomeDevedor || "Manual", total: resultado?.total });
     } catch (e) {
-      alert("Erro ao gerar PDF: " + e.message);
+      toast.error("Erro ao gerar PDF: " + e.message);
     }
   }
 
@@ -4702,6 +4761,7 @@ const LEMBRETE_VAZIO = {
 
 
 function Lembretes({ devedores, credores, user }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const hoje = new Date().toISOString().slice(0, 10);
   const [lembretes, setLembretes] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -4725,9 +4785,9 @@ function Lembretes({ devedores, credores, user }) {
   useEffect(() => { carregarLembretes(); }, []);
 
   async function salvar() {
-    if (!form.devedor_id) return alert("Selecione o devedor.");
-    if (!form.data_prometida) return alert("Informe a data.");
-    if (!form.descricao.trim()) return alert("Informe a descrição.");
+    if (!form.devedor_id) { toast("Selecione o devedor.", { icon: "⚠️" }); return; }
+    if (!form.data_prometida) { toast("Informe a data.", { icon: "⚠️" }); return; }
+    if (!form.descricao.trim()) { toast("Informe a descrição.", { icon: "⚠️" }); return; }
     const payload = {
       devedor_id: parseInt(form.devedor_id), tipo: form.tipo,
       descricao: form.descricao, data_prometida: form.data_prometida,
@@ -4757,7 +4817,7 @@ function Lembretes({ devedores, credores, user }) {
     setLembretes(l => l.map(x => x.id !== id ? x : { ...x, status: "pendente", concluido_em: null }));
   }
   async function excluir(id) {
-    if (!window.confirm("Excluir este lembrete?")) return;
+    if (!await confirm("Excluir este lembrete?")) return;
     try { await dbDelete("lembretes", id); } catch (e) { }
     setLembretes(l => l.filter(x => x.id !== id));
   }
@@ -4807,6 +4867,7 @@ function Lembretes({ devedores, credores, user }) {
 
   return (
     <div>
+      {ConfirmModal}
       {/* Cabeçalho */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
         <div>
@@ -5079,7 +5140,7 @@ function Relatorios({ devedores, processos, andamentos, credores }) {
 
   // ── Exportar CSV ─────────────────────────────────────────────
   function exportCSV(dados, nome) {
-    if (!dados.length) return alert("Sem dados para exportar.");
+    if (!dados.length) { toast("Sem dados para exportar.", { icon: "⚠️" }); return; }
     const keys = Object.keys(dados[0]);
     const csv = [keys.join(";"), ...dados.map(r => keys.map(k => `"${String(r[k] ?? "").replace(/"/g, '""')}"`).join(";"))].join("\n");
     const a = document.createElement("a");
@@ -5329,6 +5390,7 @@ const CANAL_ICONS = { whatsapp: "📱", email: "📧", sms: "💬", ligacao: "�
 const CAT_CORES = { amigavel: { cor: "#16a34a", bg: "#dcfce7", l: "Amigável" }, moderado: { cor: "#d97706", bg: "#fef3c7", l: "Moderado" }, rigido: { cor: "#dc2626", bg: "#fee2e2", l: "Rígido" }, judicial: { cor: "#7c3aed", bg: "#ede9fe", l: "Judicial" } };
 
 function Regua({ devedores, credores, user }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const HOJE = new Date().toISOString().slice(0, 10);
   // Tudo no Supabase — nada no localStorage
   const [etapas, setEtapas] = useState(ETAPAS_PADRAO);
@@ -5434,7 +5496,7 @@ function Regua({ devedores, credores, user }) {
     await salvarRegua(id, "incluido");
   }
   async function removerDev(id) {
-    if (!window.confirm("Remover este devedor da régua?")) return;
+    if (!await confirm("Remover este devedor da régua?")) return;
     const s = String(id);
     setExcluidos(prev => [...new Set([...prev.map(String), s])]);
     setIncluidos(prev => prev.map(String).filter(x => x !== s));
@@ -5456,7 +5518,7 @@ function Regua({ devedores, credores, user }) {
   }
 
   function salvarEdicao() {
-    if (!editando?.titulo?.trim() || !editando?.mensagem?.trim()) return alert("Preencha título e mensagem.");
+    if (!editando?.titulo?.trim() || !editando?.mensagem?.trim()) { toast("Preencha título e mensagem.", { icon: "⚠️" }); return; }
     if (isNova) se([...etapas, { ...editando, id: Date.now() }].sort((a, b) => a.dias - b.dias));
     else se(etapas.map(e => e.id === editando.id ? editando : e));
     setEditando(null); setIsNova(false);
@@ -5529,6 +5591,7 @@ function Regua({ devedores, credores, user }) {
 
   return (
     <div>
+      {ConfirmModal}
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -5719,7 +5782,7 @@ function Regua({ devedores, credores, user }) {
                                 <div key={et.id}
                                   onClick={async () => {
                                     if (isAtual) return;
-                                    if (!window.confirm(`Mover "${dev.nome}" para a etapa "${et.titulo}" (dia ${et.dias})?`)) return;
+                                    if (!await confirm(`Mover "${dev.nome}" para a etapa "${et.titulo}" (dia ${et.dias})?`)) return;
                                     setMoverEtapa({ devId: dev.id, novaEtapaId: et.id });
                                     // Salva no Supabase
                                     try {
@@ -5845,7 +5908,7 @@ function Regua({ devedores, credores, user }) {
                       </button>
                       <button onClick={() => { setIsNova(false); setEditando({ ...e }); }}
                         style={{ background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️</button>
-                      <button onClick={() => { if (!window.confirm("Excluir?")) return; se(etapas.filter(x => x.id !== e.id)); }}
+                      <button aria-label="Excluir etapa" onClick={async () => { if (!await confirm("Excluir esta etapa?")) return; se(etapas.filter(x => x.id !== e.id)); }}
                         style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "6px 9px", cursor: "pointer", fontSize: 11 }}>🗑</button>
                     </div>
                   </div>
@@ -6041,6 +6104,7 @@ function Regua({ devedores, credores, user }) {
 // GESTÃO DE USUÁRIOS (só para admin: advairvieira@gmail.com)
 // ═══════════════════════════════════════════════════════════════
 function GestaoUsuarios({ user }) {
+  const { confirm, ConfirmModal } = useConfirm();
   const [usuarios, setUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [modal, setModal] = useState(false);
@@ -6056,17 +6120,17 @@ function GestaoUsuarios({ user }) {
       setUsuarios(res);
       // Sincronizar no localStorage para o login funcionar offline/rápido
     } catch (e) {
-      alert("Nao foi possivel carregar usuarios do Supabase.");
+      toast.error("Nao foi possivel carregar usuarios do Supabase.");
     }
     setCarregando(false);
   }
   useEffect(() => { carregarUsuarios(); }, []);
 
   async function salvar() {
-    if (!form.nome.trim() || !form.email.trim() || !form.senha.trim()) return alert("Preencha nome, e-mail e senha.");
-    if (form.senha.length < 6) return alert("Senha deve ter no mínimo 6 caracteres.");
+    if (!form.nome.trim() || !form.email.trim() || !form.senha.trim()) { toast("Preencha nome, e-mail e senha.", { icon: "⚠️" }); return; }
+    if (form.senha.length < 6) { toast("Senha deve ter no mínimo 6 caracteres.", { icon: "⚠️" }); return; }
     const existe = usuarios.find(u => u.email === form.email);
-    if (existe) return alert("Já existe um usuário com este e-mail.");
+    if (existe) { toast("Já existe um usuário com este e-mail.", { icon: "⚠️" }); return; }
     const payload = { nome: form.nome, email: form.email, senha: form.senha, oab: form.oab || null, role: form.role, criado_por: user.nome, criado_em: new Date().toISOString() };
     try {
       const res = await dbInsert("usuarios_sistema", payload);
@@ -6076,26 +6140,24 @@ function GestaoUsuarios({ user }) {
       logAudit("Criou usuário do sistema", "usuarios", { id: novo?.id, nome: form.nome, email: form.email, role: form.role });
       setModal(false);
       setForm({ nome: "", email: "", senha: "", oab: "", role: "advogado" });
-      alert(`✅ Usuário "${form.nome}" cadastrado! Ele já pode fazer login em qualquer dispositivo.`);
+      toast.success(`Usuário "${form.nome}" cadastrado! Ele já pode fazer login em qualquer dispositivo.`);
     } catch (e) {
       // Fallback local se tabela não existir ainda
-      alert("Nao foi possivel cadastrar o usuario no Supabase: " + e.message);
+      toast.error("Nao foi possivel cadastrar o usuario no Supabase: " + e.message);
       return;
       const novo = { ...payload, id: Date.now() };
       const novos = [...usuarios, novo];
       setUsuarios(novos);
       setModal(false);
       setForm({ nome: "", email: "", senha: "", oab: "", role: "advogado" });
-      alert(`✅ Usuário "${form.nome}" cadastrado localmente!
-
-⚠️ Para funcionar em outros dispositivos, execute o SQL_USUARIOS.sql no Supabase.`);
+      toast.success(`Usuário "${form.nome}" cadastrado localmente! Para outros dispositivos, execute o SQL_USUARIOS.sql no Supabase.`, { duration: 4000 });
     }
   }
 
   async function excluir(id) {
-    if (!window.confirm("Excluir este usuário? Ele perderá o acesso imediatamente.")) return;
+    if (!await confirm("Excluir este usuário? Ele perderá o acesso imediatamente.")) return;
     const alvo = usuarios.find(u => u.id === id);
-    try { await dbDelete("usuarios_sistema", id); } catch (e) { alert("Nao foi possivel excluir o usuario no Supabase: " + e.message); return; }
+    try { await dbDelete("usuarios_sistema", id); } catch (e) { toast.error("Nao foi possivel excluir o usuario no Supabase: " + e.message); return; }
     logAudit("Excluiu usuário do sistema", "usuarios", { id, nome: alvo?.nome, email: alvo?.email });
     const novos = usuarios.filter(u => u.id !== id);
     setUsuarios(novos);
@@ -6107,6 +6169,7 @@ function GestaoUsuarios({ user }) {
 
   return (
     <div>
+      {ConfirmModal}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 22, color: "#0f172a", letterSpacing: "-.5px" }}>👥 Gestão de Usuários</h2>
@@ -6508,7 +6571,7 @@ function __old_broken_backup() {
               </div>
             </div>
             <button
-              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; logAudit("Logout do sistema", "auth", {}); setAuditUser(null); signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
+              onClick={async () => { if (!await confirm("Deseja sair do sistema?")) return; logAudit("Logout do sistema", "auth", {}); setAuditUser(null); signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(220,38,38,.15)", color: "#fca5a5", border: "1px solid rgba(220,38,38,.25)", cursor: "pointer", padding: "10px", borderRadius: 11, transition: "all .18s", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", marginTop: 8 }}
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(220,38,38,.3)"; e.currentTarget.style.color = "#fff"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(220,38,38,.15)"; e.currentTarget.style.color = "#fca5a5"; }}>
@@ -6603,6 +6666,7 @@ function __old_broken_backup() {
 }
 
 export default function App() {
+  const { confirm, ConfirmModal } = useConfirm();
   const [user, setUser] = useState(() => {
     try {
       const u = JSON.parse(sessionStorage.getItem("mr_user") || "null");
@@ -6728,6 +6792,14 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: "'Plus Jakarta Sans',sans-serif", background: "radial-gradient(circle at 0% 0%, #f8ffe8 0%, #eef2f7 35%, #ecf1f5 100%)" }}>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          success: { duration: 2000 },
+          error: { duration: 4000 },
+        }}
+      />
+      {ConfirmModal}
       <FontLink />
       <style>{`
         :root{
@@ -6873,7 +6945,7 @@ export default function App() {
               </div>
             </div>
             <button
-              onClick={() => { if (!window.confirm("Deseja sair do sistema?")) return; logAudit("Logout do sistema", "auth", {}); setAuditUser(null); signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
+              onClick={async () => { if (!await confirm("Deseja sair do sistema?")) return; logAudit("Logout do sistema", "auth", {}); setAuditUser(null); signOut(); setUser(null); try { sessionStorage.removeItem("mr_user"); } catch { } }}
               style={{ background: "#fff", color: "#b91c1c", border: "1px solid #fecaca", cursor: "pointer", padding: "8px 10px", borderRadius: 10, transition: "all .18s", fontSize: 12, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
               Sair
             </button>
