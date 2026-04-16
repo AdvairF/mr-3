@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import toast, { Toaster } from 'react-hot-toast';
 
 // ─── IMPORTS DOS MÓDULOS ──────────────────────────────────────
