@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-16 - Completed quick task 260416-q9w: Substituir coluna Acordos por dias Atraso no painel devedores
+Last activity: 2026-04-16 - Completed quick task 260416-nrx: Modal perfil + alterar senha via avatar na sidebar
 
 ## Status
 
@@ -16,3 +16,4 @@ Last activity: 2026-04-16 - Completed quick task 260416-q9w: Substituir coluna A
 | 260416-kl8 | Corrigir valor dívida no painel devedores — saldo real com encargos e pagamentos parciais | 2026-04-16 | 641af4f | Needs Review | [260416-kl8-corrigir-valor-d-vida-no-painel-devedore](./quick/260416-kl8-corrigir-valor-d-vida-no-painel-devedore/) |
 | 260416-p3r | Sincronizar alterações dívida painel tempo real — multa/honorários no saldo devedor | 2026-04-16 | 6e27e1a | Needs Review | [260416-p3r-sincronizar-alteracoes-divida-painel-tempo-r](./quick/260416-p3r-sincronizar-alteracoes-divida-painel-tempo-r/) |
 | 260416-q9w | Substituir coluna Acordos por dias Atraso no painel devedores — badge 5 tiers + sort | 2026-04-16 | fb1a927 | Needs Review | [260416-q9w-substituir-acordos-por-dias-atraso](./quick/260416-q9w-substituir-acordos-por-dias-atraso/) |
+| 260416-nrx | Modal perfil + alterar senha — clicar avatar sidebar abre modal com dados e troca de senha | 2026-04-16 | 0774bb6 | Complete | [260416-nrx-pagina-perfil-alterar-senha](./quick/260416-nrx-pagina-perfil-alterar-senha/) |
