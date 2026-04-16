@@ -58,7 +58,20 @@
       "Bash(node __TRACKED_VAR__/.claude/get-shit-done/bin/gsd-tools.cjs commit 'docs: initialize project' --files .planning/PROJECT.md)",
       "Bash(mkdir -p .planning)",
       "Bash(node __TRACKED_VAR__/.claude/get-shit-done/bin/gsd-tools.cjs config-new-project '{\"mode\":\"interactive\",\"granularity\":\"standard\",\"parallelization\":true,\"commit_docs\":true,\"model_profile\":\"balanced\",\"workflow\":{\"research\":true,\"plan_check\":true,\"verifier\":true,\"nyquist_validation\":true}}')",
-      "Bash(wc -l \"c:/Users/advai/Downloads/mr-cobrancas-vercel_1/mr-cobrancas/.planning/research/\"*.md)"
+      "Bash(wc -l \"c:/Users/advai/Downloads/mr-cobrancas-vercel_1/mr-cobrancas/.planning/research/\"*.md)",
+      "Skill(gsd-quick)",
+      "Skill(gsd-quick:*)",
+      "Skill(gsd-stats)",
+      "Skill(gsd-stats:*)",
+      "Bash(git -C \"c:/Users/advai/Downloads/mr-cobrancas-vercel_1/mr-cobrancas/src/mr-3/mr-cobrancas\" log --oneline -3)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(node __TRACKED_VAR__/.claude/get-shit-done/bin/gsd-tools.cjs list-tools)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")",
+      "Bash(gh auth *)",
+      "Bash(vercel domains *)",
+      "Bash(winget install *)",
+      "Bash(gh --version)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/GitHub CLI\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\advai\\Downloads\\mr-cobrancas-vercel_1\\mr-cobrancas\\.vercel",
