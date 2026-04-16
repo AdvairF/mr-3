@@ -1048,7 +1048,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
       if (novo?.id) { setRegistros(r => [novo, ...r]); }
       else { setRegistros(r => [{ ...payload, id: Date.now() }, ...r]); }
     } catch (e) {
-      setRegistros(r => [{ ...payload, id: Date.now() }, ...r]);
+      toast.error("Erro ao salvar registro de contato: " + (e?.message || e));
     }
     setShowFormReg(false);
     setFormReg({ data: new Date().toISOString().slice(0, 10), hora: new Date().toTimeString().slice(0, 5), tipo: "ligacao", resultado: "sem_resposta", relatorio: "", mensagem: "" });
@@ -1084,10 +1084,10 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
       const res = await dbInsert("lembretes", payload);
       const novo = Array.isArray(res) ? res[0] : res;
       setLemsDevedor(l => [...(novo?.id ? [novo] : [{ ...payload, id: Date.now() }]), ...l]);
-    } catch (e) { setLemsDevedor(l => [{ ...payload, id: Date.now() }, ...l]); }
+      toast.success("Lembrete criado e visível para todos!");
+    } catch (e) { toast.error("Erro ao criar lembrete: " + (e?.message || e)); }
     setShowForm(false);
     setFormLem({ tipo: "promessa_pagamento", descricao: "", data_prometida: "", hora: "08:00", prioridade: "normal", observacoes: "" });
-    toast.success("Lembrete criado e visível para todos!");
   }
 
   async function concluirLem(id) {
@@ -4809,7 +4809,7 @@ function Lembretes({ devedores, credores, user }) {
       const res = await dbInsert("lembretes", payload);
       const novo = Array.isArray(res) ? res[0] : res;
       setLembretes(l => [...(novo?.id ? [novo] : [{ ...payload, id: Date.now(), criado_em: new Date().toISOString() }]), ...l]);
-    } catch (e) { setLembretes(l => [{ ...payload, id: Date.now(), criado_em: new Date().toISOString() }, ...l]); }
+    } catch (e) { toast.error("Erro ao criar lembrete: " + (e?.message || e)); }
     setForm({ ...LEMBRETE_VAZIO, data_prometida: hoje });
     setModal(false);
   }
