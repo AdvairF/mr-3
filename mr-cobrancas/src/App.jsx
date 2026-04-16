@@ -652,15 +652,13 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
     [devedores, pgtosPorDevedorCarteira, hoje]
   );
 
-  const totalRecuperado = devedores.reduce((s, d) => {
-    const parcsDividas = (d.dividas || []).flatMap(div => div.parcelas || []);
-    const recDividas = parcsDividas.filter(p => p.status === "pago").reduce((ss, p) => ss + (p.valor || 0), 0);
-    const recAcordos = calcularTotaisAcordo(d.acordos || []).recuperado;
-    return s + recDividas + recAcordos;
-  }, 0);
+  const totalRecuperadoGlobal = useMemo(() =>
+    allPagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0),
+    [allPagamentos]
+  );
 
-  const taxaRecuperacao = totalCarteira > 0 ? (totalRecuperado / totalCarteira * 100) : 0;
-  const emAberto = totalCarteira - totalRecuperado;
+  const taxaRecuperacao = totalCarteira > 0 ? (totalRecuperadoGlobal / totalCarteira * 100) : 0;
+  const emAberto = totalCarteira - totalRecuperadoGlobal;
 
   // Por status
   const porStatus = {};
@@ -692,7 +690,13 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
     { label: "1 ano", dias: 365 },
     { label: "Tudo", dias: 0 },
   ];
-  const [periodo, setPeriodo] = useState(30);
+  const [periodo, setPeriodo] = useState(() => {
+    try { return parseInt(sessionStorage.getItem("mr_dash_periodo") || "30") || 30; } catch { return 30; }
+  });
+  const handleSetPeriodo = p => {
+    setPeriodo(p);
+    try { sessionStorage.setItem("mr_dash_periodo", String(p)); } catch {}
+  };
 
   const dataInicio = useMemo(() => {
     if (periodo === 0) return null;
@@ -759,7 +763,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
       {/* Filtro de período */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
         {PERIODOS.map(p => (
-          <button key={p.dias} onClick={() => setPeriodo(p.dias)}
+          <button key={p.dias} onClick={() => handleSetPeriodo(p.dias)}
             style={{ padding: "7px 14px", borderRadius: 99, border: `1.5px solid ${periodo === p.dias ? "#16a34a" : "#e2e8f0"}`, background: periodo === p.dias ? "#16a34a" : "#fff", color: periodo === p.dias ? "#fff" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", transition: "all .15s", boxShadow: periodo === p.dias ? "0 2px 8px rgba(22,163,74,.3)" : "none" }}>
             {p.label}
           </button>
@@ -796,12 +800,16 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
       {/* KPIs Principais */}
       <div className="mr-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 20 }}>
         {[
-          { l: "Carteira Total", v: fmt(totalCarteira), sub: `${devedores.length} devedor${devedores.length !== 1 ? "es" : ""}`, ic: "💼", g: "linear-gradient(135deg,#6366f1,#8b5cf6)", glow: "rgba(99,102,241,.35)" },
-          { l: "Recuperado", v: fmt(totalRecuperado), sub: `${taxaRecuperacao.toFixed(1)}% da carteira`, ic: "✅", g: "linear-gradient(135deg,#10b981,#059669)", glow: "rgba(16,185,129,.35)" },
-          { l: "Em Aberto", v: fmt(emAberto), sub: `${(100 - taxaRecuperacao).toFixed(1)}% pendente`, ic: "⏳", g: "linear-gradient(135deg,#ef4444,#dc2626)", glow: "rgba(239,68,68,.35)" },
-          { l: "Acordos Ativos", v: acordosAtivos, sub: `${acordosTotal} acordo${acordosTotal !== 1 ? "s" : ""} total`, ic: "🤝", g: "linear-gradient(135deg,#f59e0b,#d97706)", glow: "rgba(245,158,11,.35)" },
+          { l: "Carteira Total", v: fmt(totalCarteira), sub: `${devedores.length} devedor${devedores.length !== 1 ? "es" : ""}`, ic: "💼", g: "linear-gradient(135deg,#6366f1,#8b5cf6)", glow: "rgba(99,102,241,.35)", nav: { tab: "devedores" } },
+          { l: "Recuperado", v: fmt(recebidoPeriodo), sub: `${taxaPeriodo.toFixed(1)}% da carteira · ${periodoLabel}`, ic: "✅", g: "linear-gradient(135deg,#10b981,#059669)", glow: "rgba(16,185,129,.35)", nav: { tab: "devedores", filtroStatus: "pago_integral" } },
+          { l: "Em Aberto", v: fmt(emAberto), sub: `${(100 - taxaRecuperacao).toFixed(1)}% pendente`, ic: "⏳", g: "linear-gradient(135deg,#ef4444,#dc2626)", glow: "rgba(239,68,68,.35)", nav: { tab: "devedores" } },
+          { l: "Acordos Ativos", v: acordosAtivos, sub: `${acordosTotal} acordo${acordosTotal !== 1 ? "s" : ""} total`, ic: "🤝", g: "linear-gradient(135deg,#f59e0b,#d97706)", glow: "rgba(245,158,11,.35)", nav: { tab: "devedores", filtroStatus: "acordo_firmado" } },
         ].map((k, i) => (
-          <div key={i} className="kpi-card" style={{ background: k.g, borderRadius: 20, padding: "22px 24px", color: "#fff", position: "relative", overflow: "hidden", boxShadow: `0 8px 28px ${k.glow}`, cursor: "default" }}>
+          <div key={i} className="kpi-card"
+            onClick={() => window.dispatchEvent(new CustomEvent("mr_goto", { detail: k.nav }))}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = `0 14px 36px ${k.glow}`; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = `0 8px 28px ${k.glow}`; }}
+            style={{ background: k.g, borderRadius: 20, padding: "22px 24px", color: "#fff", position: "relative", overflow: "hidden", boxShadow: `0 8px 28px ${k.glow}`, cursor: "pointer", transition: "transform .15s, box-shadow .15s" }}>
             <div style={{ position: "absolute", right: -16, top: -16, width: 96, height: 96, borderRadius: 99, background: "rgba(255,255,255,.08)" }} />
             <div style={{ position: "absolute", right: 8, bottom: -28, width: 72, height: 72, borderRadius: 99, background: "rgba(255,255,255,.05)" }} />
             <div style={{ position: "absolute", right: 18, top: 16, fontSize: 28, opacity: .22 }}>{k.ic}</div>
@@ -865,7 +873,7 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
             </div>
           </div>
           {[
-            { l: "Recuperado", cor: "#059669", v: fmt(totalRecuperado) },
+            { l: "Recuperado", cor: "#059669", v: fmt(totalRecuperadoGlobal) },
             { l: "Em aberto", cor: "#dc2626", v: fmt(emAberto) },
             { l: "Total", cor: "#4f46e5", v: fmt(totalCarteira) },
           ].map(r => (
