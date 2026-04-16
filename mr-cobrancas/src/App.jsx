@@ -70,6 +70,100 @@ function calcCorrecao({ valorOriginal, dataVencimento, indexador, jurosAM, multa
   return { valorOriginal, correcao, juros: juros, multa: multaVal, total, meses, dias };
 }
 
+/**
+ * Calcula o saldo atualizado de um devedor somando encargos e abatendo pagamentos parciais.
+ * Mesma lógica iterativa de gerarPlanilhaPDF, sem side-effects.
+ *
+ * @param {object} devedor  — objeto devedor com .dividas[]
+ * @param {Array}  pagamentos — pagamentos_parciais do devedor (já filtrados por devedor_id)
+ * @param {string} hoje    — data de corte "YYYY-MM-DD"
+ * @returns {number} saldo final
+ */
+function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
+  const dividasCalc = (devedor.dividas || []).filter(d => !d._nominal && !d._so_custas);
+  if (!dividasCalc.length) return devedor.valor_original || devedor.valor_nominal || 0;
+
+  const pgtoRestantes = [...pagamentos]
+    .sort((a, b) => (a.data_pagamento || "").localeCompare(b.data_pagamento || ""))
+    .map(p => ({ ...p, remaining: parseFloat(p.valor) || 0 }));
+
+  let saldoTotal = 0;
+
+  for (const div of dividasCalc) {
+    const pv = parseFloat(div.valor_total) || 0;
+    const indexadorDiv = div.indexador || "nenhum";
+    const jurosTipoDiv = div.juros_tipo || "sem_juros";
+    const jurosAMDiv = parseFloat(div.juros_am) || 0;
+    const multaPctDiv = parseFloat(div.multa_pct) || 0;
+    const honorariosPctDiv = parseFloat(div.honorarios_pct) || 0;
+    const dataInicioDiv = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
+
+    let saldo = pv;
+    let periodoInicio = dataInicioDiv;
+    let primeiroperiodo = true;
+
+    const pgtosDiv = pgtoRestantes.filter(p => p.remaining > 0);
+
+    for (const pgto of pgtosDiv) {
+      if (saldo <= 0) break;
+      const periodoFim = pgto.data_pagamento;
+      if (!periodoFim || periodoFim <= periodoInicio) {
+        // Pagamento anterior ao início da dívida: abater diretamente
+        const abate = Math.min(pgto.remaining, saldo);
+        saldo -= abate;
+        pgto.remaining -= abate;
+        continue;
+      }
+
+      // Correção monetária no período
+      const fator = calcularFatorCorrecao(indexadorDiv, periodoInicio, periodoFim);
+      const corrAbs = saldo * (fator - 1);
+      const pcSaldo = saldo + corrAbs;
+
+      // Juros no período
+      const { juros } = calcularJurosAcumulados({
+        principal: pcSaldo,
+        dataInicio: periodoInicio,
+        dataFim: periodoFim,
+        jurosTipo: jurosTipoDiv,
+        jurosAM: jurosAMDiv,
+        regime: "simples",
+      });
+
+      // Multa e honorários (somente no primeiro período)
+      const multaVal = primeiroperiodo ? pcSaldo * (multaPctDiv / 100) : 0;
+      const honorariosVal = primeiroperiodo ? (pcSaldo + juros + multaVal) * (honorariosPctDiv / 100) : 0;
+
+      const debitoTotal = pcSaldo + juros + multaVal + honorariosVal;
+      const abate = Math.min(pgto.remaining, debitoTotal);
+      saldo = debitoTotal - abate;
+      pgto.remaining -= abate;
+      periodoInicio = periodoFim;
+      primeiroperiodo = false;
+    }
+
+    // Período final: do último evento até hoje
+    if (periodoInicio && periodoInicio < hoje) {
+      const fatorFinal = calcularFatorCorrecao(indexadorDiv, periodoInicio, hoje);
+      const corrFinal = saldo * (fatorFinal - 1);
+      const pcFinal = saldo + corrFinal;
+      const { juros: jurosFinal } = calcularJurosAcumulados({
+        principal: pcFinal,
+        dataInicio: periodoInicio,
+        dataFim: hoje,
+        jurosTipo: jurosTipoDiv,
+        jurosAM: jurosAMDiv,
+        regime: "simples",
+      });
+      saldo = pcFinal + jurosFinal;
+    }
+
+    saldoTotal += Math.max(0, saldo);
+  }
+
+  return saldoTotal;
+}
+
 // ─── ICONS ──────────────────────────────────────────────────
 const I = {
   // Dashboard — grade moderna com cantos arredondados
@@ -281,14 +375,27 @@ function Login({ onLogin }) {
 // ═══════════════════════════════════════════════════════════════
 // DASHBOARD — Foco em Cobrança
 // ═══════════════════════════════════════════════════════════════
-function Dashboard({ devedores, processos, andamentos, user, lembretes = [] }) {
+function Dashboard({ devedores, processos, andamentos, user, lembretes = [], allPagamentos = [] }) {
   const hoje = new Date().toISOString().slice(0, 10);
 
   // ── Métricas de cobrança ──────────────────────────────────────
-  const totalCarteira = devedores.reduce((s, d) => {
-    const dividas = d.dividas || [];
-    return s + (dividas.reduce((ss, div) => ss + (div.valor_total || 0), 0) || d.valor_nominal || d.valor_original || 0);
-  }, 0);
+  const pgtosPorDevedorCarteira = useMemo(() => {
+    const m = new Map();
+    allPagamentos.forEach(p => {
+      const k = String(p.devedor_id);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(p);
+    });
+    return m;
+  }, [allPagamentos]);
+
+  const totalCarteira = useMemo(
+    () => devedores.reduce((s, d) =>
+      s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje),
+      0
+    ),
+    [devedores, pgtosPorDevedorCarteira, hoje]
+  );
 
   const totalRecuperado = devedores.reduce((s, d) => {
     const parcsDividas = (d.dividas || []).flatMap(div => div.parcelas || []);
@@ -2514,10 +2621,22 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
   );
 }
 
-function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos = [], setTab }) {
+function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos = [], setTab, allPagamentos = [] }) {
   const { confirm, ConfirmModal } = useConfirm();
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
+
+  const pgtosPorDevedor = useMemo(() => {
+    const m = new Map();
+    allPagamentos.forEach(p => {
+      const k = String(p.devedor_id);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(p);
+    });
+    return m;
+  }, [allPagamentos]);
+
+  const hoje = new Date().toISOString().slice(0, 10);
 
   // Escuta filtro vindo do Dashboard
   useEffect(() => {
@@ -3562,6 +3681,10 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               const acordosDev = d.acordos || [];
               const totais = calcularTotaisAcordo(acordosDev);
               const valorDiv = d.dividas?.reduce((s, div) => s + (div.valor_total || 0), 0) || d.valor_original || d.valor_nominal || 0;
+              const pgtosDev = pgtosPorDevedor.get(String(d.id)) || [];
+              const saldo = calcularSaldoDevedorAtualizado(d, pgtosDev, hoje);
+              const totalPago = pgtosDev.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+              const temParcial = pgtosDev.length > 0;
               return (
                 <tr key={d.id} style={{ borderTop: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => abrirModal("ficha", d)}
                   onMouseEnter={e => e.currentTarget.style.background = "#fafafe"}
@@ -3573,8 +3696,16 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: 12, color: "#475569" }}>{d.cpf_cnpj || "—"}</td>
                   <td style={{ padding: "12px 16px", fontSize: 12, color: "#64748b" }}>{cr?.nome?.split(" ")[0] || "—"}</td>
                   <td style={{ padding: "12px 16px" }}><BadgeDev status={d.status} /></td>
-                  <td style={{ padding: "12px 16px" }}>
-                    <p style={{ fontWeight: 700, color: "#4f46e5", fontSize: 13 }}>{fmt(valorDiv)}</p>
+                  <td style={{ padding: "12px 16px" }}
+                    title={temParcial ? `Original: ${fmt(valorDiv)} | Pago: ${fmt(totalPago)} | Saldo: ${fmt(saldo)}` : undefined}>
+                    <p style={{ fontWeight: 700, color: "#4f46e5", fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+                      {fmt(saldo)}
+                      {temParcial && (
+                        <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: 99, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 4 }}>
+                          Parcial
+                        </span>
+                      )}
+                    </p>
                     {totais.recuperado > 0 && <p style={{ fontSize: 10, color: "#16a34a" }}>✓ {fmt(totais.recuperado)} rec.</p>}
                   </td>
                   <td style={{ padding: "12px 16px", fontSize: 12, color: "#64748b" }}>
@@ -7500,19 +7631,22 @@ export default function App() {
   const [andamentos, setAndamentos] = useState([]);
   const [regua, setRegua] = useState([]);
   const [lembretesList, setLembretesList] = useState([]);
+  const [allPagamentos, setAllPagamentos] = useState([]);
 
   const carregarTudo = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg, lems] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems, pgtos] = await Promise.all([
         dbGet("devedores"),
         dbGet("credores"),
         dbGet("processos"),
         dbGet("andamentos"),
         dbGet("regua_cobranca", "order=criado_em.asc"),
         dbGet("lembretes", "order=data_prometida.asc"),
+        dbGet("pagamentos_parciais"),
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
+      setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
       setDevedores((devs || []).map(d => {
         const dividas = parse(d.dividas);
@@ -7584,8 +7718,8 @@ export default function App() {
 
   function renderPage(t) {
     switch (t) {
-      case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} />;
-      case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} />;
+      case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} allPagamentos={allPagamentos} />;
+      case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} allPagamentos={allPagamentos} />;
       case "credores": return <Credores credores={credores} setCredores={setCredores} />;
       case "calculadora": return <Calculadora devedores={devedores} credores={credores} />;
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;
@@ -7601,7 +7735,24 @@ export default function App() {
   const pendenciasHoje = lembretesList.filter(
     (l) => l.status === "pendente" && l.data_prometida <= new Date().toISOString().slice(0, 10)
   ).length;
-  const totalCarteira = devedores.reduce((acc, d) => acc + (Number(d.valor_original) || 0), 0);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const pgtosPorDevedorCarteira = useMemo(() => {
+    const m = new Map();
+    allPagamentos.forEach(p => {
+      const k = String(p.devedor_id);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(p);
+    });
+    return m;
+  }, [allPagamentos]);
+
+  const totalCarteira = useMemo(
+    () => devedores.reduce((s, d) =>
+      s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje),
+      0
+    ),
+    [devedores, pgtosPorDevedorCarteira, hoje]
+  );
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: "'Plus Jakarta Sans',sans-serif", background: "radial-gradient(circle at 0% 0%, #f8ffe8 0%, #eef2f7 35%, #ecf1f5 100%)" }}>
