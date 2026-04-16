@@ -681,7 +681,65 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
     (d.acordos || []).flatMap(ac => (ac.parcelas || []).filter(p => p.status === "atrasado" || (p.status === "pendente" && (p.dataVencimento || "") <= hoje)))
   ).length;
 
+  // ── Filtro de período ─────────────────────────────────────────
+  const PERIODOS = [
+    { label: "Hoje", dias: 1 },
+    { label: "7 dias", dias: 7 },
+    { label: "30 dias", dias: 30 },
+    { label: "60 dias", dias: 60 },
+    { label: "90 dias", dias: 90 },
+    { label: "6 meses", dias: 180 },
+    { label: "1 ano", dias: 365 },
+    { label: "Tudo", dias: 0 },
+  ];
+  const [periodo, setPeriodo] = useState(30);
 
+  const dataInicio = useMemo(() => {
+    if (periodo === 0) return null;
+    const d = new Date();
+    d.setDate(d.getDate() - (periodo === 1 ? 0 : periodo));
+    return (periodo === 1 ? hoje : d.toISOString().slice(0, 10));
+  }, [periodo, hoje]);
+
+  const pagamentosNoPeriodo = useMemo(() =>
+    dataInicio
+      ? allPagamentos.filter(p => (p.data_pagamento || "") >= dataInicio)
+      : allPagamentos,
+    [allPagamentos, dataInicio]
+  );
+
+  const recebidoPeriodo = useMemo(() =>
+    pagamentosNoPeriodo.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0),
+    [pagamentosNoPeriodo]
+  );
+
+  const recuperadoPeriodo = useMemo(() => {
+    // Soma pagamentos do período para devedores com status de pagamento total
+    const statusPago = new Set(["pago_integral", "recuperado"]);
+    return pagamentosNoPeriodo
+      .filter(p => {
+        const dev = devedores.find(d => String(d.id) === String(p.devedor_id));
+        return dev && statusPago.has(dev.status);
+      })
+      .reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+  }, [pagamentosNoPeriodo, devedores]);
+
+  const taxaPeriodo = totalCarteira > 0 ? (recebidoPeriodo / totalCarteira * 100) : 0;
+
+  const ultimosPagamentos = useMemo(() => {
+    return [...pagamentosNoPeriodo]
+      .sort((a, b) => (b.data_pagamento || "").localeCompare(a.data_pagamento || ""))
+      .slice(0, 5)
+      .map(p => {
+        const dev = devedores.find(d => String(d.id) === String(p.devedor_id));
+        const pgtosDev = allPagamentos.filter(pp => String(pp.devedor_id) === String(p.devedor_id));
+        const totalPago = pgtosDev.reduce((s, pp) => s + (parseFloat(pp.valor) || 0), 0);
+        const saldoDev = calcularSaldoDevedorAtualizado(dev || {}, pgtosDev, hoje);
+        return { ...p, nomeDevedor: dev?.nome || "—", saldoRestante: saldoDev };
+      });
+  }, [pagamentosNoPeriodo, devedores, allPagamentos, hoje]);
+
+  const periodoLabel = PERIODOS.find(p => p.dias === periodo)?.label || "30 dias";
 
   // Saudação por hora
   const hora = new Date().getHours();
@@ -691,11 +749,21 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
   return (
     <div style={{ maxWidth: 1200 }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontFamily: "Space Grotesk", fontWeight: 800, fontSize: 26, color: "#0f172a", marginBottom: 4 }}>
           {saudacao}, {user.nome.split(" ")[0]}!
         </h2>
         <p style={{ fontSize: 13, color: "#64748b" }}>{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+      </div>
+
+      {/* Filtro de período */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+        {PERIODOS.map(p => (
+          <button key={p.dias} onClick={() => setPeriodo(p.dias)}
+            style={{ padding: "7px 14px", borderRadius: 99, border: `1.5px solid ${periodo === p.dias ? "#16a34a" : "#e2e8f0"}`, background: periodo === p.dias ? "#16a34a" : "#fff", color: periodo === p.dias ? "#fff" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Plus Jakarta Sans',sans-serif", transition: "all .15s", boxShadow: periodo === p.dias ? "0 2px 8px rgba(22,163,74,.3)" : "none" }}>
+            {p.label}
+          </button>
+        ))}
       </div>
 
       {/* Alerta lembretes urgentes */}
@@ -880,6 +948,67 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
             );
           })}
         </div>
+      </div>
+
+      {/* ── Recebimentos no período ─────────────────────────────── */}
+      <div style={{ marginTop: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 15, color: "#0f172a" }}>💰 Recebimentos</p>
+          <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99 }}>{periodoLabel}</span>
+        </div>
+
+        {/* 3 cards do período */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 16 }}>
+          {[
+            { l: "💰 Recebido", v: fmt(recebidoPeriodo), sub: `${pagamentosNoPeriodo.length} pagamento${pagamentosNoPeriodo.length !== 1 ? "s" : ""} no período`, g: "linear-gradient(135deg,#059669,#10b981)", glow: "rgba(5,150,105,.3)" },
+            { l: "📈 Recuperado", v: fmt(recuperadoPeriodo), sub: "devedores pagos integralmente", g: "linear-gradient(135deg,#0891b2,#06b6d4)", glow: "rgba(8,145,178,.3)" },
+            { l: "📊 Taxa no Período", v: `${taxaPeriodo.toFixed(1)}%`, sub: "do total da carteira", g: "linear-gradient(135deg,#7c3aed,#8b5cf6)", glow: "rgba(124,58,237,.3)" },
+          ].map((k, i) => (
+            <div key={i} style={{ background: k.g, borderRadius: 18, padding: "20px 22px", color: "#fff", position: "relative", overflow: "hidden", boxShadow: `0 6px 24px ${k.glow}` }}>
+              <div style={{ position: "absolute", right: -14, top: -14, width: 80, height: 80, borderRadius: 99, background: "rgba(255,255,255,.08)" }} />
+              <p style={{ fontSize: 10, fontWeight: 800, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".1em", opacity: .8 }}>{k.l}</p>
+              <p style={{ fontSize: 24, fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, marginBottom: 4, letterSpacing: "-1px", lineHeight: 1 }}>{k.v}</p>
+              <p style={{ fontSize: 11, opacity: .65, fontWeight: 500 }}>{k.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabela últimos recebimentos */}
+        {ultimosPagamentos.length > 0 ? (
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+            <div style={{ padding: "14px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: "#0f172a" }}>Últimos recebimentos</p>
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>últimos {ultimosPagamentos.length} no período</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["Data", "Devedor", "Valor Pago", "Saldo Restante"].map(h => (
+                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ultimosPagamentos.map((p, i) => (
+                  <tr key={p.id || i} style={{ borderTop: "1px solid #f1f5f9" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                    onMouseLeave={e => e.currentTarget.style.background = ""}>
+                    <td style={{ padding: "11px 16px", fontSize: 12, color: "#475569", whiteSpace: "nowrap" }}>{fmtDate(p.data_pagamento)}</td>
+                    <td style={{ padding: "11px 16px", fontSize: 12, fontWeight: 600, color: "#0f172a", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nomeDevedor}</td>
+                    <td style={{ padding: "11px 16px", fontSize: 12, fontWeight: 700, color: "#16a34a" }}>{fmt(parseFloat(p.valor) || 0)}</td>
+                    <td style={{ padding: "11px 16px", fontSize: 12, fontWeight: 700, color: p.saldoRestante > 0 ? "#dc2626" : "#16a34a" }}>{fmt(p.saldoRestante)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ background: "#f8fafc", borderRadius: 14, padding: "28px", textAlign: "center", border: "1px dashed #e2e8f0" }}>
+            <p style={{ fontSize: 28, marginBottom: 8 }}>📭</p>
+            <p style={{ color: "#64748b", fontSize: 13, fontWeight: 600 }}>Nenhum recebimento em {periodoLabel}</p>
+            <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 4 }}>Registre pagamentos na ficha dos devedores</p>
+          </div>
+        )}
       </div>
     </div>
   );
