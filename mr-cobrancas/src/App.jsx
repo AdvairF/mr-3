@@ -828,14 +828,14 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
         status: novoStatusDev,
       });
       onAtualizarDevedor({ ...devedor, acordos: novosAcordos, status: novoStatusDev });
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); toast.error("Erro ao confirmar pagamento: " + (e?.message || e)); }
   }
 
   async function excluirAcordo(acordoId) {
     if (!await confirm("Excluir este acordo e todas as parcelas?")) return;
     const novos = acordosLocal.filter(a => a.id !== acordoId);
     setAcordosLocal(novos);
-    try { await dbUpdate("devedores", devedor.id, { acordos: JSON.stringify(novos) }); } catch (e) { }
+    try { await dbUpdate("devedores", devedor.id, { acordos: JSON.stringify(novos) }); } catch (e) { toast.error("Erro ao excluir acordo: " + (e?.message || e)); }
     onAtualizarDevedor({ ...devedor, acordos: novos });
   }
 
@@ -1055,7 +1055,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   }
   async function excluirRegistro(id) {
     if (!await confirm("Excluir este registro?")) return;
-    try { await dbDelete("registros_contato", id); } catch (e) { }
+    try { await dbDelete("registros_contato", id); } catch (e) { toast.error("Erro ao excluir registro: " + (e?.message || e)); }
     setRegistros(r => r.filter(x => x.id !== id));
   }
 
@@ -1091,12 +1091,12 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
   }
 
   async function concluirLem(id) {
-    try { await dbUpdate("lembretes", id, { status: "concluido", concluido_em: new Date().toISOString() }); } catch (e) { }
+    try { await dbUpdate("lembretes", id, { status: "concluido", concluido_em: new Date().toISOString() }); } catch (e) { toast.error("Erro ao concluir lembrete: " + (e?.message || e)); }
     setLemsDevedor(l => l.map(x => x.id !== id ? x : { ...x, status: "concluido" }));
   }
   async function excluirLem(id) {
     if (!await confirm("Excluir lembrete?")) return;
-    try { await dbDelete("lembretes", id); } catch (e) { }
+    try { await dbDelete("lembretes", id); } catch (e) { toast.error("Erro ao excluir lembrete: " + (e?.message || e)); }
     setLemsDevedor(l => l.filter(x => x.id !== id));
   }
 
@@ -3411,7 +3411,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
     };
     // Atualizar proximo_prazo do processo se houver prazo no andamento
     if (andForm.prazo) {
-      try { await dbUpdate("processos", sel.id, { proximo_prazo: andForm.prazo }); } catch (e) { }
+      try { await dbUpdate("processos", sel.id, { proximo_prazo: andForm.prazo }); } catch (e) { toast.error("Erro ao atualizar prazo: " + (e?.message || e)); }
       setProcessos(prev => prev.map(p => p.id === sel.id ? { ...p, proximo_prazo: andForm.prazo } : p));
     }
     try {
@@ -3428,7 +3428,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
   async function excluirProcesso(id) {
     if (!await confirm("Excluir este processo?")) return;
     const proc = processos.find(p => p.id === id);
-    try { await dbDelete("processos", id); } catch (e) { }
+    try { await dbDelete("processos", id); } catch (e) { toast.error("Erro ao excluir processo: " + (e?.message || e)); }
     logAudit("Excluiu processo", "processos", { id, numero: proc?.numero });
     setProcessos(prev => prev.filter(p => p.id !== id));
     setFichaId(null);
@@ -4815,20 +4815,20 @@ function Lembretes({ devedores, credores, user }) {
   }
 
   async function concluir(id) {
-    try { await dbUpdate("lembretes", id, { status: "concluido", concluido_em: new Date().toISOString() }); } catch (e) { }
+    try { await dbUpdate("lembretes", id, { status: "concluido", concluido_em: new Date().toISOString() }); } catch (e) { toast.error("Erro ao concluir lembrete: " + (e?.message || e)); }
     setLembretes(l => l.map(x => x.id !== id ? x : { ...x, status: "concluido", concluido_em: new Date().toISOString() }));
   }
   async function cancelar(id) {
-    try { await dbUpdate("lembretes", id, { status: "cancelado" }); } catch (e) { }
+    try { await dbUpdate("lembretes", id, { status: "cancelado" }); } catch (e) { toast.error("Erro ao cancelar lembrete: " + (e?.message || e)); }
     setLembretes(l => l.map(x => x.id !== id ? x : { ...x, status: "cancelado" }));
   }
   async function reativar(id) {
-    try { await dbUpdate("lembretes", id, { status: "pendente", concluido_em: null }); } catch (e) { }
+    try { await dbUpdate("lembretes", id, { status: "pendente", concluido_em: null }); } catch (e) { toast.error("Erro ao reativar lembrete: " + (e?.message || e)); }
     setLembretes(l => l.map(x => x.id !== id ? x : { ...x, status: "pendente", concluido_em: null }));
   }
   async function excluir(id) {
     if (!await confirm("Excluir este lembrete?")) return;
-    try { await dbDelete("lembretes", id); } catch (e) { }
+    try { await dbDelete("lembretes", id); } catch (e) { toast.error("Erro ao excluir lembrete: " + (e?.message || e)); }
     setLembretes(l => l.filter(x => x.id !== id));
   }
 
@@ -5484,7 +5484,7 @@ function Regua({ devedores, credores, user }) {
       for (const id of idsExist) {
         if (!novas.find(e => e.id === id)) await dbDelete("regua_etapas", id).catch(() => { });
       }
-    } catch (e) { }
+    } catch (e) { toast.error("Erro ao salvar etapas da régua: " + (e?.message || e)); }
   }
 
   async function salvarRegua(devId, tipo, etapaForcadaId) {
@@ -5496,7 +5496,7 @@ function Regua({ devedores, credores, user }) {
         if (etapaForcadaId) payload.etapa_forcada = etapaForcadaId;
         await dbInsert("regua_cobranca", payload);
       }
-    } catch (e) { }
+    } catch (e) { toast.error("Erro ao salvar régua de cobrança: " + (e?.message || e)); }
   }
 
   async function incluirDev(id) {
@@ -5799,7 +5799,7 @@ function Regua({ devedores, credores, user }) {
                                       const ex = await dbGet("regua_cobranca", `devedor_id=eq.${dev.id}`);
                                       for (const r of (Array.isArray(ex) ? ex : [])) { try { await dbDelete("regua_cobranca", r.id); } catch { } }
                                       await dbInsert("regua_cobranca", { devedor_id: dev.id, tipo: "incluido", etapa_forcada: et.id, criado_por: user?.nome || "Sistema" });
-                                    } catch (e) { }
+                                    } catch (e) { toast.error("Erro ao incluir devedor na régua: " + (e?.message || e)); }
                                     // ✅ Atualiza estado local IMEDIATAMENTE — sem precisar recarregar
                                     setEtapasForcadas(prev => ({ ...prev, [String(dev.id)]: et.id }));
                                     setIncluidos(prev => [...new Set([...prev.map(String), String(dev.id)])]);
