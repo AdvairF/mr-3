@@ -773,7 +773,7 @@ function AbaModelos({ c, devedores }) {
                           {gerando===m.id ? "⏳" : "⬇️ Gerar"}
                         </button>
                         <button onClick={() => { setRenomId(m.id); setRenomNome(m.nome); }} style={S.btnGhost} title="Renomear">✏️</button>
-                        <button onClick={() => remover(m.id)} style={S.btnRed} title="Remover">🗑️</button>
+                        <button onClick={() => remover(m.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }} title="Remover">Excluir</button>
                       </div>
                     </div>
                   )}

@@ -916,8 +916,8 @@ function AbaAcordos({ devedor, acordos, credores, user, onAtualizarDevedor }) {
                 </div>
               </div>
               <button onClick={() => excluirAcordo(ac.id)}
-                style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "4px 8px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>
-                🗑
+                style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>
+                Excluir
               </button>
             </div>
 
@@ -1210,7 +1210,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 9px", borderRadius: 99, background: resBg, color: resCor }}>{resLabel}</span>
                   <span style={{ fontSize: 10, color: "#94a3b8" }}>por {r.criado_por}</span>
                 </div>
-                <button aria-label="Excluir registro de contato" onClick={() => excluirRegistro(r.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "4px 8px", cursor: "pointer", fontSize: 11, flexShrink: 0 }}>🗑</button>
+                <button aria-label="Excluir registro de contato" onClick={() => excluirRegistro(r.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
               </div>
 
               {/* Relatório */}
@@ -1341,7 +1341,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                   <button aria-label="Concluir lembrete" onClick={() => concluirLem(l.id)} style={{ background: "#dcfce7", color: "#15803d", border: "none", borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✅</button>
-                  <button aria-label="Excluir lembrete" onClick={() => excluirLem(l.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 7, padding: "5px 8px", cursor: "pointer", fontSize: 11 }}>🗑</button>
+                  <button aria-label="Excluir lembrete" onClick={() => excluirLem(l.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
                 </div>
               </div>
             );
@@ -2444,7 +2444,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               try { const r = await dbGet("registros_contato", `devedor_id=eq.${sel.id}&order=data.desc`); regs = Array.isArray(r) ? r : []; } catch { }
               imprimirFicha({ ...sel, _registros: regs }, credores, fmt, fmtDate);
             }} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>🖨️ Imprimir PDF</button>
-            <button onClick={() => excluirDevedor(sel)} style={{ background: "rgba(220,38,38,.3)", color: "#fca5a5", border: "1px solid rgba(220,38,38,.4)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>🗑 Excluir</button>
+            <button onClick={() => excluirDevedor(sel)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
           </div>
         </div>
 
@@ -2499,7 +2499,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               {sel.observacoes && <div style={{ marginTop: 10, padding: "10px 14px", background: "#fef9c3", borderRadius: 10 }}><p style={{ fontSize: 10, color: "#92400e", fontWeight: 700, marginBottom: 2, textTransform: "uppercase" }}>Observações</p><p style={{ fontSize: 13, color: "#0f172a" }}>{sel.observacoes}</p></div>}
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 {sel.telefone && <Btn onClick={() => abrirWp(sel)}>📱 WhatsApp</Btn>}
-                <Btn onClick={() => excluirDevedor(sel)} danger>🗑 Excluir</Btn>
+                <button onClick={() => excluirDevedor(sel)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
               </div>
             </div>
           )}
@@ -2646,11 +2646,11 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                       {!ehSoCustas && editDivId !== div.id && (
                         <div style={{ display: "flex", gap: 5, marginLeft: 8, flexShrink: 0 }}>
                           <button onClick={() => abrirEdicaoDivida(div)} style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️ Editar</button>
-                          <button onClick={() => excluirDivida(div.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>🗑️ Excluir</button>
+                          <button onClick={() => excluirDivida(div.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
                         </div>
                       )}
                       {ehSoCustas && (
-                        <button onClick={() => excluirDivida(div.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "1px solid #fecaca", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700, marginLeft: 8 }}>🗑️ Excluir</button>
+                        <button onClick={() => excluirDivida(div.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px', marginLeft: 8 }}>Excluir</button>
                       )}
                     </div>
 
@@ -3226,7 +3226,7 @@ function Credores({ credores, setCredores }) {
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => abrirEditar(c)} style={{ flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#475569", cursor: "pointer" }}>✏️ Editar</button>
-              <button aria-label="Excluir credor" onClick={() => excluir(c)} style={{ padding: "7px 12px", fontSize: 12, fontWeight: 600, borderRadius: 9, border: "1.5px solid #fee2e2", background: "#fff5f5", color: "#ef4444", cursor: "pointer" }}>🗑️</button>
+              <button aria-label="Excluir credor" onClick={() => excluir(c)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
             </div>
           </div>
         ))}
@@ -3474,7 +3474,7 @@ function Processos({ processos, setProcessos, devedores, credores, andamentos, s
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => excluirProcesso(sel.id)} style={{ background: "rgba(220,38,38,.3)", color: "#fca5a5", border: "1px solid rgba(220,38,38,.4)", borderRadius: 8, padding: "7px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>🗑 Excluir</button>
+              <button onClick={() => excluirProcesso(sel.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
             </div>
           </div>
         </div>
@@ -5021,8 +5021,8 @@ function Lembretes({ devedores, credores, user }) {
                       </button>
                     )}
                     <button onClick={() => excluir(l.id)}
-                      style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "6px 8px", cursor: "pointer", fontSize: 11 }}>
-                      🗑
+                      style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>
+                      Excluir
                     </button>
                   </div>
                 </div>
@@ -5919,7 +5919,7 @@ function Regua({ devedores, credores, user }) {
                       <button aria-label="Editar etapa" onClick={() => { setIsNova(false); setEditando({ ...e }); }}
                         style={{ background: "#ede9fe", color: "#6366f1", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️</button>
                       <button aria-label="Excluir etapa" onClick={async () => { if (!await confirm("Excluir esta etapa?")) return; se(etapas.filter(x => x.id !== e.id)); }}
-                        style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, padding: "6px 9px", cursor: "pointer", fontSize: 11 }}>🗑</button>
+                        style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
                     </div>
                   </div>
                 </div>
@@ -6231,8 +6231,8 @@ function GestaoUsuarios({ user }) {
                 </div>
               </div>
               <button onClick={() => excluir(u.id)}
-                style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 9, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
-                🗑 Excluir
+                style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>
+                Excluir
               </button>
             </div>
           );
