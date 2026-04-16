@@ -3,7 +3,7 @@ import toast, { Toaster } from 'react-hot-toast';
 
 // ─── IMPORTS DOS MÓDULOS ──────────────────────────────────────
 // Config / Auth
-import { sb, dbGet, dbInsert, dbUpdate, dbDelete, signOut, setAuthToken, requestPasswordReset, updatePassword } from "./config/supabase.js";
+import { sb, dbGet, dbInsert, dbUpdate, dbDelete, signIn, signOut, setAuthToken, requestPasswordReset, updatePassword } from "./config/supabase.js";
 import { authenticateUser, fetchSystemUsers } from "./auth/users.js";
 
 // Utils
@@ -437,6 +437,120 @@ function Login({ onLogin }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PERFIL MODAL
+// ═══════════════════════════════════════════════════════════════
+function PerfilModal({ user, onClose }) {
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showAtual, setShowAtual] = useState(false);
+  const [showNova, setShowNova] = useState(false);
+  const [showConf, setShowConf] = useState(false);
+
+  async function handleAlterarSenha() {
+    if (!senhaAtual) { toast("Informe a senha atual.", { icon: "⚠️" }); return; }
+    if (!novaSenha || novaSenha.length < 6) { toast("A nova senha deve ter ao menos 6 caracteres.", { icon: "⚠️" }); return; }
+    if (novaSenha !== confirmarSenha) { toast("As senhas não coincidem.", { icon: "⚠️" }); return; }
+    setLoading(true);
+    try {
+      // Verifica senha atual re-autenticando
+      const auth = await signIn(user.email, senhaAtual);
+      // Atualiza para a nova senha usando o token da sessão recém-validada
+      await updatePassword(auth.access_token, novaSenha);
+      toast.success("Senha alterada com sucesso!");
+      setSenhaAtual(""); setNovaSenha(""); setConfirmarSenha("");
+    } catch (e) {
+      const msg = e.message || "";
+      if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("credentials") || msg.includes("401")) {
+        toast.error("Senha atual incorreta.");
+      } else {
+        toast.error("Erro ao alterar senha: " + msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputStyle = { width: "100%", padding: "12px 44px 12px 14px", background: "#f8fafb", border: "1.5px solid #e5e7eb", borderRadius: 11, color: "#111", fontSize: 14, boxSizing: "border-box", fontFamily: "'Plus Jakarta Sans',sans-serif", transition: "border-color .15s" };
+  const labelStyle = { color: "#374151", fontSize: 11, fontWeight: 800, display: "block", marginBottom: 7, textTransform: "uppercase", letterSpacing: "1px" };
+  const roStyle = { width: "100%", padding: "12px 14px", background: "#f1f5f9", border: "1.5px solid #e5e7eb", borderRadius: 11, color: "#64748b", fontSize: 14, boxSizing: "border-box", fontFamily: "'Plus Jakarta Sans',sans-serif" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "#fff", borderRadius: 22, width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,.2)", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+        {/* Header */}
+        <div style={{ padding: "28px 28px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 16, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: "#fff", fontFamily: "'Space Grotesk',sans-serif", flexShrink: 0 }}>{user.nome[0]}</div>
+            <div>
+              <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 20, color: "#0d2b1e", margin: 0, letterSpacing: "-.5px" }}>Meu Perfil</h3>
+              <p style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>Dados da conta e segurança</p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "#f1f5f9", border: "none", borderRadius: 10, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#64748b", fontSize: 18, flexShrink: 0 }}>✕</button>
+        </div>
+
+        <div style={{ padding: "24px 28px 28px", display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Dados do perfil */}
+          <div style={{ background: "#f8fafc", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
+            <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: "#0d2b1e", marginBottom: 16, textTransform: "uppercase", letterSpacing: ".5px" }}>Dados do Perfil</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Nome completo</label>
+                <div style={roStyle}>{user.nome}</div>
+              </div>
+              <div>
+                <label style={labelStyle}>E-mail</label>
+                <div style={roStyle}>{user.email}</div>
+              </div>
+              {user.oab && (
+                <div>
+                  <label style={labelStyle}>OAB / Registro</label>
+                  <div style={roStyle}>{user.oab}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Alterar senha */}
+          <div style={{ background: "#f8fafc", borderRadius: 14, padding: "20px", border: "1px solid #e2e8f0" }}>
+            <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: "#0d2b1e", marginBottom: 16, textTransform: "uppercase", letterSpacing: ".5px", display: "flex", alignItems: "center", gap: 6 }}>
+              🔒 Alterar Senha
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {[
+                ["Senha atual", senhaAtual, setSenhaAtual, showAtual, setShowAtual],
+                ["Nova senha", novaSenha, setNovaSenha, showNova, setShowNova],
+                ["Confirmar nova senha", confirmarSenha, setConfirmarSenha, showConf, setShowConf],
+              ].map(([label, val, set, show, setShow]) => (
+                <div key={label}>
+                  <label style={labelStyle}>{label}</label>
+                  <div style={{ position: "relative" }}>
+                    <input value={val} onChange={e => set(e.target.value)} type={show ? "text" : "password"}
+                      placeholder="••••••••"
+                      onKeyDown={e => e.key === "Enter" && handleAlterarSenha()}
+                      style={inputStyle} />
+                    <button onClick={() => setShow(v => !v)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 15 }}>
+                      {show ? "👁" : "🙈"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={handleAlterarSenha} disabled={loading}
+                style={{ padding: "14px", background: "linear-gradient(135deg,#c5f135,#4ade80)", border: "none", borderRadius: 12, color: "#0d2b1e", fontSize: 14, fontWeight: 800, cursor: loading ? "wait" : "pointer", fontFamily: "'Space Grotesk',sans-serif", opacity: loading ? .7 : 1, boxShadow: "0 6px 16px rgba(61,153,112,.25)", marginTop: 4 }}>
+                {loading ? "⏳ Alterando..." : "🔒 Alterar Senha"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -7675,7 +7789,8 @@ function __old_broken_backup() {
         {/* Usuário */}
         <div style={{ padding: "12px 10px 16px", borderTop: "1px solid rgba(255,255,255,.05)" }}>
           <div style={{ background: "rgba(255,255,255,.04)", borderRadius: 14, padding: "11px 12px", border: "1px solid rgba(255,255,255,.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <div onClick={() => setShowPerfil(true)} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, cursor: "pointer", flex: 1 }}
+              title="Clique para ver perfil e alterar senha">
               <div style={{ width: 36, height: 36, borderRadius: 12, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Space Grotesk',sans-serif" }}>{user.nome[0]}</div>
               <div style={{ minWidth: 0 }}>
                 <p style={{ color: "#f1f5f9", fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.nome.split(" ")[0]}</p>
@@ -7800,6 +7915,7 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
+  const [showPerfil, setShowPerfil] = useState(false);
 
   const [devedores, setDevedores] = useState([]);
   useEffect(() => { window.__mrSetDevedores = setDevedores; return () => { delete window.__mrSetDevedores; }; }, [setDevedores]);
@@ -7944,6 +8060,7 @@ export default function App() {
         }}
       />
       {ConfirmModal}
+      {showPerfil && <PerfilModal user={user} onClose={() => setShowPerfil(false)} />}
       <FontLink />
       <style>{`
         :root{
