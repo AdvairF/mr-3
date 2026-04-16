@@ -1,6 +1,7 @@
 ---
 phase: quick/260416-gp2
 plan: 01
+status: complete
 subsystem: App.jsx — error handling / persistence
 tags: [error-handling, toast, supabase, persistence, catches]
 dependency_graph:

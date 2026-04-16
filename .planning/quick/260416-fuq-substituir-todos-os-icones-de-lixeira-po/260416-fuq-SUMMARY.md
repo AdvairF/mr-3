@@ -1,6 +1,7 @@
 ---
 phase: 260416-fuq
 plan: "01"
+status: complete
 subsystem: ui
 tags: [buttons, delete, style, uniformization]
 tech-stack:
