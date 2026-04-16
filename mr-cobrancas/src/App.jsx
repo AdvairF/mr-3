@@ -1996,130 +1996,243 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
     try {
       // 2. Identify reference divida (first non-nominal, non-_so_custas)
       const dividas = Array.isArray(devedor.dividas) ? devedor.dividas : [];
-      const divRef = dividas.find(d => !d._nominal && !d._so_custas) || dividas[0];
 
-      if (!divRef) {
+      // 3. dividasCalc, distribuição sequencial de pagamentos
+      const dividasCalc = dividas.filter(d => !d._nominal && !d._so_custas);
+      if (dividasCalc.length === 0) {
         toast.error("Devedor não possui dívidas cadastradas para cálculo.");
         return;
       }
 
-      // 3. Aggregate principal across all non-nominal, non-_so_custas dividas
-      const dividasCalc = dividas.filter(d => !d._nominal && !d._so_custas);
-      const PV = dividasCalc.reduce((s, d) => s + (parseFloat(d.valor_total) || 0), 0);
-      const dataInicioGlobal = divRef.data_inicio_atualizacao || divRef.data_vencimento || divRef.data_origem;
+      const pgtos = [...pagamentos].sort((a, b) => a.data_pagamento.localeCompare(b.data_pagamento));
 
+      // Acumuladores globais para o resumo executivo
+      let totalCorr = 0;
+      let totalJuros = 0;
+      let totalMulta = 0;
+
+      // Distribuição sequencial com tracking por referência (.remaining mutado in place)
+      // Cada objeto recebe um campo .remaining inicializado com o valor original.
+      // O abatimento decrementa .remaining diretamente — sem rastreio por índice posicional.
+      const pgtoRestantes = pgtos.map(p => ({ ...p, remaining: parseFloat(p.valor) || 0 }));
+
+      // rows por dívida (para seções múltiplas) e rows global (para dívida única)
+      const secoes = []; // [{ div, rows, saldoDiv }]
+
+      for (let di = 0; di < dividasCalc.length; di++) {
+        const div = dividasCalc[di];
+        const pvDiv = parseFloat(div.valor_total) || 0;
+        const indexadorDiv = div.indexador || "nenhum";
+        const jurosTipoDiv = div.juros_tipo || "sem_juros";
+        const jurosAMDiv = parseFloat(div.juros_am) || 0;
+        const multaPctDiv = parseFloat(div.multa_pct) || 0;
+        const honorariosPctDiv = parseFloat(div.honorarios_pct) || 0;
+        const dataInicioDiv = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
+
+        const rowsDiv = [];
+        let saldo = pvDiv;
+        let periodoInicio = dataInicioDiv;
+        let primeiroperiodo = true;
+
+        // Opening row por dívida
+        rowsDiv.push({
+          data: fmtDate(dataInicioDiv),
+          desc: dividasCalc.length > 1
+            ? `Saldo inicial — ${div.descricao || "Dívida " + (di + 1)}`
+            : "Saldo inicial / abertura",
+          debito: pvDiv,
+          credito: 0,
+          saldo: pvDiv,
+          isOpening: true,
+        });
+
+        // Coletar referências aos objetos de pagamento com remaining > 0 (sequencial)
+        // Ao iterar pgtoRestantes por referência, qualquer decremento em .remaining persiste
+        // para as dívidas seguintes — sem risco de desalinhamento por índice.
+        const pgtosDiv = pgtoRestantes.filter(p => p.remaining > 0);
+
+        // Loop iterativo de períodos
+        for (const pgto of pgtosDiv) {
+          if (saldo <= 0) break; // dívida já zerada
+          const periodoFim = pgto.data_pagamento;
+
+          if (periodoFim <= periodoInicio) {
+            const abate = Math.min(pgto.remaining, saldo);
+            rowsDiv.push({
+              data: fmtDate(pgto.data_pagamento),
+              desc: pgto.observacao || "Pagamento parcial",
+              debito: 0,
+              credito: abate,
+              saldo: saldo - abate,
+            });
+            saldo -= abate;
+            pgto.remaining -= abate; // mutação in place — reflete na próxima dívida
+            continue;
+          }
+
+          // Correção monetária
+          const fator = calcularFatorCorrecao(indexadorDiv, periodoInicio, periodoFim);
+          const corrAbs = saldo * (fator - 1);
+          const pcSaldo = saldo + corrAbs;
+
+          // Juros
+          const { juros } = calcularJurosAcumulados({
+            principal: pcSaldo,
+            dataInicio: periodoInicio,
+            dataFim: periodoFim,
+            jurosTipo: jurosTipoDiv,
+            jurosAM: jurosAMDiv,
+            regime: "simples",
+          });
+
+          // Multa (só no 1º período desta dívida, se > 0)
+          const multaVal = primeiroperiodo ? pcSaldo * (multaPctDiv / 100) : 0;
+
+          // Honorários por dívida (calculados sobre pcSaldo + juros + multa neste período)
+          // Emitidos apenas no 1º período para não duplicar; base = total acumulado até aqui
+          const honorariosRowVal = primeiroperiodo ? (pcSaldo + juros + multaVal) * (honorariosPctDiv / 100) : 0;
+
+          // Acumuladores globais
+          totalCorr += corrAbs;
+          totalJuros += juros;
+          if (primeiroperiodo) totalMulta += multaVal;
+
+          // Datas formatadas para labels
+          const dInicio = fmtDate(periodoInicio);
+          const dFim = fmtDate(periodoFim);
+          const diasPeriodo = Math.round((new Date(periodoFim) - new Date(periodoInicio)) / 86400000);
+          const mesesPeriodo = Math.floor(diasPeriodo / 30);
+          const periodoLabel = mesesPeriodo >= 1 ? `${mesesPeriodo} meses` : `${diasPeriodo} dias`;
+
+          // Linha de Multa (só 1º período, se > 0)
+          if (multaVal > 0) {
+            rowsDiv.push({
+              data: dFim,
+              desc: `Multa (${multaPctDiv}%) — 1ª ocorrência = ${fmt(multaVal)}`,
+              debito: multaVal,
+              credito: 0,
+              saldo: saldo + multaVal,
+              isMulta: true,
+            });
+          }
+
+          // Linha de Honorários (só 1º período, se > 0.005)
+          if (honorariosRowVal > 0.005) {
+            rowsDiv.push({
+              data: dFim,
+              desc: `Honorários (${honorariosPctDiv}%) = ${fmt(honorariosRowVal)}`,
+              debito: honorariosRowVal,
+              credito: 0,
+              saldo: saldo + multaVal + honorariosRowVal,
+              isHonorarios: true,
+            });
+          }
+
+          // Linha de Correção monetária (se > 0)
+          if (corrAbs > 0.005) {
+            rowsDiv.push({
+              data: dFim,
+              desc: `Correção monetária (${indexadorDiv.toUpperCase()}) — ${dInicio} a ${dFim} = ${fmt(corrAbs)}`,
+              debito: corrAbs,
+              credito: 0,
+              saldo: saldo + corrAbs,
+              isCorr: true,
+            });
+          }
+
+          // Linha de Juros (se > 0)
+          if (juros > 0.005) {
+            rowsDiv.push({
+              data: dFim,
+              desc: `Juros ${jurosAMDiv}% a.m. — ${dInicio} a ${dFim} (${periodoLabel}) = ${fmt(juros)}`,
+              debito: juros,
+              credito: 0,
+              saldo: pcSaldo + juros,
+              isJuros: true,
+            });
+          }
+
+          const debitoTotal = pcSaldo + juros + multaVal + honorariosRowVal;
+
+          // Linha de pagamento
+          const abate = Math.min(pgto.remaining, debitoTotal);
+          const saldoAposPgto = debitoTotal - abate;
+          rowsDiv.push({
+            data: dFim,
+            desc: pgto.observacao || "Pagamento parcial",
+            debito: 0,
+            credito: abate,
+            saldo: saldoAposPgto,
+          });
+
+          pgto.remaining -= abate; // mutação in place — persiste para próxima dívida
+
+          saldo = saldoAposPgto;
+          periodoInicio = periodoFim;
+          primeiroperiodo = false;
+        }
+
+        // Período final: último evento → hoje
+        if (periodoInicio < hoje) {
+          const fatorFinal = calcularFatorCorrecao(indexadorDiv, periodoInicio, hoje);
+          const corrFinal = saldo * (fatorFinal - 1);
+          const pcFinal = saldo + corrFinal;
+          const { juros: jurosFinal } = calcularJurosAcumulados({
+            principal: pcFinal,
+            dataInicio: periodoInicio,
+            dataFim: hoje,
+            jurosTipo: jurosTipoDiv,
+            jurosAM: jurosAMDiv,
+            regime: "simples",
+          });
+
+          totalCorr += corrFinal;
+          totalJuros += jurosFinal;
+
+          const dInicio = fmtDate(periodoInicio);
+          const dFim = fmtDate(hoje);
+          const diasFinal = Math.round((new Date(hoje) - new Date(periodoInicio)) / 86400000);
+          const mesesFinal = Math.floor(diasFinal / 30);
+          const periodoFinalLabel = mesesFinal >= 1 ? `${mesesFinal} meses` : `${diasFinal} dias`;
+
+          if (corrFinal > 0.005) {
+            rowsDiv.push({
+              data: dFim,
+              desc: `Correção monetária (${indexadorDiv.toUpperCase()}) — ${dInicio} a ${dFim} = ${fmt(corrFinal)}`,
+              debito: corrFinal, credito: 0, saldo: saldo + corrFinal, isCorr: true,
+            });
+          }
+          if (jurosFinal > 0.005) {
+            rowsDiv.push({
+              data: dFim,
+              desc: `Juros ${jurosAMDiv}% a.m. — ${dInicio} a ${dFim} (${periodoFinalLabel}) = ${fmt(jurosFinal)}`,
+              debito: jurosFinal, credito: 0, saldo: pcFinal + jurosFinal, isJuros: true,
+            });
+          }
+
+          saldo = pcFinal + jurosFinal;
+        }
+
+        secoes.push({ div, rows: rowsDiv, saldoDiv: saldo });
+      }
+
+      // PV global (soma de todas as dívidas)
+      const PV = dividasCalc.reduce((s, d) => s + (parseFloat(d.valor_total) || 0), 0);
+      const divRef = dividasCalc[0]; // para parâmetros do footer
       const indexador = divRef.indexador || "nenhum";
-      const jurosTipo = divRef.juros_tipo || "sem_juros";
       const jurosAM = parseFloat(divRef.juros_am) || 0;
       const multaPct = parseFloat(divRef.multa_pct) || 0;
 
-      // 4. Iterative calculation across sorted payments
-      const pgtos = [...pagamentos].sort((a, b) => a.data_pagamento.localeCompare(b.data_pagamento));
-
-      let saldo = PV;
-      let periodoInicio = dataInicioGlobal;
-      let primeiroperiodo = true;
-      const rows = [];
-
-      // Opening row
-      rows.push({
-        data: fmtDate(dataInicioGlobal),
-        desc: "Saldo inicial / abertura",
-        debito: PV,
-        credito: 0,
-        saldo: PV,
-        isOpening: true,
-      });
-
-      for (const pgto of pgtos) {
-        const periodoFim = pgto.data_pagamento;
-
-        // Skip if period has no duration (same-day)
-        if (periodoFim <= periodoInicio) {
-          // Still record the payment credit
-          rows.push({
-            data: fmtDate(pgto.data_pagamento),
-            desc: pgto.observacao || "Pagamento parcial",
-            debito: 0,
-            credito: pgto.valor,
-            saldo: saldo - pgto.valor,
-          });
-          saldo = saldo - pgto.valor;
-          continue;
-        }
-
-        // Monetary correction
-        const fator = calcularFatorCorrecao(indexador, periodoInicio, periodoFim);
-        const corrAbs = saldo * (fator - 1);
-        const pcSaldo = saldo + corrAbs;
-
-        // Interest on corrected balance
-        const { juros } = calcularJurosAcumulados({
-          principal: pcSaldo,
-          dataInicio: periodoInicio,
-          dataFim: periodoFim,
-          jurosTipo,
-          jurosAM,
-          regime: "simples",
-        });
-
-        // Multa: one-time, first period only
-        const multaVal = primeiroperiodo ? pcSaldo * (multaPct / 100) : 0;
-
-        const debitoTotal = pcSaldo + juros + multaVal;
-
-        // Row: accrual
-        const descricaoAtualizacao = [
-          corrAbs > 0 ? `Correção monetária (${indexador.toUpperCase()})` : null,
-          juros > 0 ? `Juros (${jurosAM}% a.m.)` : null,
-          multaVal > 0 ? `Multa (${multaPct}%)` : null,
-        ].filter(Boolean).join(" + ") || "Atualização do saldo";
-
-        rows.push({
-          data: fmtDate(periodoFim),
-          desc: descricaoAtualizacao,
-          debito: debitoTotal - saldo,  // only the accrued charges, not the principal
-          credito: 0,
-          saldo: debitoTotal,
-        });
-
-        // Row: payment credit
-        const saldoAposPgto = debitoTotal - pgto.valor;
-        rows.push({
-          data: fmtDate(pgto.data_pagamento),
-          desc: pgto.observacao || "Pagamento parcial",
-          debito: 0,
-          credito: pgto.valor,
-          saldo: saldoAposPgto,
-        });
-
-        saldo = saldoAposPgto;
-        periodoInicio = periodoFim;
-        primeiroperiodo = false;
-      }
-
-      // Final period: last payment date → today
-      const dataHoje = hoje;
-      if (periodoInicio < dataHoje) {
-        const fatorFinal = calcularFatorCorrecao(indexador, periodoInicio, dataHoje);
-        const corrFinal = saldo * (fatorFinal - 1);
-        const pcFinal = saldo + corrFinal;
-        const { juros: jurosFinal } = calcularJurosAcumulados({
-          principal: pcFinal,
-          dataInicio: periodoInicio,
-          dataFim: dataHoje,
-          jurosTipo,
-          jurosAM,
-          regime: "simples",
-        });
-        const debitoFinal = pcFinal + jurosFinal;
-        const descFinal = [
-          corrFinal > 0 ? `Correção ${indexador.toUpperCase()}` : null,
-          jurosFinal > 0 ? `Juros ${jurosAM}% a.m.` : null,
-        ].filter(Boolean).join(" + ") || "Atualização até hoje";
-        rows.push({ data: fmtDate(dataHoje), desc: descFinal, debito: debitoFinal - saldo, credito: 0, saldo: debitoFinal });
-        saldo = debitoFinal;
-      }
+      // Totais finais
+      const totalAtualizado_sem_hon = PV + totalCorr + totalJuros + totalMulta;
+      // Honorários: sobre total atualizado (sem os próprios honorários), baseado na 1ª dívida
+      const honorariosPct = parseFloat(dividasCalc[0].honorarios_pct) || 0;
+      const totalHonorarios = totalAtualizado_sem_hon * (honorariosPct / 100);
+      const totalAtualizado = totalAtualizado_sem_hon + totalHonorarios;
+      const totalPago = pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      const saldoFinal = totalAtualizado - totalPago;
+      // saldo para footer e final row
+      const saldo = saldoFinal;
 
       // 5. Build PDF — landscape A4
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -2156,75 +2269,130 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
       doc.text(devedor.numero_processo || "—", x2 + 2, y + 6);
       y += 20;
 
-      // ── Resumo executivo box ──
-      const totalPagoResume = pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      // ── Resumo executivo vertical ──
+      const resumoLinhas = [
+        { label: "Valor Original da Dívida", valor: PV, prefix: "" },
+        ...(totalMulta > 0.005 ? [{ label: `(+) Multa (${multaPct}%)`, valor: totalMulta, prefix: "+" }] : []),
+        ...(totalHonorarios > 0.005 ? [{ label: `(+) Honorários (${honorariosPct}%)`, valor: totalHonorarios, prefix: "+" }] : []),
+        ...(totalCorr > 0.005 ? [{ label: "(+) Correção Monetária", valor: totalCorr, prefix: "+" }] : []),
+        ...(totalJuros > 0.005 ? [{ label: `(+) Juros (${jurosAM}% a.m.)`, valor: totalJuros, prefix: "+" }] : []),
+        { label: "(=) Total Atualizado", valor: totalAtualizado, prefix: "=", separator: true },
+        { label: "(-) Total Pago", valor: totalPago, prefix: "-" },
+        { label: "(=) SALDO DEVEDOR FINAL", valor: saldoFinal, prefix: "=", isFinal: true },
+      ];
+      const lineH = 6;
+      const boxH = resumoLinhas.length * lineH + 10;
       doc.setFillColor(187, 247, 208); // #bbf7d0
-      doc.rect(14, y - 5, W2, 18, "F");
+      doc.rect(14, y - 5, W2, boxH, "F");
       doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(21, 128, 61);
       doc.text("RESUMO EXECUTIVO", 16, y - 1);
-      const resumoItems = [
-        ["Valor Original", fmt(PV)],
-        ["Total Pago", fmt(totalPagoResume)],
-        ["SALDO DEVEDOR ATUAL", fmt(saldo)],
-      ];
-      const cellW = W2 / resumoItems.length;
-      resumoItems.forEach(([label, valor], ri) => {
-        const rx = 14 + ri * cellW + 2;
-        const isLast = ri === resumoItems.length - 1;
-        doc.setFont("helvetica", "bold"); doc.setFontSize(isLast ? 9 : 7);
-        doc.setTextColor(isLast ? 22 : 21, isLast ? 101 : 128, isLast ? 52 : 61);
-        doc.text(label, rx, y + 5);
-        doc.setFontSize(isLast ? 11 : 9);
-        doc.text(valor, rx, y + 12);
+      let ry = y + 4;
+      resumoLinhas.forEach((linha) => {
+        if (linha.separator) {
+          doc.setDrawColor(21, 128, 61);
+          doc.setLineWidth(0.3);
+          doc.line(16, ry - 2, 14 + W2 - 2, ry - 2);
+        }
+        const isFinal = !!linha.isFinal;
+        doc.setFont("helvetica", isFinal ? "bold" : "normal");
+        doc.setFontSize(isFinal ? 9 : 7.5);
+        doc.setTextColor(isFinal ? 22 : 21, isFinal ? 101 : 128, isFinal ? 52 : 61);
+        doc.text(linha.label, 16, ry);
+        doc.setFont("helvetica", isFinal ? "bold" : "normal");
+        doc.setFontSize(isFinal ? 10 : 8);
+        doc.text(fmt(linha.valor), 14 + W2 - 2, ry, { align: "right" });
+        ry += lineH;
       });
-      y += 24;
+      y += boxH + 4;
 
-      // ── Table ──
+      // ── Tabela — helper para renderizar rows de uma seção ──
       const cols = ["DATA", "DESCRIÇÃO / EVENTO", "DÉBITO", "CRÉDITO", "SALDO"];
-      const colW = [24, 105, 40, 40, 60]; // sum = 269 = W2
+      const colW = [24, 105, 40, 40, 60];
 
-      // Header row
-      let x = 14;
-      doc.setFillColor(187, 247, 208);
-      doc.rect(14, y - 4, W2, 7, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(21, 128, 61);
-      cols.forEach((c, ci) => {
-        if (ci === 0) doc.text(c, x + 1, y);
-        else doc.text(c, x + colW[ci] - 1, y, { align: "right" });
-        x += colW[ci];
-      });
-      y += 6;
-
-      // Data rows
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
-      rows.forEach((row, ri) => {
-        if (ri % 2 === 0) { doc.setFillColor(240, 253, 244); doc.rect(14, y - 3.5, W2, 5.5, "F"); }
-        x = 14;
-        const vals = [
-          row.data,
-          row.desc,
-          row.debito > 0 ? fmt(row.debito) : "—",
-          row.credito > 0 ? fmt(row.credito) : "—",
-          fmt(row.saldo),
-        ];
-        vals.forEach((v, vi) => {
-          const mw = colW[vi] - 2;
-          if (vi === 0 || vi === 1) doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + 1, y);
-          else doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + colW[vi] - 1, y, { align: "right" });
-          x += colW[vi];
+      function renderTableHeader() {
+        let x = 14;
+        doc.setFillColor(187, 247, 208);
+        doc.rect(14, y - 4, W2, 7, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(21, 128, 61);
+        cols.forEach((c, ci) => {
+          if (ci === 0) doc.text(c, x + 1, y);
+          else doc.text(c, x + colW[ci] - 1, y, { align: "right" });
+          x += colW[ci];
         });
-        y += 5.5;
-        if (y > 185) { doc.addPage(); y = 15; }
-      });
+        y += 6;
+      }
 
-      // Final saldo row (indigo/purple, white text)
-      y += 2;
-      doc.setFillColor(79, 70, 229);
-      doc.rect(14, y - 4, W2, 8, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
-      doc.text("SALDO DEVEDOR ATUALIZADO", 15, y);
-      doc.text(fmt(saldo), W - 14 - 1, y, { align: "right" });
-      y += 12;
+      function renderRows(rows) {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+        rows.forEach((row, ri) => {
+          if (y > 185) { doc.addPage(); y = 15; renderTableHeader(); }
+          if (ri % 2 === 0) { doc.setFillColor(240, 253, 244); doc.rect(14, y - 3.5, W2, 5.5, "F"); }
+          let x = 14;
+          const vals = [
+            row.data,
+            row.desc,
+            row.debito > 0 ? fmt(row.debito) : "—",
+            row.credito > 0 ? fmt(row.credito) : "—",
+            fmt(row.saldo),
+          ];
+          vals.forEach((v, vi) => {
+            const mw = colW[vi] - 2;
+            if (vi === 0 || vi === 1) doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + 1, y);
+            else doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + colW[vi] - 1, y, { align: "right" });
+            x += colW[vi];
+          });
+          y += 5.5;
+        });
+      }
+
+      if (dividasCalc.length === 1) {
+        // Uma dívida: comportamento semelhante ao atual, sem cabeçalho de seção
+        renderTableHeader();
+        renderRows(secoes[0].rows);
+      } else {
+        // Múltiplas dívidas: seção por dívida
+        secoes.forEach(({ div, rows: rowsDiv, saldoDiv }, si) => {
+          if (y > 170) { doc.addPage(); y = 15; }
+          // Cabeçalho de seção
+          doc.setFillColor(220, 252, 231); // #dcfce7
+          doc.rect(14, y - 4, W2, 8, "F");
+          doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(21, 128, 61);
+          doc.text(`DÍVIDA ${si + 1}: ${(div.descricao || "Dívida " + (si + 1)).toUpperCase()}`, 16, y);
+          y += 8;
+
+          renderTableHeader();
+          renderRows(rowsDiv);
+
+          // Subtotal por dívida
+          y += 2;
+          doc.setFillColor(187, 247, 208);
+          doc.rect(14, y - 4, W2, 7, "F");
+          doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(21, 128, 61);
+          doc.text(`SUBTOTAL — ${(div.descricao || "Dívida " + (si + 1)).toUpperCase()}`, 15, y);
+          doc.text(fmt(saldoDiv), W - 14 - 1, y, { align: "right" });
+          y += 10;
+        });
+
+        // TOTAL GERAL
+        y += 2;
+        doc.setFillColor(79, 70, 229);
+        doc.rect(14, y - 4, W2, 8, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+        doc.text("TOTAL GERAL", 15, y);
+        doc.text(fmt(saldoFinal), W - 14 - 1, y, { align: "right" });
+        y += 12;
+      }
+
+      // Final saldo row (para dívida única) ou apenas spacing (múltiplas já têm TOTAL GERAL)
+      if (dividasCalc.length === 1) {
+        y += 2;
+        doc.setFillColor(79, 70, 229);
+        doc.rect(14, y - 4, W2, 8, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+        doc.text("SALDO DEVEDOR ATUALIZADO", 15, y);
+        doc.text(fmt(saldoFinal), W - 14 - 1, y, { align: "right" });
+        y += 12;
+      }
 
       // ── Footer ──
       doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
