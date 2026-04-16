@@ -2651,6 +2651,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     return () => window.removeEventListener("mr_filtro", handler);
   }, []);
   const [filtroCredor, setFiltroCredor] = useState("");
+  const [sortAtraso, setSortAtraso] = useState(false);
   const [modal, setModal] = useState(null);
   const [sel, setSel] = useState(null);
   const [abaFicha, setAbaFicha] = useState("dados");
@@ -3134,6 +3135,21 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     const ok3 = !filtroCredor || String(d.credor_id) === String(filtroCredor);
     return ok1 && ok2 && ok3;
   });
+
+  const calcDiasAtraso = d => {
+    const divs = (d.dividas || []).filter(div => !div._nominal && !div._so_custas && (div.valor_total || 0) > 0);
+    if (!divs.length) return -1;
+    const oldest = divs.reduce((min, div) => {
+      const dt = div.data_vencimento || div.data_origem;
+      return (!min || dt < min) ? dt : min;
+    }, null);
+    if (!oldest) return -1;
+    return Math.floor((new Date(hoje) - new Date(oldest)) / 86400000);
+  };
+
+  const filteredSorted = sortAtraso
+    ? [...filtered].sort((a, b) => calcDiasAtraso(b) - calcDiasAtraso(a))
+    : filtered;
 
   const WP_MSGS = d => [
     { titulo: "Notificação", msg: `Prezado(a) *${d.nome}*, consta débito em aberto.\n\nEntre em contato para regularização.\n\n*MR Cobranças* | (62) 9 9999-0000` },
@@ -3671,16 +3687,19 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f1f5f9" }}>
-              {["Nome", "CPF/CNPJ", "Credor", "Status", "Valor Dívida", "Acordos", "Ações"].map(h => (
-                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em" }}>{h}</th>
+              {["Nome", "CPF/CNPJ", "Credor", "Status", "Valor Dívida", "Atraso", "Ações"].map(h => (
+                <th key={h} onClick={h === "Atraso" ? () => setSortAtraso(s => !s) : undefined}
+                  style={{ padding: "12px 16px", textAlign: "left", fontSize: 10, fontWeight: 700, color: h === "Atraso" ? "#7c3aed" : "#94a3b8", textTransform: "uppercase", letterSpacing: ".05em", cursor: h === "Atraso" ? "pointer" : undefined, userSelect: "none" }}>
+                  {h}{h === "Atraso" && <span style={{ marginLeft: 3 }}>{sortAtraso ? " ↓" : " ↑"}</span>}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {filteredSorted.length === 0 && (
               <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Nenhum devedor encontrado.</td></tr>
             )}
-            {filtered.map(d => {
+            {filteredSorted.map(d => {
               const cr = credores.find(c => String(c.id) === String(d.credor_id));
               const acordosDev = d.acordos || [];
               const totais = calcularTotaisAcordo(acordosDev);
@@ -3712,8 +3731,16 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                     </p>
                     {totais.recuperado > 0 && <p style={{ fontSize: 10, color: "#16a34a" }}>✓ {fmt(totais.recuperado)} rec.</p>}
                   </td>
-                  <td style={{ padding: "12px 16px", fontSize: 12, color: "#64748b" }}>
-                    {acordosDev.length > 0 ? <span style={{ background: "#ede9fe", color: "#4f46e5", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{acordosDev.length} acordo{acordosDev.length > 1 ? "s" : ""}</span> : "—"}
+                  <td style={{ padding: "12px 16px" }}>
+                    {(() => {
+                      const dias = calcDiasAtraso(d);
+                      if (dias < 0) return <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>;
+                      if (dias === 0) return <span style={{ background: "#f1f5f9", color: "#64748b", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>Em dia</span>;
+                      if (dias <= 30) return <span style={{ background: "#fef9c3", color: "#854d0e", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{dias} dias</span>;
+                      if (dias <= 90) return <span style={{ background: "#ffedd5", color: "#9a3412", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{dias} dias</span>;
+                      if (dias <= 180) return <span style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{dias} dias</span>;
+                      return <span style={{ background: "#450a0a", color: "#fca5a5", borderRadius: 99, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{dias} dias ⚠</span>;
+                    })()}
                   </td>
                   <td style={{ padding: "12px 16px" }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
