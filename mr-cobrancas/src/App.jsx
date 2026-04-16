@@ -7729,6 +7729,25 @@ export default function App() {
     return () => clearInterval(iv);
   }, [user, carregarTudo, modalAberto]);
 
+  // ── hooks que devem ser chamados antes de qualquer early return ──
+  const hoje_app = new Date().toISOString().slice(0, 10);
+  const pgtosPorDevedorCarteira = useMemo(() => {
+    const m = new Map();
+    allPagamentos.forEach(p => {
+      const k = String(p.devedor_id);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(p);
+    });
+    return m;
+  }, [allPagamentos]);
+  const totalCarteira = useMemo(
+    () => devedores.reduce((s, d) =>
+      s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje_app),
+      0
+    ),
+    [devedores, pgtosPorDevedorCarteira, hoje_app]
+  );
+
   if (!user) return <Login onLogin={u => { if (u?._token) setAuthToken(u._token); setAuditUser(u); setUser(u); try { sessionStorage.setItem("mr_user", JSON.stringify(u)); } catch { } logAudit("Login no sistema", "auth", { email: u.email, nome: u.nome }); }} />;
 
   const isAdmin = user?.role === "admin";
@@ -7766,24 +7785,7 @@ export default function App() {
   const pendenciasHoje = lembretesList.filter(
     (l) => l.status === "pendente" && l.data_prometida <= new Date().toISOString().slice(0, 10)
   ).length;
-  const hoje = new Date().toISOString().slice(0, 10);
-  const pgtosPorDevedorCarteira = useMemo(() => {
-    const m = new Map();
-    allPagamentos.forEach(p => {
-      const k = String(p.devedor_id);
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(p);
-    });
-    return m;
-  }, [allPagamentos]);
-
-  const totalCarteira = useMemo(
-    () => devedores.reduce((s, d) =>
-      s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje),
-      0
-    ),
-    [devedores, pgtosPorDevedorCarteira, hoje]
-  );
+  const hoje = hoje_app; // alias para compatibilidade com o restante do render
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: "'Plus Jakarta Sans',sans-serif", background: "radial-gradient(circle at 0% 0%, #f8ffe8 0%, #eef2f7 35%, #ecf1f5 100%)" }}>
