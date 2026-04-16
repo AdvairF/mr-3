@@ -155,7 +155,11 @@ function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
         jurosAM: jurosAMDiv,
         regime: "simples",
       });
-      saldo = pcFinal + jurosFinal;
+      const multaFinal = primeiroperiodo ? pcFinal * (multaPctDiv / 100) : 0;
+      const honorariosFinal = primeiroperiodo
+        ? (pcFinal + jurosFinal + multaFinal) * (honorariosPctDiv / 100)
+        : 0;
+      saldo = pcFinal + jurosFinal + multaFinal + honorariosFinal;
     }
 
     saldoTotal += Math.max(0, saldo);
