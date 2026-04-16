@@ -1903,6 +1903,449 @@ function CustasAvulsasForm({ onSalvar }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ABA PAGAMENTOS PARCIAIS — Cadastro + Cálculo Iterativo + PDF
+// ═══════════════════════════════════════════════════════════════
+function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [pagamentos, setPagamentos] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [form, setForm] = useState({ data_pagamento: "", valor: "", observacao: "" });
+  const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      const rows = await dbGet("pagamentos_parciais", `devedor_id=eq.${devedor.id}&order=data_pagamento.asc`);
+      setPagamentos(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      toast.error("Erro ao carregar pagamentos: " + e.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => { if (devedor?.id) carregar(); }, [devedor?.id]);
+
+  async function adicionarPagamento() {
+    const { data_pagamento, valor, observacao } = form;
+    if (!data_pagamento || !valor) {
+      toast("Data e valor são obrigatórios.", { icon: "⚠️" });
+      return;
+    }
+    const valorNum = parseFloat(valor);
+    if (isNaN(valorNum) || valorNum <= 0) {
+      toast("Valor deve ser maior que zero.", { icon: "⚠️" });
+      return;
+    }
+    try {
+      await dbInsert("pagamentos_parciais", {
+        devedor_id: devedor.id,
+        data_pagamento,
+        valor: valorNum,
+        observacao: observacao || null,
+      });
+      toast.success("Pagamento registrado.");
+      setForm({ data_pagamento: "", valor: "", observacao: "" });
+      await carregar();
+    } catch (e) {
+      toast.error("Erro ao salvar: " + e.message);
+    }
+  }
+
+  async function excluirPagamento(id) {
+    if (!window.confirm("Excluir este pagamento?")) return;
+    try {
+      await dbDelete("pagamentos_parciais", id);
+      toast.success("Pagamento excluído.");
+      await carregar();
+    } catch (e) {
+      toast.error("Erro ao excluir: " + e.message);
+    }
+  }
+
+  // ── PDF: Planilha de Pagamentos Parciais ──────────────────────
+  async function gerarPlanilhaPDF() {
+    if (pagamentos.length === 0) {
+      toast("Adicione ao menos um pagamento antes de gerar a planilha.", { icon: "⚠️" });
+      return;
+    }
+
+    // 1. Load jsPDF (CDN, same pattern as exportarPDF at line 4343)
+    let jsPDF;
+    try {
+      if (window.jspdf?.jsPDF) {
+        jsPDF = window.jspdf.jsPDF;
+      } else {
+        await new Promise((resolve, reject) => {
+          if (document.querySelector('script[data-jspdf]')) { setTimeout(resolve, 500); return; }
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          s.setAttribute('data-jspdf', '1');
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        jsPDF = window.jspdf?.jsPDF;
+      }
+      if (!jsPDF) throw new Error("Não foi possível carregar o jsPDF. Verifique sua conexão.");
+    } catch (e) {
+      toast.error("Erro ao carregar gerador de PDF: " + e.message);
+      return;
+    }
+
+    try {
+      // 2. Identify reference divida (first non-nominal, non-_so_custas)
+      const dividas = Array.isArray(devedor.dividas) ? devedor.dividas : [];
+      const divRef = dividas.find(d => !d._nominal && !d._so_custas) || dividas[0];
+
+      if (!divRef) {
+        toast.error("Devedor não possui dívidas cadastradas para cálculo.");
+        return;
+      }
+
+      // 3. Aggregate principal across all non-nominal, non-_so_custas dividas
+      const dividasCalc = dividas.filter(d => !d._nominal && !d._so_custas);
+      const PV = dividasCalc.reduce((s, d) => s + (parseFloat(d.valor_total) || 0), 0);
+      const dataInicioGlobal = divRef.data_inicio_atualizacao || divRef.data_vencimento || divRef.data_origem;
+
+      const indexador = divRef.indexador || "nenhum";
+      const jurosTipo = divRef.juros_tipo || "sem_juros";
+      const jurosAM = parseFloat(divRef.juros_am) || 0;
+      const multaPct = parseFloat(divRef.multa_pct) || 0;
+
+      // 4. Iterative calculation across sorted payments
+      const pgtos = [...pagamentos].sort((a, b) => a.data_pagamento.localeCompare(b.data_pagamento));
+
+      let saldo = PV;
+      let periodoInicio = dataInicioGlobal;
+      let primeiroperiodo = true;
+      const rows = [];
+
+      // Opening row
+      rows.push({
+        data: fmtDate(dataInicioGlobal),
+        desc: "Saldo inicial / abertura",
+        debito: PV,
+        credito: 0,
+        saldo: PV,
+        isOpening: true,
+      });
+
+      for (const pgto of pgtos) {
+        const periodoFim = pgto.data_pagamento;
+
+        // Skip if period has no duration (same-day)
+        if (periodoFim <= periodoInicio) {
+          // Still record the payment credit
+          rows.push({
+            data: fmtDate(pgto.data_pagamento),
+            desc: pgto.observacao || "Pagamento parcial",
+            debito: 0,
+            credito: pgto.valor,
+            saldo: saldo - pgto.valor,
+          });
+          saldo = saldo - pgto.valor;
+          continue;
+        }
+
+        // Monetary correction
+        const fator = calcularFatorCorrecao(indexador, periodoInicio, periodoFim);
+        const corrAbs = saldo * (fator - 1);
+        const pcSaldo = saldo + corrAbs;
+
+        // Interest on corrected balance
+        const { juros } = calcularJurosAcumulados({
+          principal: pcSaldo,
+          dataInicio: periodoInicio,
+          dataFim: periodoFim,
+          jurosTipo,
+          jurosAM,
+          regime: "simples",
+        });
+
+        // Multa: one-time, first period only
+        const multaVal = primeiroperiodo ? pcSaldo * (multaPct / 100) : 0;
+
+        const debitoTotal = pcSaldo + juros + multaVal;
+
+        // Row: accrual
+        const descricaoAtualizacao = [
+          corrAbs > 0 ? `Correção monetária (${indexador.toUpperCase()})` : null,
+          juros > 0 ? `Juros (${jurosAM}% a.m.)` : null,
+          multaVal > 0 ? `Multa (${multaPct}%)` : null,
+        ].filter(Boolean).join(" + ") || "Atualização do saldo";
+
+        rows.push({
+          data: fmtDate(periodoFim),
+          desc: descricaoAtualizacao,
+          debito: debitoTotal - saldo,  // only the accrued charges, not the principal
+          credito: 0,
+          saldo: debitoTotal,
+        });
+
+        // Row: payment credit
+        const saldoAposPgto = debitoTotal - pgto.valor;
+        rows.push({
+          data: fmtDate(pgto.data_pagamento),
+          desc: pgto.observacao || "Pagamento parcial",
+          debito: 0,
+          credito: pgto.valor,
+          saldo: saldoAposPgto,
+        });
+
+        saldo = saldoAposPgto;
+        periodoInicio = periodoFim;
+        primeiroperiodo = false;
+      }
+
+      // Final period: last payment date → today
+      const dataHoje = hoje;
+      if (periodoInicio < dataHoje) {
+        const fatorFinal = calcularFatorCorrecao(indexador, periodoInicio, dataHoje);
+        const corrFinal = saldo * (fatorFinal - 1);
+        const pcFinal = saldo + corrFinal;
+        const { juros: jurosFinal } = calcularJurosAcumulados({
+          principal: pcFinal,
+          dataInicio: periodoInicio,
+          dataFim: dataHoje,
+          jurosTipo,
+          jurosAM,
+          regime: "simples",
+        });
+        const debitoFinal = pcFinal + jurosFinal;
+        const descFinal = [
+          corrFinal > 0 ? `Correção ${indexador.toUpperCase()}` : null,
+          jurosFinal > 0 ? `Juros ${jurosAM}% a.m.` : null,
+        ].filter(Boolean).join(" + ") || "Atualização até hoje";
+        rows.push({ data: fmtDate(dataHoje), desc: descFinal, debito: debitoFinal - saldo, credito: 0, saldo: debitoFinal });
+        saldo = debitoFinal;
+      }
+
+      // 5. Build PDF — landscape A4
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const W = doc.internal.pageSize.getWidth(); // 297
+      const W2 = W - 28; // 269
+
+      // ── Header ──
+      doc.setFillColor(22, 163, 74); // green #16a34a
+      doc.rect(0, 0, W, 20, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13); doc.setFont("helvetica", "bold");
+      doc.text("PLANILHA DE PAGAMENTOS PARCIAIS", 14, 13);
+      doc.setFontSize(8); doc.setFont("helvetica", "normal");
+      doc.text("MR COBRANÇAS", W - 14, 13, { align: "right" });
+      doc.setTextColor(0, 0, 0);
+
+      let y = 28;
+
+      // ── Devedor / Credor / Processo ──
+      const half = (W2 / 2) - 3;
+      doc.setFillColor(220, 252, 231); // #dcfce7
+      doc.rect(14, y - 5, half, 16, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(21, 128, 61);
+      doc.text("DEVEDOR", 16, y - 1);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+      doc.text(devedor.nome || "Não informado", 16, y + 6);
+
+      const x2 = 14 + half + 6;
+      doc.setFillColor(220, 252, 231);
+      doc.rect(x2, y - 5, half, 16, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(21, 128, 61);
+      doc.text("PROCESSO / REFERÊNCIA", x2 + 2, y - 1);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+      doc.text(devedor.numero_processo || "—", x2 + 2, y + 6);
+      y += 20;
+
+      // ── Resumo executivo box ──
+      const totalPagoResume = pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      doc.setFillColor(187, 247, 208); // #bbf7d0
+      doc.rect(14, y - 5, W2, 18, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(21, 128, 61);
+      doc.text("RESUMO EXECUTIVO", 16, y - 1);
+      const resumoItems = [
+        ["Valor Original", fmt(PV)],
+        ["Total Pago", fmt(totalPagoResume)],
+        ["SALDO DEVEDOR ATUAL", fmt(saldo)],
+      ];
+      const cellW = W2 / resumoItems.length;
+      resumoItems.forEach(([label, valor], ri) => {
+        const rx = 14 + ri * cellW + 2;
+        const isLast = ri === resumoItems.length - 1;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(isLast ? 9 : 7);
+        doc.setTextColor(isLast ? 22 : 21, isLast ? 101 : 128, isLast ? 52 : 61);
+        doc.text(label, rx, y + 5);
+        doc.setFontSize(isLast ? 11 : 9);
+        doc.text(valor, rx, y + 12);
+      });
+      y += 24;
+
+      // ── Table ──
+      const cols = ["DATA", "DESCRIÇÃO / EVENTO", "DÉBITO", "CRÉDITO", "SALDO"];
+      const colW = [24, 105, 40, 40, 60]; // sum = 269 = W2
+
+      // Header row
+      let x = 14;
+      doc.setFillColor(187, 247, 208);
+      doc.rect(14, y - 4, W2, 7, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(21, 128, 61);
+      cols.forEach((c, ci) => {
+        if (ci === 0) doc.text(c, x + 1, y);
+        else doc.text(c, x + colW[ci] - 1, y, { align: "right" });
+        x += colW[ci];
+      });
+      y += 6;
+
+      // Data rows
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0, 0, 0);
+      rows.forEach((row, ri) => {
+        if (ri % 2 === 0) { doc.setFillColor(240, 253, 244); doc.rect(14, y - 3.5, W2, 5.5, "F"); }
+        x = 14;
+        const vals = [
+          row.data,
+          row.desc,
+          row.debito > 0 ? fmt(row.debito) : "—",
+          row.credito > 0 ? fmt(row.credito) : "—",
+          fmt(row.saldo),
+        ];
+        vals.forEach((v, vi) => {
+          const mw = colW[vi] - 2;
+          if (vi === 0 || vi === 1) doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + 1, y);
+          else doc.text((doc.splitTextToSize(String(v), mw)[0] || ""), x + colW[vi] - 1, y, { align: "right" });
+          x += colW[vi];
+        });
+        y += 5.5;
+        if (y > 185) { doc.addPage(); y = 15; }
+      });
+
+      // Final saldo row (indigo/purple, white text)
+      y += 2;
+      doc.setFillColor(79, 70, 229);
+      doc.rect(14, y - 4, W2, 8, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+      doc.text("SALDO DEVEDOR ATUALIZADO", 15, y);
+      doc.text(fmt(saldo), W - 14 - 1, y, { align: "right" });
+      y += 12;
+
+      // ── Footer ──
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+      doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-BR")} · Índice: ${indexador.toUpperCase()} · Juros: ${jurosAM}% a.m. · Multa (1ª vez): ${multaPct}%`, 14, y);
+
+      doc.save(`planilha-pagamentos-${devedor.nome.replace(/\s+/g, "-")}.pdf`);
+      logAudit("Gerou planilha PDF de pagamentos parciais", "pagamentos_parciais", { devedor: devedor.nome, saldo });
+
+    } catch (e) {
+      toast.error("Erro ao gerar planilha PDF: " + e.message);
+    }
+  }
+
+  const totalPago = pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+
+  return (
+    <div style={{ background: "#f0fdf4", borderRadius: 14, padding: 16, border: "1.5px solid #bbf7d0", marginTop: 8 }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <p style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 13, color: "#15803d" }}>💰 Pagamentos Parciais</p>
+          <p style={{ fontSize: 11, color: "#166534", marginTop: 2 }}>Registre pagamentos e gere planilha com saldo devedor atualizado</p>
+        </div>
+        <button
+          onClick={gerarPlanilhaPDF}
+          style={{ background: "#15803d", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+        >
+          📄 Planilha PDF
+        </button>
+      </div>
+
+      {/* Add payment form */}
+      <div style={{ background: "#dcfce7", borderRadius: 10, padding: 12, marginBottom: 14, border: "1px solid #bbf7d0" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "#15803d", marginBottom: 8 }}>+ Novo Pagamento</p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr auto", gap: 8, alignItems: "center" }}>
+          <input
+            type="date"
+            value={form.data_pagamento}
+            onChange={e => F("data_pagamento", e.target.value)}
+            style={{ padding: "7px 9px", border: "1.5px solid #bbf7d0", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "Plus Jakarta Sans" }}
+          />
+          <input
+            type="number"
+            placeholder="Valor (R$)"
+            value={form.valor}
+            onChange={e => F("valor", e.target.value)}
+            min="0"
+            step="0.01"
+            style={{ padding: "7px 9px", border: "1.5px solid #bbf7d0", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "Plus Jakarta Sans" }}
+          />
+          <input
+            type="text"
+            placeholder="Observação (opcional)"
+            value={form.observacao}
+            onChange={e => F("observacao", e.target.value)}
+            style={{ padding: "7px 9px", border: "1.5px solid #bbf7d0", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "Plus Jakarta Sans" }}
+          />
+          <button
+            onClick={adicionarPagamento}
+            style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}
+          >
+            Salvar
+          </button>
+        </div>
+      </div>
+
+      {/* Pagamentos list */}
+      {carregando ? (
+        <p style={{ fontSize: 12, color: "#15803d", opacity: 0.6, textAlign: "center", padding: "8px 0" }}>Carregando...</p>
+      ) : pagamentos.length === 0 ? (
+        <p style={{ fontSize: 12, color: "#15803d", opacity: 0.6, textAlign: "center", padding: "8px 0" }}>
+          Nenhum pagamento registrado. Adicione o primeiro pagamento acima.
+        </p>
+      ) : (
+        <div style={{ maxHeight: 240, overflowY: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: "#bbf7d0" }}>
+                {["Data", "Valor", "Observação", ""].map(h => (
+                  <th key={h} style={{ padding: "5px 8px", textAlign: "left", color: "#166534", fontWeight: 700, fontSize: 10 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pagamentos.map(p => (
+                <tr key={p.id} style={{ borderBottom: "1px solid #dcfce7" }}>
+                  <td style={{ padding: "5px 8px", color: "#374151" }}>{fmtDate(p.data_pagamento)}</td>
+                  <td style={{ padding: "5px 8px", color: "#16a34a", fontWeight: 700 }}>{fmt(parseFloat(p.valor))}</td>
+                  <td style={{ padding: "5px 8px", color: "#64748b" }}>{p.observacao || "—"}</td>
+                  <td style={{ padding: "5px 8px" }}>
+                    <button
+                      aria-label="Excluir pagamento"
+                      onClick={() => excluirPagamento(p.id)}
+                      style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Footer: total */}
+      {pagamentos.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 10, borderTop: "1px dashed #bbf7d0" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#15803d" }}>
+            Total pago: {fmt(totalPago)}
+          </span>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            {pagamentos.length} pagamento{pagamentos.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos = [], setTab }) {
   const { confirm, ConfirmModal } = useConfirm();
   const [search, setSearch] = useState("");
@@ -2457,7 +2900,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         <div style={{ position: "relative", marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #f1f5f9", overflowX: "auto", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent", WebkitOverflowScrolling: "touch" }}>
             <style>{`.tab-scroll::-webkit-scrollbar{height:3px}.tab-scroll::-webkit-scrollbar-track{background:transparent}.tab-scroll::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:99px}`}</style>
-            {[["dados", "📋 Dados"], ["contatos", "📞 Contatos"], ["dividas", "💳 Dívidas"], ["acordos", "🤝 Acordos"], ["processos", "⚖️ Processos"], ["relatorio", "📊 Relatório"]].map(([id, label]) => (
+            {[["dados", "📋 Dados"], ["contatos", "📞 Contatos"], ["dividas", "💳 Dívidas"], ["pagamentos", "💰 Pagamentos"], ["acordos", "🤝 Acordos"], ["processos", "⚖️ Processos"], ["relatorio", "📊 Relatório"]].map(([id, label]) => (
               <button key={id} onClick={() => setAbaFicha(id)}
                 style={{ padding: "10px 18px", border: "none", background: abaFicha === id ? "#fafafe" : "none", cursor: "pointer", fontFamily: "Plus Jakarta Sans", fontWeight: 700, fontSize: 12, color: abaFicha === id ? "#4f46e5" : "#94a3b8", borderBottom: `2px solid ${abaFicha === id ? "#4f46e5" : "transparent"}`, marginBottom: -2, whiteSpace: "nowrap", flexShrink: 0, transition: "all .15s" }}>
                 {label}
@@ -2820,6 +3263,17 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               {/* ── Lançamento rápido de custas avulsas ── */}
               <CustasAvulsasForm onSalvar={adicionarCustasAvulsas} />
             </div>
+          )}
+
+          {/* ABA PAGAMENTOS PARCIAIS */}
+          {abaFicha === "pagamentos" && (
+            <AbaPagamentosParciais
+              devedor={sel}
+              onAtualizarDevedor={onAtualizarDevedor}
+              user={user}
+              fmt={fmt}
+              fmtDate={fmtDate}
+            />
           )}
 
           {/* ABA ACORDOS */}
