@@ -3891,6 +3891,25 @@ function Calculadora({ devedores, credores = [] }) {
     }
   }, []);
 
+  // ── Auto-recálculo em tempo real ──────────────────────────────
+  useEffect(() => {
+    const PV = parseFloat(valorOriginal) || 0;
+    if (!PV || !dataCalculo) {
+      setResultado(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      calcularSilencioso();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [
+    valorOriginal, dataCalculo, dataVencimento,
+    indexador, jurosAM, multa, baseMulta,
+    encargos, bonificacao,
+    honorariosPct, incluirHonorarios,
+    dividasSel, devId,
+  ]);
+
   async function handleAtualizarIndices() {
     setAtualizandoIndices(true);
     setStatusIndices(null);
@@ -3935,6 +3954,162 @@ function Calculadora({ devedores, credores = [] }) {
   }
 
   // ── Calcular cada dívida individualmente pela sua data ────────
+  function calcularSilencioso() {
+    const dFim = new Date(dataCalculo + "T12:00:00");
+    const encargosVal = parseFloat(encargos) || 0;
+    const bonificacaoVal = parseFloat(bonificacao) || 0;
+    const honPct = incluirHonorarios ? (parseFloat(honorariosPct) || 0) : 0;
+
+    // Obter dívidas selecionadas do devedor
+    const dev = devedores.find(x => x.id == devId);
+    const dividasParaCalc = dev
+      ? (dev.dividas || []).filter(dv => dividasSel.includes(dv.id) && !dv._nominal)
+      : null;
+
+    // Se não tiver devedor, usa os campos manuais como uma dívida única
+    if (!dividasParaCalc || dividasParaCalc.length === 0) {
+      const PV = parseFloat(valorOriginal) || 0;
+      if (!PV || !dataCalculo) return;
+
+      // Usa dataVencimento como data de início quando informada e há índice de correção
+      const dataIniStr = dataVencimento && indexador !== "nenhum" ? dataVencimento : null;
+      const dIni = dataIniStr ? new Date(dataIniStr + "T12:00:00") : dFim;
+      const meses = dataIniStr
+        ? Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()))
+        : 0;
+      const dias = dataIniStr ? Math.max(0, Math.floor((dFim - dIni) / 86400000)) : 0;
+      const fatorCorrecao = dataIniStr && indexador !== "nenhum"
+        ? calcularFatorCorrecao(indexador, dataIniStr, dataCalculo)
+        : 1;
+      const correcao = PV * fatorCorrecao - PV;
+      const principalCorrigido = PV + correcao;
+      const jurosAMNum = parseFloat(jurosAM) || 0;
+      const juros = jurosAMNum > 0
+        ? calcularJurosAcumulados({
+            principal: principalCorrigido,
+            dataInicio: dataIniStr || dataCalculo,
+            dataFim: dataCalculo,
+            jurosTipo: "outros",
+            jurosAM: jurosAMNum,
+            regime: "simples",
+          }).juros
+        : 0;
+      const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
+      const multaVal = baseParaMulta * (parseFloat(multa) || 0) / 100;
+      const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
+      const honorariosVal = subtotal * honPct / 100;
+      const total = subtotal + honorariosVal;
+      const linhasMes = [];
+      return setResultado({
+        valorOriginal: PV, correcao, principalCorrigido,
+        juros, multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
+        honorarios: honorariosVal, honPct, subtotal, total,
+        meses, dias, fatorCorrecao, linhasMes, jurosTipo,
+        dividasDetalhe: [],
+      });
+    }
+
+    // ── Calcular cada dívida com seus próprios parâmetros ────────
+    let totalValorOriginal = 0, totalCorrecao = 0, totalJuros = 0, totalMulta = 0;
+    let totalHonorarios = 0, totalEncargos = encargosVal, totalBonificacao = bonificacaoVal;
+    let todasLinhas = [];
+    const dividasDetalhe = [];
+
+    for (const div of dividasParaCalc) {
+      const PV = div.valor_total || 0;
+      if (!PV) continue;
+
+      // Data de início da atualização: usa data_inicio_atualizacao do cadastro, senão data_vencimento
+      const dataIni = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
+      if (!dataIni) continue;
+
+      const idxDiv = indexador;
+      const jTipo = jurosTipo;
+      const jAM = parseFloat(jurosAM);
+      const mPct = parseFloat(multa);
+      const hPct = incluirHonorarios ? parseFloat(honorariosPct) : 0;
+
+      const dIni = new Date(dataIni + "T12:00:00");
+      const meses = Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()));
+      const dias = Math.max(0, Math.floor((dFim - dIni) / 86400000));
+
+      // Correção usando índice da dívida
+      const fatorCorr = calcularFatorCorrecao(idxDiv, dataIni, dataCalculo);
+      const corrDiv = PV * fatorCorr - PV;
+      const pcDiv = PV + corrDiv;
+
+      // Juros usando taxa da dívida (zero quando jAM não informado)
+      const jurosDiv = jAM > 0
+        ? calcularJurosAcumulados({
+            principal: pcDiv,
+            dataInicio: dataIni,
+            dataFim: dataCalculo,
+            jurosTipo: "outros",
+            jurosAM: jAM,
+            regime: "simples",
+          }).juros
+        : 0;
+
+      // Multa usando % da dívida
+      const baseM = baseMulta === "corrigido" ? pcDiv : PV;
+      const multaDiv = baseM * mPct / 100;
+
+      // Honorários individuais da dívida
+      const subDiv = pcDiv + jurosDiv + multaDiv;
+      const honDiv = subDiv * hPct / 100;
+
+      totalValorOriginal += PV;
+      totalCorrecao += corrDiv;
+      totalJuros += jurosDiv;
+      totalMulta += multaDiv;
+      totalHonorarios += honDiv;
+
+      // Linhas mensais desta dívida
+      const linhas = calcularLinhasDivida(
+        { ...div, indexador: idxDiv, juros_am: jAM, multa_pct: mPct, honorarios_pct: hPct },
+        dataCalculo, baseMulta, 0, 0
+      );
+      todasLinhas = [...todasLinhas, ...linhas];
+
+      dividasDetalhe.push({
+        descricao: div.descricao || "Dívida",
+        dataIni, meses, dias,
+        valor: PV, correcao: corrDiv, principalCorrigido: pcDiv,
+        juros: jurosDiv, multa: multaDiv, honorarios: honDiv,
+        total: pcDiv + jurosDiv + multaDiv + honDiv,
+        indexador: idxDiv, jurosAM: jAM, multaPct: mPct,
+      });
+    }
+
+    // Ordenar linhas por data
+    todasLinhas.sort((a, b) => a.vecto.localeCompare(b.vecto));
+
+    // Adicionar encargos/bonificação na primeira linha
+    if (todasLinhas.length > 0) {
+      todasLinhas[0].encargos += encargosVal;
+      todasLinhas[0].bonificacao += bonificacaoVal;
+      todasLinhas[0].total += encargosVal - bonificacaoVal;
+    }
+
+    const totalPC = totalValorOriginal + totalCorrecao;
+    const subtotal = totalPC + totalJuros + totalMulta + encargosVal - bonificacaoVal;
+    const total = subtotal + totalHonorarios;
+    const mesesGlobal = dividasDetalhe.length > 0 ? Math.max(...dividasDetalhe.map(d => d.meses)) : 0;
+
+    setResultado({
+      valorOriginal: totalValorOriginal,
+      correcao: totalCorrecao,
+      principalCorrigido: totalPC,
+      juros: totalJuros, multa: totalMulta,
+      encargos: encargosVal, bonificacao: bonificacaoVal,
+      honorarios: totalHonorarios, honPct,
+      subtotal, total,
+      meses: mesesGlobal, dias: 0,
+      linhasMes: todasLinhas,
+      dividasDetalhe,
+    });
+  }
+
   function calcular() {
     const dFim = new Date(dataCalculo + "T12:00:00");
     const encargosVal = parseFloat(encargos) || 0;
@@ -4504,7 +4679,7 @@ function Calculadora({ devedores, credores = [] }) {
             </p>
           </div>
 
-          <Btn onClick={calcular}>🧮 Calcular →</Btn>
+          <Btn onClick={calcular}>🧮 Recalcular</Btn>
         </div>
 
         {/* ── PAINEL DIREITO — Resultado ── */}
@@ -4513,7 +4688,7 @@ function Calculadora({ devedores, credores = [] }) {
           {!resultado ? (
             <div style={{ background: "#f1f5f9", borderRadius: 18, padding: 24, border: "1px solid #f1f5f9", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320 }}>
               <div style={{ fontSize: 44, marginBottom: 12 }}>🧮</div>
-              <p style={{ color: "#94a3b8", fontSize: 13, textAlign: "center" }}>Preencha os parâmetros e clique em Calcular</p>
+              <p style={{ color: "#94a3b8", fontSize: 13, textAlign: "center" }}>Preencha valor e data para ver o resultado</p>
             </div>
           ) : (
             <>
