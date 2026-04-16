@@ -2377,7 +2377,12 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
 
   async function excluirDevedor(d) {
     if (!await confirm(`Excluir "${d.nome}"?`)) return;
-    await dbDelete("devedores", d.id);
+    try {
+      await dbDelete("devedores", d.id);
+    } catch (e) {
+      toast.error("Erro ao excluir devedor: " + (e?.message || e));
+      return;
+    }
     logAudit("Excluiu devedor", "devedores", { id: d.id, nome: d.nome, cpf_cnpj: d.cpf_cnpj });
     setDevedores(prev => prev.filter(x => x.id !== d.id));
     fecharModal();
