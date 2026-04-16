@@ -3,7 +3,7 @@ import toast, { Toaster } from 'react-hot-toast';
 
 // ─── IMPORTS DOS MÓDULOS ──────────────────────────────────────
 // Config / Auth
-import { sb, dbGet, dbInsert, dbUpdate, dbDelete, signOut, setAuthToken } from "./config/supabase.js";
+import { sb, dbGet, dbInsert, dbUpdate, dbDelete, signOut, setAuthToken, requestPasswordReset, updatePassword } from "./config/supabase.js";
 import { authenticateUser, fetchSystemUsers } from "./auth/users.js";
 
 // Utils
@@ -273,6 +273,10 @@ function Login({ onLogin }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   async function handleLogin() {
     setLoading(true); setErr("");
@@ -283,6 +287,20 @@ function Login({ onLogin }) {
     } catch (e) {
       setErr("Não foi possível validar o acesso no Supabase.");
       setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!forgotEmail.trim()) { toast("Informe o e-mail cadastrado.", { icon: "⚠️" }); return; }
+    setForgotLoading(true);
+    try {
+      await requestPasswordReset(forgotEmail.trim(), "https://mrcobrancas.com.br/reset-password");
+      setForgotSent(true);
+      toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+    } catch (e) {
+      toast.error("Não foi possível enviar o e-mail: " + e.message);
+    } finally {
+      setForgotLoading(false);
     }
   }
 
@@ -365,8 +383,127 @@ function Login({ onLogin }) {
             </button>
           </div>
 
-          <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid #f0f2f5", textAlign: "center" }}>
+          <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid #f0f2f5", textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+            <button onClick={() => { setShowForgot(true); setForgotEmail(email); setForgotSent(false); }}
+              style={{ background: "none", border: "none", color: "#64748b", fontSize: 13, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+              Esqueci minha senha
+            </button>
             <p style={{ color: "#94a3b8", fontSize: 12, fontWeight: 500 }}>🔒 Acesso restrito a usuários autorizados</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal — Recuperação de senha */}
+      {showForgot && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowForgot(false); }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: "36px 32px", width: "100%", maxWidth: 420, boxShadow: "0 24px 60px rgba(0,0,0,.2)", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+            {forgotSent ? (
+              <>
+                <div style={{ textAlign: "center", marginBottom: 24 }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>📬</div>
+                  <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22, color: "#0d2b1e", marginBottom: 8 }}>E-mail enviado!</h3>
+                  <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.6 }}>Verifique sua caixa de entrada e siga as instruções para redefinir sua senha.</p>
+                </div>
+                <button onClick={() => setShowForgot(false)}
+                  style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg,#c5f135,#4ade80)", border: "none", borderRadius: 12, color: "#0d2b1e", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "'Space Grotesk',sans-serif" }}>
+                  Fechar
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22, color: "#0d2b1e", marginBottom: 8 }}>Recuperar senha</h3>
+                  <p style={{ color: "#64748b", fontSize: 13, lineHeight: 1.6 }}>Informe seu e-mail cadastrado. Enviaremos um link para você criar uma nova senha.</p>
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ color: "#374151", fontSize: 11, fontWeight: 800, display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: "1px" }}>E-mail</label>
+                  <input value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} type="email" placeholder="seu@email.com"
+                    onKeyDown={e => e.key === "Enter" && handleForgotPassword()}
+                    style={{ width: "100%", padding: "13px 16px", background: "#f8fafb", border: "1.5px solid #e5e7eb", borderRadius: 12, color: "#111", fontSize: 14, boxSizing: "border-box", fontFamily: "'Plus Jakarta Sans',sans-serif" }} />
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setShowForgot(false)}
+                    style={{ flex: 1, padding: "13px", background: "#f1f5f9", border: "none", borderRadius: 12, color: "#64748b", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleForgotPassword} disabled={forgotLoading}
+                    style={{ flex: 2, padding: "13px", background: "linear-gradient(135deg,#c5f135,#4ade80)", border: "none", borderRadius: 12, color: "#0d2b1e", fontSize: 14, fontWeight: 800, cursor: forgotLoading ? "wait" : "pointer", opacity: forgotLoading ? .7 : 1, fontFamily: "'Space Grotesk',sans-serif" }}>
+                    {forgotLoading ? "⏳ Enviando..." : "Enviar link →"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESET PASSWORD SCREEN
+// ═══════════════════════════════════════════════════════════════
+function ResetPassword({ token, onDone }) {
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showNova, setShowNova] = useState(false);
+  const [showConf, setShowConf] = useState(false);
+
+  async function handleReset() {
+    if (!novaSenha || novaSenha.length < 6) { toast("A senha deve ter ao menos 6 caracteres.", { icon: "⚠️" }); return; }
+    if (novaSenha !== confirmar) { toast("As senhas não coincidem.", { icon: "⚠️" }); return; }
+    setLoading(true);
+    try {
+      await updatePassword(token, novaSenha);
+      toast.success("Senha atualizada com sucesso! Faça login com a nova senha.");
+      setTimeout(onDone, 1500);
+    } catch (e) {
+      toast.error("Erro ao atualizar senha: " + e.message);
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fdfb", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      <FontLink />
+      <Toaster position="top-right" />
+      <div style={{ width: "100%", maxWidth: 440, padding: "0 24px" }}>
+        <div style={{ background: "#fff", borderRadius: 24, padding: "48px 40px", boxShadow: "0 20px 60px rgba(0,0,0,.1)" }}>
+          <div style={{ textAlign: "center", marginBottom: 36 }}>
+            <div style={{ width: 72, height: 72, borderRadius: 20, background: "linear-gradient(135deg,#c5f135,#4ade80)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", boxShadow: "0 12px 30px rgba(197,241,53,.3)" }}>
+              <span style={{ color: "#0d2b1e", fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 26, letterSpacing: "-2px" }}>MR</span>
+            </div>
+            <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 26, color: "#0d2b1e", letterSpacing: "-1px", marginBottom: 8 }}>Nova senha</h2>
+            <p style={{ color: "#64748b", fontSize: 13 }}>Escolha uma senha segura para sua conta</p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div>
+              <label style={{ color: "#374151", fontSize: 11, fontWeight: 800, display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: "1px" }}>Nova senha</label>
+              <div style={{ position: "relative" }}>
+                <input value={novaSenha} onChange={e => setNovaSenha(e.target.value)} type={showNova ? "text" : "password"} placeholder="Mínimo 6 caracteres"
+                  style={{ width: "100%", padding: "13px 46px 13px 16px", background: "#f8fafb", border: "1.5px solid #e5e7eb", borderRadius: 12, color: "#111", fontSize: 14, boxSizing: "border-box", fontFamily: "'Plus Jakarta Sans',sans-serif" }} />
+                <button onClick={() => setShowNova(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 16 }}>
+                  {showNova ? "👁" : "🙈"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label style={{ color: "#374151", fontSize: 11, fontWeight: 800, display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: "1px" }}>Confirmar senha</label>
+              <div style={{ position: "relative" }}>
+                <input value={confirmar} onChange={e => setConfirmar(e.target.value)} type={showConf ? "text" : "password"} placeholder="Repita a nova senha"
+                  onKeyDown={e => e.key === "Enter" && handleReset()}
+                  style={{ width: "100%", padding: "13px 46px 13px 16px", background: "#f8fafb", border: "1.5px solid #e5e7eb", borderRadius: 12, color: "#111", fontSize: 14, boxSizing: "border-box", fontFamily: "'Plus Jakarta Sans',sans-serif" }} />
+                <button onClick={() => setShowConf(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 16 }}>
+                  {showConf ? "👁" : "🙈"}
+                </button>
+              </div>
+            </div>
+            <button onClick={handleReset} disabled={loading}
+              style={{ padding: "15px", background: "linear-gradient(135deg,#c5f135,#4ade80)", border: "none", borderRadius: 14, color: "#0d2b1e", fontSize: 15, fontWeight: 800, cursor: loading ? "wait" : "pointer", fontFamily: "'Space Grotesk',sans-serif", opacity: loading ? .7 : 1, boxShadow: "0 8px 20px rgba(61,153,112,.25)", marginTop: 4 }}>
+              {loading ? "⏳ Salvando..." : "Salvar nova senha →"}
+            </button>
           </div>
         </div>
       </div>
@@ -7649,6 +7786,15 @@ export default function App() {
       return u;
     } catch { return null; }
   });
+  // Detecta token de recuperação de senha no hash da URL (#access_token=...&type=recovery)
+  const [recoveryToken, setRecoveryToken] = useState(() => {
+    try {
+      const hash = window.location.hash.slice(1);
+      const params = new URLSearchParams(hash);
+      if (params.get("type") === "recovery") return params.get("access_token") || null;
+    } catch { }
+    return null;
+  });
   const [tab, setTab] = useState("dashboard");
   const [tabKey, setTabKey] = useState(0);
   const [sideOpen, setSideOpen] = useState(false);
@@ -7748,6 +7894,7 @@ export default function App() {
     [devedores, pgtosPorDevedorCarteira, hoje_app]
   );
 
+  if (recoveryToken) return <ResetPassword token={recoveryToken} onDone={() => { setRecoveryToken(null); window.history.replaceState(null, "", window.location.pathname); }} />;
   if (!user) return <Login onLogin={u => { if (u?._token) setAuthToken(u._token); setAuditUser(u); setUser(u); try { sessionStorage.setItem("mr_user", JSON.stringify(u)); } catch { } logAudit("Login no sistema", "auth", { email: u.email, nome: u.nome }); }} />;
 
   const isAdmin = user?.role === "admin";

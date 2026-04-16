@@ -74,3 +74,37 @@ export const dbGet    = (t, q = "")   => sb(t, "GET",    null, q ? `?${q}` : "?o
 export const dbInsert = (t, b)         => sb(t, "POST",   b);
 export const dbUpdate = (t, id, b)     => sb(t, "PATCH",  b, `?id=eq.${id}`);
 export const dbDelete = (t, id)        => sb(t, "DELETE", null, `?id=eq.${id}`);
+
+// ─── PASSWORD RESET ───────────────────────────────────────────
+// Envia e-mail de recuperação de senha (usa SMTP Resend configurado no Supabase)
+export async function requestPasswordReset(email, redirectTo) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, gotrue_meta_security: {}, ...(redirectTo ? { redirect_to: redirectTo } : {}) }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error_description || data?.msg || data?.error || `Erro ${res.status} ao solicitar reset`);
+  }
+}
+
+// Atualiza a senha usando o access_token vindo do hash da URL de recuperação
+export async function updatePassword(accessToken, newPassword) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error_description || data?.msg || data?.error || `Erro ${res.status} ao atualizar senha`);
+  }
+}
