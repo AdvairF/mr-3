@@ -1,6 +1,7 @@
 ---
 phase: quick
 plan: 260415-ide
+status: complete
 subsystem: ui/accessibility
 tags: [aria, accessibility, i18n, security, toast]
 key-files:
