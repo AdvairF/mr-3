@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-16 - Completed quick task 260416-nrx: Modal perfil + alterar senha via avatar na sidebar
+Last activity: 2026-04-16 - Completed quick task 260416-oez: Dashboard filtro período + cards e tabela de recebimentos
 
 ## Status
 
@@ -17,3 +17,4 @@ Last activity: 2026-04-16 - Completed quick task 260416-nrx: Modal perfil + alte
 | 260416-p3r | Sincronizar alterações dívida painel tempo real — multa/honorários no saldo devedor | 2026-04-16 | 6e27e1a | Needs Review | [260416-p3r-sincronizar-alteracoes-divida-painel-tempo-r](./quick/260416-p3r-sincronizar-alteracoes-divida-painel-tempo-r/) |
 | 260416-q9w | Substituir coluna Acordos por dias Atraso no painel devedores — badge 5 tiers + sort | 2026-04-16 | fb1a927 | Needs Review | [260416-q9w-substituir-acordos-por-dias-atraso](./quick/260416-q9w-substituir-acordos-por-dias-atraso/) |
 | 260416-nrx | Modal perfil + alterar senha — clicar avatar sidebar abre modal com dados e troca de senha | 2026-04-16 | 0774bb6 | Complete | [260416-nrx-pagina-perfil-alterar-senha](./quick/260416-nrx-pagina-perfil-alterar-senha/) |
+| 260416-oez | Dashboard filtro período + 3 cards recebimentos + tabela últimos pagamentos | 2026-04-16 | 1109629 | Complete | [260416-oez-dashboard-filtro-periodo-recebimentos](./quick/260416-oez-dashboard-filtro-periodo-recebimentos/) |
