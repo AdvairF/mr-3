@@ -149,6 +149,146 @@ export function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
 }
 
 /**
+ * Retorna o breakdown detalhado de encargos por componente (multa, juros, correção,
+ * honorários, custas) calculados de forma teórica (sem abatimento de pagamentos),
+ * mais o saldo atualizado real (com pagamentos) e detalhe por dívida.
+ *
+ * @param {object} devedor
+ * @param {Array}  pagamentos
+ * @param {string} hoje "YYYY-MM-DD"
+ * @returns {{ valorOriginal, multa, juros, correcao, honorarios, custas,
+ *             totalEncargos, totalPago, saldoAtualizado, diasEmAtraso, detalhePorDivida }}
+ */
+export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
+  const dividasCalc = parseDividas(devedor?.dividas).filter((d) => !d._nominal && !d._so_custas);
+  const dividasSoCustas = parseDividas(devedor?.dividas).filter((d) => d._so_custas);
+
+  let totalMulta = 0;
+  let totalJuros = 0;
+  let totalCorrecao = 0;
+  let totalHonorarios = 0;
+  let totalCustasOriginal = 0;
+  let totalCustasAtualizado = 0;
+
+  const detalhePorDivida = [];
+
+  for (const div of dividasCalc) {
+    const pv = parseFloat(div.valor_total) || 0;
+    const indexador = div.indexador || "nenhum";
+    const jurosTipo = div.juros_tipo || "sem_juros";
+    const jurosAM = parseFloat(div.juros_am) || 0;
+    const multaPct = parseFloat(div.multa_pct) || 0;
+    const honorariosPct = parseFloat(div.honorarios_pct) || 0;
+    const dataInicio = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
+
+    let correcaoValor = 0;
+    let jurosValor = 0;
+    let multaValor = 0;
+    let honorariosValor = 0;
+
+    if (dataInicio && dataInicio < hoje) {
+      const fator = calcularFatorCorrecao(indexador, dataInicio, hoje);
+      correcaoValor = pv * (fator - 1);
+      const pcSaldo = pv + correcaoValor;
+
+      const { juros } = calcularJurosAcumulados({
+        principal: pcSaldo,
+        dataInicio,
+        dataFim: hoje,
+        jurosTipo,
+        jurosAM,
+        regime: "simples",
+      });
+      jurosValor = juros;
+      multaValor = pcSaldo * (multaPct / 100);
+      honorariosValor = (pcSaldo + jurosValor + multaValor) * (honorariosPct / 100);
+    }
+
+    // Custas dentro desta dívida
+    const custasDiv = div.custas || [];
+    let custasOrigDiv = 0;
+    let custasAtualizadoDiv = 0;
+    for (const c of custasDiv) {
+      const vc = parseFloat(c.valor) || 0;
+      custasOrigDiv += vc;
+      if (c.data && c.data < hoje) {
+        const fatorC = calcularFatorCorrecao(indexador !== "nenhum" ? indexador : "inpc", c.data, hoje);
+        custasAtualizadoDiv += vc * fatorC;
+      } else {
+        custasAtualizadoDiv += vc;
+      }
+    }
+
+    totalMulta += multaValor;
+    totalJuros += jurosValor;
+    totalCorrecao += correcaoValor;
+    totalHonorarios += honorariosValor;
+    totalCustasOriginal += custasOrigDiv;
+    totalCustasAtualizado += custasAtualizadoDiv;
+
+    const saldoTeoricoDivida = pv + correcaoValor + jurosValor + multaValor + honorariosValor + (custasAtualizadoDiv - custasOrigDiv);
+
+    detalhePorDivida.push({
+      descricao: div.descricao || `Dívida ${detalhePorDivida.length + 1}`,
+      valorOriginal: pv,
+      indexador,
+      multaPct,
+      jurosAM,
+      honorariosPct,
+      correcao: correcaoValor,
+      juros: jurosValor,
+      multa: multaValor,
+      honorarios: honorariosValor,
+      custas: custasDiv.length > 0 ? { original: custasOrigDiv, atualizado: custasAtualizadoDiv } : null,
+      saldoTeorico: saldoTeoricoDivida,
+      dataVencimento: div.data_vencimento || div.data_origem,
+    });
+  }
+
+  // Entradas _so_custas (lançamentos avulsos de custas judiciais)
+  for (const div of dividasSoCustas) {
+    for (const c of div.custas || []) {
+      const vc = parseFloat(c.valor) || 0;
+      totalCustasOriginal += vc;
+      if (c.data && c.data < hoje) {
+        const fatorC = calcularFatorCorrecao("inpc", c.data, hoje);
+        totalCustasAtualizado += vc * fatorC;
+      } else {
+        totalCustasAtualizado += vc;
+      }
+    }
+  }
+
+  const valorOriginal = calcularValorFace(devedor);
+  const saldoAtualizado = calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje);
+  const totalPago = (pagamentos || []).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+  const totalEncargos = totalMulta + totalJuros + totalCorrecao + totalHonorarios + (totalCustasAtualizado - totalCustasOriginal);
+
+  const datasVencimento = parseDividas(devedor?.dividas)
+    .map((d) => d.data_vencimento || d.data_origem)
+    .filter(Boolean)
+    .sort();
+  const dataVencMaisAntiga = datasVencimento[0] || devedor?.data_origem_divida || null;
+  const diasEmAtraso = dataVencMaisAntiga
+    ? Math.max(0, Math.floor((Date.now() - new Date(dataVencMaisAntiga + "T12:00:00")) / 86400000))
+    : 0;
+
+  return {
+    valorOriginal,
+    multa: { valor: totalMulta },
+    juros: { valor: totalJuros },
+    correcao: { valor: totalCorrecao },
+    honorarios: { valor: totalHonorarios },
+    custas: { original: totalCustasOriginal, atualizado: totalCustasAtualizado },
+    totalEncargos,
+    totalPago,
+    saldoAtualizado,
+    diasEmAtraso,
+    detalhePorDivida,
+  };
+}
+
+/**
  * Retorna o resumo financeiro completo do devedor, com breakdown de componentes.
  * Útil para a tela de atendimento.
  *

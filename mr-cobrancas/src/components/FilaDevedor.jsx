@@ -5,7 +5,7 @@ import Btn from "./ui/Btn.jsx";
 import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
 import { STATUS_DEV } from "../utils/constants.js";
-import { calcularValorFace, calcularResumoFinanceiro } from "../utils/devedorCalc.js";
+import { calcularValorFace, calcularResumoFinanceiro, calcularDetalheEncargos } from "../utils/devedorCalc.js";
 
 // ─── Status ativos para fila ──────────────────────────────────
 const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
@@ -687,50 +687,138 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
       {/* Resumo financeiro completo */}
       {devedor && (() => {
         const hoje = new Date().toISOString().slice(0, 10);
-        const r = calcularResumoFinanceiro(devedor, pagamentos, hoje);
-        const dividas = parseDividas(devedor.dividas).filter(d => !d._nominal && !d._so_custas);
+        const det = calcularDetalheEncargos(devedor, pagamentos, hoje);
+        const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #f1f5f9" };
+        const labelStyle = { color: "#64748b", fontSize: 12 };
+        const valStyle = (cor) => ({ fontWeight: 600, color: cor, fontSize: 12 });
+        const secStyle = { fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".5px", marginTop: 10, marginBottom: 4, paddingTop: 6, borderTop: "1px dashed #e2e8f0" };
         return (
           <div style={{ background: "linear-gradient(135deg,#fff5f5 0%,#fff 100%)", borderRadius: 16, padding: "18px 20px", border: "1px solid #fecaca", marginBottom: 16 }}>
             <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>💰 Resumo Financeiro</p>
+
             {/* Saldo destaque */}
             <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", marginBottom: 12, border: "1px solid #fca5a5", textAlign: "center" }}>
               <p style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 2 }}>Saldo Devedor Atualizado</p>
-              <p style={{ fontSize: 26, fontWeight: 800, color: "#dc2626", fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1.2 }}>{fmtBRL(r.saldo)}</p>
+              <p style={{ fontSize: 26, fontWeight: 800, color: "#dc2626", fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1.2 }}>{fmtBRL(det.saldoAtualizado)}</p>
             </div>
-            {/* Breakdown */}
-            <div style={{ display: "grid", gap: 5, fontSize: 12 }}>
-              {[
-                ["Valor Original", fmtBRL(r.valorOriginal), "#374151"],
-                ["Encargos (Multa + Juros + Correção)", fmtBRL(r.encargos), "#f59e0b"],
-                ["Total Pago", r.totalPago > 0 ? fmtBRL(r.totalPago) : "—", "#10b981"],
-                ["Dias em Atraso", r.diasEmAtraso > 0 ? `${r.diasEmAtraso} dias` : "—", "#6366f1"],
-              ].map(([k, v, cor]) => (
-                <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #f1f5f9" }}>
-                  <span style={{ color: "#64748b" }}>{k}</span>
-                  <span style={{ fontWeight: 600, color: cor }}>{v}</span>
+
+            <div style={{ display: "grid", gap: 2 }}>
+              {/* Valor original */}
+              <div style={rowStyle}>
+                <span style={labelStyle}>Valor Original</span>
+                <span style={valStyle("#374151")}>{fmtBRL(det.valorOriginal)}</span>
+              </div>
+
+              {/* Encargos */}
+              <p style={secStyle}>── Encargos ──</p>
+              {det.multa.valor > 0 && (() => {
+                const pcts = [...new Set(det.detalhePorDivida.filter(d => d.multaPct > 0).map(d => d.multaPct))];
+                const label = pcts.length > 0 ? `Multa (${pcts.join("/")}%)` : "Multa";
+                return (
+                  <div style={rowStyle}>
+                    <span style={labelStyle} title="Multa incidente uma única vez sobre o saldo corrigido">{label}</span>
+                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.multa.valor)}</span>
+                  </div>
+                );
+              })()}
+              {det.juros.valor > 0 && (() => {
+                const pcts = [...new Set(det.detalhePorDivida.filter(d => d.jurosAM > 0).map(d => `${d.jurosAM}% a.m.`))];
+                const label = pcts.length > 0 ? `Juros (${pcts.join("/")})` : "Juros";
+                return (
+                  <div style={rowStyle}>
+                    <span style={labelStyle} title="Juros simples acumulados desde o vencimento">{label}</span>
+                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.juros.valor)}</span>
+                  </div>
+                );
+              })()}
+              {det.correcao.valor > 0 && (() => {
+                const indices = [...new Set(det.detalhePorDivida.filter(d => d.correcao > 0 && d.indexador !== "nenhum").map(d => d.indexador.toUpperCase()))];
+                const label = indices.length > 0 ? `Correção Monetária (${indices.join("/")})` : "Correção Monetária";
+                return (
+                  <div style={rowStyle}>
+                    <span style={labelStyle} title="Correção pelo índice oficial desde o vencimento">{label}</span>
+                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.correcao.valor)}</span>
+                  </div>
+                );
+              })()}
+              {det.honorarios.valor > 0 && (() => {
+                const pcts = [...new Set(det.detalhePorDivida.filter(d => d.honorariosPct > 0).map(d => d.honorariosPct))];
+                const label = pcts.length > 0 ? `Honorários (${pcts.join("/")}%)` : "Honorários";
+                return (
+                  <div style={rowStyle}>
+                    <span style={labelStyle} title="Honorários advocatícios sobre principal + juros + multa">{label}</span>
+                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.honorarios.valor)}</span>
+                  </div>
+                );
+              })()}
+              {det.custas.original > 0 && (
+                <div style={rowStyle}>
+                  <span style={labelStyle} title={`Original: ${fmtBRL(det.custas.original)} — corrigido até hoje`}>Custas Processuais (corrigidas)</span>
+                  <span style={valStyle("#f59e0b")}>{fmtBRL(det.custas.atualizado)}</span>
                 </div>
-              ))}
+              )}
+              {det.totalEncargos > 0 && (
+                <div style={{ ...rowStyle, borderBottom: "none", paddingTop: 6 }}>
+                  <span style={{ ...labelStyle, fontWeight: 700, color: "#374151" }}>Subtotal Encargos</span>
+                  <span style={{ fontWeight: 700, color: "#f59e0b", fontSize: 12 }}>{fmtBRL(det.totalEncargos)}</span>
+                </div>
+              )}
+
+              {/* Pagamentos */}
+              {det.totalPago > 0 && <>
+                <p style={secStyle}>── Pagamentos ──</p>
+                <div style={rowStyle}>
+                  <span style={labelStyle}>Total Pago</span>
+                  <span style={valStyle("#10b981")}>{fmtBRL(det.totalPago)}</span>
+                </div>
+              </>}
+
+              {/* Resultado */}
+              <p style={secStyle}>── Resultado ──</p>
+              <div style={rowStyle}>
+                <span style={{ ...labelStyle, fontWeight: 700, color: "#dc2626" }}>Saldo Devedor</span>
+                <span style={{ fontWeight: 800, color: "#dc2626", fontSize: 13 }}>{fmtBRL(det.saldoAtualizado)}</span>
+              </div>
+              {det.diasEmAtraso > 0 && (
+                <div style={{ ...rowStyle, borderBottom: "none" }}>
+                  <span style={labelStyle}>Dias em Atraso</span>
+                  <span style={valStyle(det.diasEmAtraso > 180 ? "#dc2626" : det.diasEmAtraso > 90 ? "#f59e0b" : "#6366f1")}>{det.diasEmAtraso} dias</span>
+                </div>
+              )}
             </div>
+
             {/* Dívidas cadastradas */}
-            {dividas.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Dívidas Cadastradas ({dividas.length})</p>
+            {det.detalhePorDivida.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Dívidas Cadastradas ({det.detalhePorDivida.length})</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {dividas.map((div, i) => {
-                    const dataVenc = div.data_vencimento || div.data_origem;
-                    const diasAtraso = dataVenc ? Math.max(0, Math.floor((Date.now() - new Date(dataVenc + "T12:00:00")) / 86400000)) : null;
+                  {det.detalhePorDivida.map((div, i) => {
+                    const diasAtraso = div.dataVencimento ? Math.max(0, Math.floor((Date.now() - new Date(div.dataVencimento + "T12:00:00")) / 86400000)) : null;
+                    const temEncargos = div.correcao > 0 || div.juros > 0 || div.multa > 0 || div.honorarios > 0;
                     return (
                       <div key={i} style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px", fontSize: 11, border: "1px solid #e2e8f0" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                          <span style={{ fontWeight: 600, color: "#374151" }}>{div.descricao || `Dívida ${i + 1}`}</span>
-                          <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(div.valor_total)}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontWeight: 600, color: "#374151" }}>{div.descricao}</span>
+                          <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(div.valorOriginal)}</span>
                         </div>
-                        <div style={{ display: "flex", gap: 10, color: "#94a3b8", flexWrap: "wrap" }}>
-                          {dataVenc && <span>Venc: {fmtData(dataVenc)}</span>}
+                        <div style={{ display: "flex", gap: 8, color: "#94a3b8", flexWrap: "wrap", marginBottom: temEncargos || div.custas ? 4 : 0 }}>
+                          {div.dataVencimento && <span>Venc: {fmtData(div.dataVencimento)}</span>}
                           {diasAtraso !== null && <span style={{ color: diasAtraso > 90 ? "#dc2626" : "#f59e0b" }}>{diasAtraso}d atraso</span>}
                           {div.indexador && div.indexador !== "nenhum" && <span>Idx: {div.indexador.toUpperCase()}</span>}
-                          {div.juros_am > 0 && <span>Juros: {div.juros_am}% a.m.</span>}
+                          {div.jurosAM > 0 && <span>Juros: {div.jurosAM}% a.m.</span>}
+                          {div.multaPct > 0 && <span>Multa: {div.multaPct}%</span>}
+                          {div.honorariosPct > 0 && <span>Honor: {div.honorariosPct}%</span>}
                         </div>
+                        {div.custas && (
+                          <div style={{ color: "#6366f1", fontSize: 10, marginBottom: 2 }}>
+                            └ Custas: {fmtBRL(div.custas.original)} → Atualizado: {fmtBRL(div.custas.atualizado)}
+                          </div>
+                        )}
+                        {temEncargos && (
+                          <div style={{ color: "#10b981", fontSize: 10, fontWeight: 600 }}>
+                            └ Atualizado: {fmtBRL(div.saldoTeorico)}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
