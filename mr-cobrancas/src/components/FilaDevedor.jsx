@@ -66,6 +66,43 @@ const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#6
 const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
 const inpS = { padding: "7px 10px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 12, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151" };
 
+const TIPOS_EVENTO_LABEL = { LIGACAO: "Ligação", WHATSAPP: "WhatsApp", EMAIL: "E-mail", SMS: "SMS", PROMESSA_PAGAMENTO: "Promessa", SEM_CONTATO: "Sem contato", ACORDO: "Acordo", TELEFONE_NAO_EXISTE: "Tel. Inativo", CONTATO_COM_CLIENTE: "Contato", RECADO: "Recado" };
+
+// ─── AtendimentoBadge ─────────────────────────────────────────
+function AtendimentoBadge({ devedor }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const semana = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  if (devedor._bloqueado) {
+    return <span style={{ fontSize: 10, fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "1px 6px", borderRadius: 99 }}>⏰ Promessa</span>;
+  }
+  const ue = devedor._ultimo_evento;
+  if (!ue) {
+    return <span style={{ fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#fee2e2", padding: "1px 6px", borderRadius: 99 }}>🔴 Nunca</span>;
+  }
+  const data = ue.data_evento.slice(0, 10);
+  if (data === hoje) {
+    return <span style={{ fontSize: 10, fontWeight: 700, color: "#16a34a", background: "#dcfce7", padding: "1px 6px", borderRadius: 99 }}>🟢 Hoje</span>;
+  }
+  if (data >= semana) {
+    return <span style={{ fontSize: 10, fontWeight: 700, color: "#d97706", background: "#fef3c7", padding: "1px 6px", borderRadius: 99 }}>🟡 Semana</span>;
+  }
+  return null;
+}
+
+// ─── UltimoAtendimentoCell ────────────────────────────────────
+function UltimoAtendimentoCell({ ultimoEvento }) {
+  if (!ultimoEvento) {
+    return <span style={{ color: "#94a3b8", fontSize: 11 }}>— Nunca atendido</span>;
+  }
+  return (
+    <div>
+      <p style={{ fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 1 }}>{fmtData(ultimoEvento.data_evento)}</p>
+      <p style={{ fontSize: 10, color: "#6366f1", marginBottom: 1 }}>{TIPOS_EVENTO_LABEL[ultimoEvento.tipo_evento] || ultimoEvento.tipo_evento}</p>
+      {ultimoEvento.usuario_nome && <p style={{ fontSize: 10, color: "#94a3b8" }}>por {ultimoEvento.usuario_nome}</p>}
+    </div>
+  );
+}
+
 // ─── TELA 1: FilaPainel (Supervisor) ─────────────────────────
 function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
   const [devedores, setDevedores] = useState([]);
@@ -80,6 +117,8 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
   const [modalEvento, setModalEvento] = useState(null); // devedor selecionado
   const [formEvento, setFormEvento] = useState({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
   const [salvandoEvento, setSalvandoEvento] = useState(false);
+  const [filtroAtendimento, setFiltroAtendimento] = useState("pendentes");
+  const [totalEventosHoje, setTotalEventosHoje] = useState(0);
   const pollRef = useRef(null);
 
   const carregar = useCallback(async (silencioso = false) => {
@@ -93,8 +132,10 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
       valor_max: filtroValorMax ? Number(filtroValorMax) : undefined,
     };
     const r = await filaDevedor.listarDevedoresParaFila(filtros);
-    if (r.success) setDevedores(r.data);
-    else toast.error("Erro ao carregar fila: " + r.error);
+    if (r.success) {
+      setDevedores(r.data);
+      setTotalEventosHoje(r.totalEventosHoje || 0);
+    } else toast.error("Erro ao carregar fila: " + r.error);
     if (!silencioso) setCarregando(false);
   }, [busca, filtroStatus, filtroCredor, filtroPrioridade, filtroValorMin, filtroValorMax]);
 
@@ -132,18 +173,52 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
     );
   }
 
-  // Contadores
-  const totalDevedores = devedores.length;
-  const emAtendimento = devedores.filter(d => d._em_atendimento).length;
-  const bloqueados = devedores.filter(d => d._bloqueado).length;
-  const aguardando = totalDevedores - emAtendimento - bloqueados;
+  // Contadores (calculados da lista completa, antes do filtro de atendimento)
+  const hojeCC = new Date().toISOString().slice(0, 10);
+  const cntPendentes = devedores.filter(d =>
+    !d._bloqueado && (!d._ultimo_evento || d._ultimo_evento.data_evento.slice(0, 10) < hojeCC)
+  ).length;
+  const cntAtendidosHoje = devedores.filter(d =>
+    d._ultimo_evento?.data_evento?.slice(0, 10) === hojeCC
+  ).length;
+  const valorTotalAberto = devedores.reduce((s, d) => s + (Number(d.valor_total) || 0), 0);
 
   const cards = [
-    { label: "Aguardando", valor: aguardando, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
-    { label: "Em Atendimento", valor: emAtendimento, cor: "#f59e0b", bg: "rgba(245,158,11,.08)" },
-    { label: "Bloqueados", valor: bloqueados, cor: "#ef4444", bg: "rgba(239,68,68,.08)" },
-    { label: "Total na Fila", valor: totalDevedores, cor: "#10b981", bg: "rgba(16,185,129,.08)" },
+    { label: "Pendentes", valor: cntPendentes, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
+    { label: "Atendidos Hoje", valor: cntAtendidosHoje, cor: "#10b981", bg: "rgba(16,185,129,.08)" },
+    { label: "Eventos Hoje", valor: totalEventosHoje, cor: "#f59e0b", bg: "rgba(245,158,11,.08)" },
+    { label: "Valor em Aberto", valor: fmtBRL(valorTotalAberto), cor: "#ef4444", bg: "rgba(239,68,68,.08)", isText: true },
   ];
+
+  // Filtro de atendimento (client-side, sobre a lista retornada pelo serviço)
+  let devedoresFiltrados = [...devedores];
+  {
+    const semana = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    if (filtroAtendimento === "pendentes") {
+      devedoresFiltrados = devedoresFiltrados.filter(d =>
+        !d._bloqueado && (!d._ultimo_evento || d._ultimo_evento.data_evento.slice(0, 10) < hojeCC)
+      );
+      // Ordenação inteligente: ALTA → MEDIA → BAIXA, depois valor desc, depois mais antigo
+      const priOrd = { ALTA: 0, MEDIA: 1, BAIXA: 2 };
+      devedoresFiltrados.sort((a, b) => {
+        const pd = (priOrd[a._prioridade] ?? 2) - (priOrd[b._prioridade] ?? 2);
+        if (pd !== 0) return pd;
+        const vd = (Number(b.valor_total) || 0) - (Number(a.valor_total) || 0);
+        if (vd !== 0) return vd;
+        return (a.created_at || "").localeCompare(b.created_at || "");
+      });
+    } else if (filtroAtendimento === "atendidos_hoje") {
+      devedoresFiltrados = devedoresFiltrados.filter(d =>
+        d._ultimo_evento?.data_evento?.slice(0, 10) === hojeCC
+      );
+    } else if (filtroAtendimento === "atendidos_semana") {
+      devedoresFiltrados = devedoresFiltrados.filter(d => {
+        const data = d._ultimo_evento?.data_evento?.slice(0, 10);
+        return data && data >= semana;
+      });
+    }
+    // "todos" = sem filtro adicional
+  }
 
   return (
     <div>
@@ -152,8 +227,29 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
         {cards.map(c => (
           <div key={c.label} style={{ background: c.bg, border: `1px solid ${c.cor}22`, borderRadius: 14, padding: "14px 16px" }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: c.cor, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".5px" }}>{c.label}</p>
-            <p style={{ fontSize: 28, fontWeight: 800, color: c.cor, fontFamily: "'Space Grotesk',sans-serif" }}>{c.valor}</p>
+            <p style={{ fontSize: c.isText ? 16 : 28, fontWeight: 800, color: c.cor, fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1.2 }}>{c.valor}</p>
           </div>
+        ))}
+      </div>
+
+      {/* Tabs de atendimento */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {[
+          { id: "pendentes", label: "⏳ Pendentes" },
+          { id: "atendidos_hoje", label: "✅ Atendidos Hoje" },
+          { id: "atendidos_semana", label: "📅 Atendidos Semana" },
+          { id: "todos", label: "🗓️ Todos" },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setFiltroAtendimento(tab.id)} style={{
+            padding: "7px 16px", borderRadius: 99, fontSize: 12, fontWeight: 700,
+            fontFamily: "'Plus Jakarta Sans',sans-serif", cursor: "pointer",
+            border: filtroAtendimento === tab.id ? "none" : "1px solid #e2e8f0",
+            background: filtroAtendimento === tab.id ? "#f97316" : "#fff",
+            color: filtroAtendimento === tab.id ? "#fff" : "#64748b",
+            transition: "all .15s",
+          }}>
+            {tab.label}
+          </button>
         ))}
       </div>
 
@@ -200,39 +296,46 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
       {/* Tabela */}
       {carregando ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Carregando fila...</div>
-      ) : devedores.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum devedor com status ativo encontrado</div>
+      ) : devedoresFiltrados.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum devedor encontrado neste filtro</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>{devedores.length} devedor(es) — atualização automática a cada 30s</p>
+          <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>{devedoresFiltrados.length} devedor(es) — atualização automática a cada 30s</p>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#f8fafc" }}>
                 <th style={th}>Nome</th>
                 <th style={th}>CPF/CNPJ</th>
                 <th style={th}>Status</th>
-                <th style={th}>Valor</th>
-                <th style={th}>Dias</th>
+                <th style={th}>Valor Dívida</th>
+                <th style={th}>Último Atendimento</th>
+                <th style={th}>Dias s/ contato</th>
                 <th style={th}>Prioridade</th>
                 <th style={th}>Telefone</th>
                 <th style={th}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {devedores.map(d => (
+              {devedoresFiltrados.map(d => (
                 <tr key={d.id} style={{
                   borderBottom: "1px solid #f1f5f9",
                   background: d._em_atendimento ? "rgba(245,158,11,.06)" : d._bloqueado ? "rgba(239,68,68,.04)" : "#fff",
                 }}>
                   <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>
-                    {d.nome}
-                    {d._em_atendimento && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#f59e0b", background: "#FEF3C7", padding: "1px 6px", borderRadius: 99 }}>Em atendimento</span>}
-                    {d._bloqueado && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#FEE2E2", padding: "1px 6px", borderRadius: 99 }}>🔒 Bloqueado até {fmtData(d._fila?.bloqueado_ate)}</span>}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <span>{d.nome}</span>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {d._em_atendimento && <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", background: "#FEF3C7", padding: "1px 6px", borderRadius: 99 }}>Em atendimento</span>}
+                        {d._bloqueado && <span style={{ fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#FEE2E2", padding: "1px 6px", borderRadius: 99 }}>🔒 até {fmtData(d._fila?.bloqueado_ate)}</span>}
+                        <AtendimentoBadge devedor={d} />
+                      </div>
+                    </div>
                   </td>
                   <td style={td}>{d.cpf_cnpj || "—"}</td>
                   <td style={td}><StatusBadge status={d.status} /></td>
-                  <td style={td}>{fmtBRL(d.valor_total)}</td>
-                  <td style={td}>{diasDesde(d.created_at)}d</td>
+                  <td style={{ ...td, fontWeight: 700, color: "#dc2626" }}>{fmtBRL(d.valor_total)}</td>
+                  <td style={td}><UltimoAtendimentoCell ultimoEvento={d._ultimo_evento} /></td>
+                  <td style={{ ...td, textAlign: "center" }}>{d._dias_sem_contato !== null ? `${d._dias_sem_contato}d` : "—"}</td>
                   <td style={td}><PriorityBadge prioridade={d._prioridade} /></td>
                   <td style={td}>{d.telefone || "—"}</td>
                   <td style={td}>

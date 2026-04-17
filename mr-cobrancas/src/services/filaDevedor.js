@@ -125,10 +125,44 @@ async function listarDevedoresParaFila(filtros = {}) {
       resultado = resultado.filter((d) => (Number(d.valor_total) || 0) <= filtros.valor_max);
     }
 
+    // Buscar últimos eventos por devedor + total de eventos hoje
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    let ultimoEventoMap = {};
+    let totalEventosHoje = 0;
+
+    if (devedorIds.length > 0) {
+      const [eventosRecentes, countHoje] = await Promise.all([
+        dbGet(
+          "eventos_andamento",
+          `select=devedor_id,tipo_evento,data_evento,usuario_nome&devedor_id=in.(${devedorIds.join(",")})&order=data_evento.desc&limit=2000`
+        ),
+        dbGet(
+          "eventos_andamento",
+          `select=id&devedor_id=in.(${devedorIds.join(",")})&data_evento=gte.${hojeStr}T00:00:00&limit=1000`
+        ),
+      ]);
+
+      for (const ev of eventosRecentes) {
+        const key = String(ev.devedor_id);
+        if (!ultimoEventoMap[key]) ultimoEventoMap[key] = ev; // primeiro = mais recente (order desc)
+      }
+      totalEventosHoje = countHoje.length;
+    }
+
+    // Adicionar _ultimo_evento e _dias_sem_contato a cada devedor
+    resultado = resultado.map(d => {
+      const ue = ultimoEventoMap[String(d.id)] || null;
+      const ueData = ue?.data_evento?.slice(0, 10) || null;
+      const diasSemContato = ueData
+        ? Math.floor((Date.now() - new Date(ueData + "T12:00:00")) / 86400000)
+        : null;
+      return { ...d, _ultimo_evento: ue, _dias_sem_contato: diasSemContato };
+    });
+
     // Ordenar por score desc
     resultado.sort((a, b) => b._score - a._score);
 
-    return { success: true, data: resultado, error: null };
+    return { success: true, data: resultado, totalEventosHoje, error: null };
   } catch (err) {
     return { success: false, data: null, error: err.message };
   }
