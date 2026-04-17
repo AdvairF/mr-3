@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-exu: Simplificar fila — remover bridge operadores, usuario_id direto, botões ação rápida
+Last activity: 2026-04-17 - Completed quick task 260417-i3m: Valor dívida real + devedorCalc.js + resumo financeiro completo na tela de atendimento
 
 ## Status
 
@@ -28,3 +28,4 @@ Last activity: 2026-04-17 - Completed quick task 260417-exu: Simplificar fila �
 | 260417-fad | Fila automática por status: listarDevedoresParaFila, score JS, FilaPainel devedor-centric, poll 30s, 3 migrations | 2026-04-17 | ceded4d | Complete | [260417-fad-fila-automatica-por-status-devedor](./quick/260417-fad-fila-automatica-por-status-devedor/) |
 | 260417-g7k | Fix FK usuario_id: drop constraints eventos_andamento+fila_cobranca, extractUsuario helper, usuario_nome/email text | 2026-04-17 | fc8649a | Complete | [260417-g7k-fix-fk-usuario-eventos-andamento](./quick/260417-g7k-fix-fk-usuario-eventos-andamento/) |
 | 260417-h5p | Filtro atendimentos (4 tabs), AtendimentoBadge, UltimoAtendimentoCell, valor_total, counters, Dias s/ contato | 2026-04-17 | 2c07d1c | Complete | [260417-h5p-filtro-atendimentos-valor-divida-fila](./quick/260417-h5p-filtro-atendimentos-valor-divida-fila/) |
+| 260417-i3m | Valor dívida real (devedorCalc.js), DividaCell, CredorCell, FilaAtendimento resumo financeiro completo | 2026-04-17 | 3932c0a | Complete | [260417-i3m-valor-divida-real-fila-resumo-financeiro](./quick/260417-i3m-valor-divida-real-fila-resumo-financeiro/) |
