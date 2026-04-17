@@ -5050,7 +5050,7 @@ function Calculadora({ devedores, credores = [] }) {
     setAtualizandoIndices(true);
     setStatusIndices(null);
     try {
-      const dados = await buscarIndicesBCB(10);
+      const dados = await buscarIndicesBCB();
       salvarCacheIndices(dados);
       setIndicesOverride(dados);
       const em = new Date(dados.atualizadoEm).toLocaleString("pt-BR");

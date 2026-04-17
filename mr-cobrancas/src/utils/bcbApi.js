@@ -10,7 +10,7 @@ const SERIES_BCB = {
 };
 
 const BASE_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs";
-const CACHE_KEY = "bcb_indices_v1";
+const CACHE_KEY = "bcb_indices_v2"; // v2: cache busting — histórico expandido para 31 anos (desde 1995)
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 // ─── Helpers de data ──────────────────────────────────────────────────────────
