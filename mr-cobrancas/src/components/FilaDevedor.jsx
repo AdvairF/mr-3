@@ -805,12 +805,24 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
                           {div.dataVencimento && <span>Venc: {fmtData(div.dataVencimento)}</span>}
                           {diasAtraso !== null && <span style={{ color: diasAtraso > 90 ? "#dc2626" : "#f59e0b" }}>{diasAtraso}d atraso</span>}
                           {div.indexador && div.indexador !== "nenhum" && <span>Idx: {div.indexador.toUpperCase()}</span>}
-                          {div.jurosTipo === "taxa_legal_406"
-                            ? <span style={{ color: "#6366f1", fontWeight: 600 }}>Juros: Art. 406 CC</span>
+                          {(div.jurosTipo === "taxa_legal_406" || div.jurosTipo === "taxa_legal_406_12")
+                            ? <span style={{ color: "#6366f1", fontWeight: 600 }}>Juros: Art. 406 CC{div.jurosTipo === "taxa_legal_406_12" ? " (12%→TL)" : ""}</span>
                             : div.jurosAM > 0 && <span>Juros: {div.jurosAM}% a.m.</span>}
+                          {div.indexador === "inpc_ipca" && <span style={{ color: "#6366f1", fontWeight: 600 }}>Corr: INPC→IPCA</span>}
                           {div.multaPct > 0 && <span>Multa: {div.multaPct}%</span>}
                           {div.honorariosPct > 0 && <span>Honor: {div.honorariosPct}%</span>}
                         </div>
+                        {div.correcaoPeriodos && div.correcaoPeriodos.length > 0 && (
+                          <div style={{ background: "#f0fdf4", borderRadius: 6, padding: "4px 8px", marginBottom: 4, fontSize: 10 }}>
+                            <span style={{ fontWeight: 700, color: "#059669", display: "block", marginBottom: 2 }}>Correção Monetária (INPC→IPCA) — {fmtBRL(div.correcao)}</span>
+                            {div.correcaoPeriodos.map((p, pi) => (
+                              <div key={pi} style={{ color: "#475569", display: "flex", justifyContent: "space-between" }}>
+                                <span>├ {p.indice} ({(p.acumulado * 100).toFixed(2)}%)</span>
+                                <span style={{ fontWeight: 600, color: "#059669" }}>{fmtBRL(div.valorOriginal * p.acumulado)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {div.jurosPeriodos && div.jurosPeriodos.length > 0 && (
                           <div style={{ background: "#f0f4ff", borderRadius: 6, padding: "4px 8px", marginBottom: 4, fontSize: 10 }}>
                             <span style={{ fontWeight: 700, color: "#6366f1", display: "block", marginBottom: 2 }}>Juros Legais (Art. 406 CC) — {fmtBRL(div.juros)}</span>

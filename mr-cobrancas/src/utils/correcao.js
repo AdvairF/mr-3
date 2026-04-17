@@ -92,12 +92,14 @@ export const INDICE_OPTIONS = [
   { v:"ipca", l:"IPCA" },
   { v:"selic", l:"SELIC" },
   { v:"inpc", l:"INPC" },
+  { v:"inpc_ipca", l:"IPCA a partir de 30/08/24; antes INPC" },
   { v:"nenhum", l:"Sem correção" },
 ];
 export const IDX_LABEL = Object.fromEntries(INDICE_OPTIONS.map(({ v, l }) => [v, l]));
 
 export const JUROS_OPTIONS = [
   { v:"taxa_legal_406", l:"Taxa Legal (Art. 406 CC) — STJ Tema 1368" },
+  { v:"taxa_legal_406_12", l:"Taxa Legal/art.406 CC: a partir de 30/08/24; antes 12%" },
   { v:"legal_classico", l:"0,5% a.m. até 01/2003 e 1% a.m. após" },
   { v:"fixo_05", l:"0,5% a.m. (6% a.a.)" },
   { v:"fixo_1", l:"1% a.m. (12% a.a.)" },
@@ -119,6 +121,15 @@ export function obterTaxaJurosMes(chaveMes, jurosTipo = "fixo_1", jurosAM = 1) {
       const selic = getIndicesMerged().selic[chaveMes] ?? TAXA_MEDIA.selic;
       const ipca  = (INDICES.ipca[chaveMes]) ?? TAXA_MEDIA.ipca;
       return Math.max(0, selic - ipca);
+    }
+    case "taxa_legal_406_12": {
+      // Lei 14.905/2024 — regime simplificado (2 períodos):
+      // Período 1: até ago/2024 → 1% a.m. (12% a.a.)
+      // Período 2: a partir set/2024 → max(0, SELIC - IPCA)
+      if (chaveMes <= "2024-08") return 0.01;
+      const selicTL = getIndicesMerged().selic[chaveMes] ?? TAXA_MEDIA.selic;
+      const ipcaTL  = (INDICES.ipca[chaveMes]) ?? TAXA_MEDIA.ipca;
+      return Math.max(0, selicTL - ipcaTL);
     }
     case "legal_classico":
       return chaveMes <= "2003-01" ? 0.005 : 0.01;
@@ -244,8 +255,115 @@ export function calcularJurosArt406(principal, dataInicio, dataFim) {
   return { jurosTotal, periodos };
 }
 
+/**
+ * Calcula juros Art. 406 CC com regime simplificado (Lei 14.905/2024) — 2 períodos:
+ * Período 1: até ago/2024 → 1% a.m. (12% a.a.)
+ * Período 2: a partir set/2024 → Taxa Legal (SELIC − IPCA, mín 0)
+ */
+export function calcularJurosArt406_12aa(principal, dataInicio, dataFim) {
+  if (!principal || !dataInicio || !dataFim || dataInicio >= dataFim) {
+    return { jurosTotal: 0, periodos: [] };
+  }
+
+  const CUT = "2024-09-01"; // início do período 2 (set/2024)
+  const periodos = [];
+  let jurosTotal = 0;
+
+  // PERÍODO 1: 1% a.m. até ago/2024
+  const fimP1 = dataFim < CUT ? dataFim : CUT;
+  if (dataInicio < fimP1) {
+    const { juros, meses } = calcularJurosAcumulados({
+      principal, dataInicio, dataFim: fimP1,
+      jurosTipo: "taxa_legal_406_12", regime: "simples",
+    });
+    if (meses > 0) {
+      periodos.push({
+        regime: "1% a.m. (12% a.a.)",
+        inicio: dataInicio,
+        fim: fimP1,
+        valor: juros,
+        meses,
+        taxaAcum: principal > 0 ? juros / principal : 0,
+      });
+      jurosTotal += juros;
+    }
+  }
+
+  // PERÍODO 2: Taxa Legal (SELIC − IPCA, mín 0) a partir set/2024
+  const inicioP2 = dataInicio > CUT ? dataInicio : CUT;
+  if (inicioP2 < dataFim) {
+    const { juros, meses } = calcularJurosAcumulados({
+      principal, dataInicio: inicioP2, dataFim,
+      jurosTipo: "taxa_legal_406_12", regime: "simples",
+    });
+    if (meses > 0) {
+      periodos.push({
+        regime: "Taxa Legal (Lei 14.905/2024)",
+        inicio: inicioP2,
+        fim: dataFim,
+        valor: juros,
+        meses,
+        taxaAcum: principal > 0 ? juros / principal : 0,
+      });
+      jurosTotal += juros;
+    }
+  }
+
+  return { jurosTotal, periodos };
+}
+
+/**
+ * Calcula fator de correção monetária com regime INPC→IPCA (Lei 14.905/2024):
+ * Período 1: até ago/2024 → INPC
+ * Período 2: a partir set/2024 → IPCA
+ * Retorna { fator, periodos: [{indice, inicio, fim, fator, acumulado}] }
+ */
+export function calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim) {
+  if (!dataInicio || !dataFim || dataInicio >= dataFim) return { fator: 1, periodos: [] };
+
+  const CUT = "2024-09-01";
+  const merged = getIndicesMerged();
+  let fatorTotal = 1;
+  const periodos = [];
+
+  // PERÍODO 1: INPC até ago/2024
+  const fimP1 = dataFim < CUT ? dataFim : CUT;
+  if (dataInicio < fimP1) {
+    let f1 = 1;
+    let atual = new Date(dataInicio + "T12:00:00");
+    const fim1 = new Date(fimP1 + "T12:00:00");
+    while (atual < fim1) {
+      const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
+      const taxa = merged.inpc?.[chave];
+      f1 *= (1 + (taxa !== undefined ? taxa : TAXA_MEDIA.inpc));
+      atual.setMonth(atual.getMonth() + 1);
+    }
+    fatorTotal *= f1;
+    periodos.push({ indice: "INPC", inicio: dataInicio, fim: fimP1, fator: f1, acumulado: f1 - 1 });
+  }
+
+  // PERÍODO 2: IPCA a partir set/2024
+  const inicioP2 = dataInicio > CUT ? dataInicio : CUT;
+  if (inicioP2 < dataFim) {
+    let f2 = 1;
+    let atual = new Date(inicioP2 + "T12:00:00");
+    const fim2 = new Date(dataFim + "T12:00:00");
+    while (atual < fim2) {
+      const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
+      const taxa = merged.ipca?.[chave];
+      f2 *= (1 + (taxa !== undefined ? taxa : TAXA_MEDIA.ipca));
+      atual.setMonth(atual.getMonth() + 1);
+    }
+    fatorTotal *= f2;
+    periodos.push({ indice: "IPCA", inicio: inicioP2, fim: dataFim, fator: f2, acumulado: f2 - 1 });
+  }
+
+  return { fator: fatorTotal, periodos };
+}
+
 export function calcularFatorCorrecao(indexador, dataInicio, dataFim) {
   if(indexador==="nenhum") return 1;
+  if(indexador==="inpc_ipca") return calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim).fator;
   const tabela = getIndicesMerged()[indexador];
   let fator = 1;
   let atual = new Date(dataInicio+"T12:00:00");

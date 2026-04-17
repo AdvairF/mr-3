@@ -14,6 +14,8 @@ import {
   calcularFatorCorrecao,
   calcularJurosAcumulados,
   calcularJurosArt406,
+  calcularJurosArt406_12aa,
+  calcularFatorCorrecao_INPC_IPCA,
   obterTaxaJurosMes,
   setIndicesOverride,
   INDICES,
@@ -3732,9 +3734,25 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                             <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
                               <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
                               • Até 10/01/2003: 0,5% a.m. (6% a.a.) — Código Civil de 1916<br />
-                              • 11/01/2003 a 29/08/2024: 1% a.m. (12% a.a.) — Art. 406 CC/2002<br />
+                              • 11/01/2003 a 29/08/2024: SELIC (STJ Tema 1368)<br />
                               • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (nunca negativa) — Lei 14.905/2024<br />
                               O sistema aplicará automaticamente cada regime conforme o período.
+                            </div>
+                          )}
+                          {ndEdit.juros_tipo === "taxa_legal_406_12" && (
+                            <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
+                              <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
+                              • Até 29/08/2024: 1% a.m. (12% a.a.)<br />
+                              • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
+                              Base: Art. 406 CC com redação dada pela Lei nº 14.905/2024.
+                            </div>
+                          )}
+                          {ndEdit.indexador === "inpc_ipca" && (
+                            <div style={{ marginTop: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#065f46", lineHeight: 1.6 }}>
+                              <strong>📊 Correção com regime temporal — Lei 14.905/2024:</strong><br />
+                              • Até 29/08/2024: INPC acumulado<br />
+                              • A partir de 30/08/2024: IPCA acumulado<br />
+                              O sistema aplicará automaticamente cada índice conforme o período.
                             </div>
                           )}
                         </div>
@@ -3801,9 +3819,25 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                     <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
                       <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
                       • Até 10/01/2003: 0,5% a.m. (6% a.a.) — Código Civil de 1916<br />
-                      • 11/01/2003 a 29/08/2024: 1% a.m. (12% a.a.) — Art. 406 CC/2002<br />
+                      • 11/01/2003 a 29/08/2024: SELIC (STJ Tema 1368)<br />
                       • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (nunca negativa) — Lei 14.905/2024<br />
                       O sistema aplicará automaticamente cada regime conforme o período entre o vencimento e a data de cálculo.
+                    </div>
+                  )}
+                  {nd.juros_tipo === "taxa_legal_406_12" && (
+                    <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
+                      <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
+                      • Até 29/08/2024: 1% a.m. (12% a.a.)<br />
+                      • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
+                      Base: Art. 406 CC com redação dada pela Lei nº 14.905/2024.
+                    </div>
+                  )}
+                  {nd.indexador === "inpc_ipca" && (
+                    <div style={{ marginTop: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#065f46", lineHeight: 1.6 }}>
+                      <strong>📊 Correção com regime temporal — Lei 14.905/2024:</strong><br />
+                      • Até 29/08/2024: INPC acumulado<br />
+                      • A partir de 30/08/2024: IPCA acumulado<br />
+                      O sistema aplicará automaticamente cada índice conforme o período.
                     </div>
                   )}
                   <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>Base oficial carregada no app: IGP-M até {ULTIMA_COMPETENCIA_INDICES.igpm}, IPCA/INPC até {ULTIMA_COMPETENCIA_INDICES.ipca} e Selic até {ULTIMA_COMPETENCIA_INDICES.selic}.</p>
@@ -5079,9 +5113,17 @@ function Calculadora({ devedores, credores = [] }) {
         ? Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()))
         : 0;
       const dias = dataIniStr ? Math.max(0, Math.floor((dFim - dIni) / 86400000)) : 0;
-      const fatorCorrecao = dataIniStr && indexador !== "nenhum"
-        ? calcularFatorCorrecao(indexador, dataIniStr, dataCalculo)
-        : 1;
+      let fatorCorrecao = 1;
+      let correcaoPeriodosSimples = null;
+      if (dataIniStr && indexador !== "nenhum") {
+        if (indexador === "inpc_ipca") {
+          const r = calcularFatorCorrecao_INPC_IPCA(dataIniStr, dataCalculo);
+          fatorCorrecao = r.fator;
+          correcaoPeriodosSimples = r.periodos;
+        } else {
+          fatorCorrecao = calcularFatorCorrecao(indexador, dataIniStr, dataCalculo);
+        }
+      }
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
       const jurosAMNum = parseFloat(jurosAM) || 0;
@@ -5092,6 +5134,10 @@ function Calculadora({ devedores, credores = [] }) {
         const art406 = calcularJurosArt406(principalCorrigido, _dataIniJuros, dataCalculo);
         juros = art406.jurosTotal;
         jurosPeriodosSimples = art406.periodos;
+      } else if (jurosTipo === "taxa_legal_406_12" && _dataIniJuros < dataCalculo) {
+        const art406_12 = calcularJurosArt406_12aa(principalCorrigido, _dataIniJuros, dataCalculo);
+        juros = art406_12.jurosTotal;
+        jurosPeriodosSimples = art406_12.periodos;
       } else if (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0)) {
         juros = calcularJurosAcumulados({
           principal: principalCorrigido,
@@ -5110,6 +5156,7 @@ function Calculadora({ devedores, credores = [] }) {
       const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
+        correcaoPeriodos: correcaoPeriodosSimples,
         juros, jurosPeriodos: jurosPeriodosSimples,
         multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
@@ -5143,7 +5190,15 @@ function Calculadora({ devedores, credores = [] }) {
       const dias = Math.max(0, Math.floor((dFim - dIni) / 86400000));
 
       // Correção usando índice da dívida
-      const fatorCorr = calcularFatorCorrecao(idxDiv, dataIni, dataCalculo);
+      let fatorCorr;
+      let correcaoPeriodosDiv = null;
+      if (idxDiv === "inpc_ipca") {
+        const r = calcularFatorCorrecao_INPC_IPCA(dataIni, dataCalculo);
+        fatorCorr = r.fator;
+        correcaoPeriodosDiv = r.periodos;
+      } else {
+        fatorCorr = calcularFatorCorrecao(idxDiv, dataIni, dataCalculo);
+      }
       const corrDiv = PV * fatorCorr - PV;
       const pcDiv = PV + corrDiv;
 
@@ -5154,6 +5209,10 @@ function Calculadora({ devedores, credores = [] }) {
         const art406Div = calcularJurosArt406(pcDiv, dataIni, dataCalculo);
         jurosDiv = art406Div.jurosTotal;
         jurosPeriodosDiv = art406Div.periodos;
+      } else if (jTipo === "taxa_legal_406_12" && dataIni < dataCalculo) {
+        const art406_12Div = calcularJurosArt406_12aa(pcDiv, dataIni, dataCalculo);
+        jurosDiv = art406_12Div.jurosTotal;
+        jurosPeriodosDiv = art406_12Div.periodos;
       } else if (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0)) {
         jurosDiv = calcularJurosAcumulados({
           principal: pcDiv,
@@ -5189,7 +5248,7 @@ function Calculadora({ devedores, credores = [] }) {
       dividasDetalhe.push({
         descricao: div.descricao || "Dívida",
         dataIni, meses, dias,
-        valor: PV, correcao: corrDiv, principalCorrigido: pcDiv,
+        valor: PV, correcao: corrDiv, correcaoPeriodos: correcaoPeriodosDiv, principalCorrigido: pcDiv,
         juros: jurosDiv, jurosPeriodos: jurosPeriodosDiv,
         multa: multaDiv, honorarios: honDiv,
         total: pcDiv + jurosDiv + multaDiv + honDiv,
@@ -5250,9 +5309,17 @@ function Calculadora({ devedores, credores = [] }) {
         ? Math.max(0, (dFim.getFullYear() - dIni.getFullYear()) * 12 + (dFim.getMonth() - dIni.getMonth()))
         : 0;
       const dias = dataIniStr ? Math.max(0, Math.floor((dFim - dIni) / 86400000)) : 0;
-      const fatorCorrecao = dataIniStr && indexador !== "nenhum"
-        ? calcularFatorCorrecao(indexador, dataIniStr, dataCalculo)
-        : 1;
+      let fatorCorrecao = 1;
+      let correcaoPeriodosSimples = null;
+      if (dataIniStr && indexador !== "nenhum") {
+        if (indexador === "inpc_ipca") {
+          const r = calcularFatorCorrecao_INPC_IPCA(dataIniStr, dataCalculo);
+          fatorCorrecao = r.fator;
+          correcaoPeriodosSimples = r.periodos;
+        } else {
+          fatorCorrecao = calcularFatorCorrecao(indexador, dataIniStr, dataCalculo);
+        }
+      }
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
       const jurosAMNum = parseFloat(jurosAM) || 0;
@@ -5263,6 +5330,10 @@ function Calculadora({ devedores, credores = [] }) {
         const art406 = calcularJurosArt406(principalCorrigido, _dataIniJuros, dataCalculo);
         juros = art406.jurosTotal;
         jurosPeriodosSimples = art406.periodos;
+      } else if (jurosTipo === "taxa_legal_406_12" && _dataIniJuros < dataCalculo) {
+        const art406_12 = calcularJurosArt406_12aa(principalCorrigido, _dataIniJuros, dataCalculo);
+        juros = art406_12.jurosTotal;
+        jurosPeriodosSimples = art406_12.periodos;
       } else if (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0)) {
         juros = calcularJurosAcumulados({
           principal: principalCorrigido,
@@ -5281,6 +5352,7 @@ function Calculadora({ devedores, credores = [] }) {
       const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
+        correcaoPeriodos: correcaoPeriodosSimples,
         juros, jurosPeriodos: jurosPeriodosSimples,
         multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
@@ -5314,7 +5386,15 @@ function Calculadora({ devedores, credores = [] }) {
       const dias = Math.max(0, Math.floor((dFim - dIni) / 86400000));
 
       // Correção usando índice da dívida
-      const fatorCorr = calcularFatorCorrecao(idxDiv, dataIni, dataCalculo);
+      let fatorCorr;
+      let correcaoPeriodosDiv = null;
+      if (idxDiv === "inpc_ipca") {
+        const r = calcularFatorCorrecao_INPC_IPCA(dataIni, dataCalculo);
+        fatorCorr = r.fator;
+        correcaoPeriodosDiv = r.periodos;
+      } else {
+        fatorCorr = calcularFatorCorrecao(idxDiv, dataIni, dataCalculo);
+      }
       const corrDiv = PV * fatorCorr - PV;
       const pcDiv = PV + corrDiv;
 
@@ -5325,6 +5405,10 @@ function Calculadora({ devedores, credores = [] }) {
         const art406Div = calcularJurosArt406(pcDiv, dataIni, dataCalculo);
         jurosDiv = art406Div.jurosTotal;
         jurosPeriodosDiv = art406Div.periodos;
+      } else if (jTipo === "taxa_legal_406_12" && dataIni < dataCalculo) {
+        const art406_12Div = calcularJurosArt406_12aa(pcDiv, dataIni, dataCalculo);
+        jurosDiv = art406_12Div.jurosTotal;
+        jurosPeriodosDiv = art406_12Div.periodos;
       } else if (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0)) {
         jurosDiv = calcularJurosAcumulados({
           principal: pcDiv,
@@ -5360,7 +5444,7 @@ function Calculadora({ devedores, credores = [] }) {
       dividasDetalhe.push({
         descricao: div.descricao || "Dívida",
         dataIni, meses, dias,
-        valor: PV, correcao: corrDiv, principalCorrigido: pcDiv,
+        valor: PV, correcao: corrDiv, correcaoPeriodos: correcaoPeriodosDiv, principalCorrigido: pcDiv,
         juros: jurosDiv, jurosPeriodos: jurosPeriodosDiv,
         multa: multaDiv, honorarios: honDiv,
         total: pcDiv + jurosDiv + multaDiv + honDiv,
@@ -5751,7 +5835,13 @@ function Calculadora({ devedores, credores = [] }) {
           {jurosTipo === "taxa_legal_406" && (
             <div style={{ marginBottom: 10, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
               <strong>ℹ️ Taxa Legal (Art. 406 CC) — STJ Tema 1368:</strong><br />
-              • Até jan/2003: 0,5% a.m. &nbsp;•&nbsp; Fev/2003 a ago/2024: 1% a.m. &nbsp;•&nbsp; Set/2024 em diante: SELIC − IPCA
+              • Até jan/2003: 0,5% a.m. (CC/1916) &nbsp;•&nbsp; Fev/2003 a ago/2024: SELIC (STJ Tema 1368) &nbsp;•&nbsp; Set/2024 em diante: SELIC − IPCA (Lei 14.905/2024)
+            </div>
+          )}
+          {jurosTipo === "taxa_legal_406_12" && (
+            <div style={{ marginBottom: 10, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
+              <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
+              • Até 29/08/2024: 1% a.m. (12% a.a.) &nbsp;•&nbsp; A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º
             </div>
           )}
 
@@ -5858,7 +5948,7 @@ function Calculadora({ devedores, credores = [] }) {
                     ["Valor Original", resultado.valorOriginal, "#94a3b8"],
                     ...(resultado.correcao > 0 ? [["Correção (" + IDX_LABEL[indexador] + ")", resultado.correcao, "#818cf8"]] : []),
                     ...(resultado.correcao > 0 ? [["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"]] : []),
-                    ...(resultado.juros > 0 ? [[resultado.jurosTipo === "taxa_legal_406" ? "Juros (Art. 406 CC — STJ Tema 1368)" : "Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"]] : []),
+                    ...(resultado.juros > 0 ? [[resultado.jurosTipo === "taxa_legal_406" ? "Juros (Art. 406 CC — STJ Tema 1368)" : resultado.jurosTipo === "taxa_legal_406_12" ? "Juros (Art. 406 CC — 12%→Taxa Legal)" : "Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"]] : []),
                     ...(resultado.multa > 0 ? [["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", resultado.multa, "#f87171"]] : []),
                     ...(resultado.encargos > 0 ? [["Encargos", resultado.encargos, "#f97316"]] : []),
                     ...(resultado.bonificacao > 0 ? [["Bonificação (-)", resultado.bonificacao, "#34d399"]] : []),
@@ -5876,10 +5966,32 @@ function Calculadora({ devedores, credores = [] }) {
                 </div>
               </div>
 
+              {/* ── Breakdown correção INPC→IPCA por regime ── */}
+              {resultado.correcaoPeriodos && resultado.correcaoPeriodos.length > 0 && (
+                <div style={{ background: "#f0fdf4", borderRadius: 14, padding: "14px 16px", border: "1px solid #bbf7d0" }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#059669", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".04em" }}>📊 Correção Monetária INPC→IPCA (Lei 14.905/2024)</p>
+                  {resultado.correcaoPeriodos.map((p, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "5px 8px", background: "rgba(16,185,129,.07)", borderRadius: 8, marginBottom: 4 }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#065f46", display: "block" }}>{i < resultado.correcaoPeriodos.length - 1 ? "├" : "└"} {p.indice}</span>
+                        <span style={{ fontSize: 10, color: "#059669" }}>acumulado {(p.acumulado * 100).toFixed(4)}%</span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#059669", whiteSpace: "nowrap", marginLeft: 8 }}>{fmt(resultado.valorOriginal * p.acumulado)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderTop: "1px solid #bbf7d0", marginTop: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#065f46" }}>Total Correção</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "#059669" }}>{fmt(resultado.correcao)}</span>
+                  </div>
+                </div>
+              )}
+
               {/* ── Breakdown juros Art. 406 CC por regime ── */}
               {resultado.jurosPeriodos && resultado.jurosPeriodos.length > 0 && (
                 <div style={{ background: "#f0f4ff", borderRadius: 14, padding: "14px 16px", border: "1px solid #c7d2fe" }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".04em" }}>⚖️ Juros Legais — Art. 406 CC (STJ Tema 1368 + Lei 14.905/2024)</p>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                    {resultado.jurosTipo === "taxa_legal_406_12" ? "⚖️ Juros — Art. 406 CC (Regime Simplificado Lei 14.905/2024)" : "⚖️ Juros Legais — Art. 406 CC (STJ Tema 1368 + Lei 14.905/2024)"}
+                  </p>
                   {resultado.jurosPeriodos.map((p, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "5px 8px", background: "rgba(99,102,241,.07)", borderRadius: 8, marginBottom: 4 }}>
                       <div>

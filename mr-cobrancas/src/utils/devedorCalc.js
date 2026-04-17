@@ -6,7 +6,7 @@
  * mesmo cálculo de correção monetária e juros).
  */
 
-import { calcularFatorCorrecao, calcularJurosAcumulados, calcularJurosArt406 } from "./correcao.js";
+import { calcularFatorCorrecao, calcularJurosAcumulados, calcularJurosArt406, calcularJurosArt406_12aa, calcularFatorCorrecao_INPC_IPCA } from "./correcao.js";
 
 /**
  * Parse seguro de devedor.dividas.
@@ -186,9 +186,17 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
     let multaValor = 0;
     let honorariosValor = 0;
     let jurosPeriodos = null;
+    let correcaoPeriodos = null;
 
     if (dataInicio && dataInicio < hoje) {
-      const fator = calcularFatorCorrecao(indexador, dataInicio, hoje);
+      let fator;
+      if (indexador === "inpc_ipca") {
+        const r = calcularFatorCorrecao_INPC_IPCA(dataInicio, hoje);
+        fator = r.fator;
+        correcaoPeriodos = r.periodos;
+      } else {
+        fator = calcularFatorCorrecao(indexador, dataInicio, hoje);
+      }
       correcaoValor = pv * (fator - 1);
       const pcSaldo = pv + correcaoValor;
 
@@ -196,6 +204,10 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
         const art406 = calcularJurosArt406(pcSaldo, dataInicio, hoje);
         jurosValor = art406.jurosTotal;
         jurosPeriodos = art406.periodos;
+      } else if (jurosTipo === "taxa_legal_406_12") {
+        const art406_12 = calcularJurosArt406_12aa(pcSaldo, dataInicio, hoje);
+        jurosValor = art406_12.jurosTotal;
+        jurosPeriodos = art406_12.periodos;
       } else {
         const { juros } = calcularJurosAcumulados({
           principal: pcSaldo,
@@ -244,6 +256,7 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
       jurosAM,
       honorariosPct,
       correcao: correcaoValor,
+      correcaoPeriodos,
       juros: jurosValor,
       jurosPeriodos,
       multa: multaValor,
