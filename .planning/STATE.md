@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-dne: Fase 02 — Fila de Devedor service layer (filaDevedor.js, 7 funcoes, 19/19 testes passando)
+Last activity: 2026-04-17 - Completed quick task 260417-e59: CR-01 ID validation + CR-02 giro_carteira_dias fix in filaDevedor.js (32/32 testes passando)
 
 ## Status
 
@@ -22,3 +22,4 @@ Last activity: 2026-04-17 - Completed quick task 260417-dne: Fase 02 — Fila de
 | 260417-cym | Testar conexao MCP Supabase + schema DDL Kanban: 6 tabelas, RLS, 20 indexes, 7 seed rows | 2026-04-17 | 61a4254 | Verified | [260417-cym-testar-conexao-mcp-supabase-e-executar-s](./quick/260417-cym-testar-conexao-mcp-supabase-e-executar-s/) |
 | 260417-dea | Fase 1 — Criar tabelas Fila de Devedor: 6 tabelas, 5 indexes, RLS allow_all, telefones_adicionais | 2026-04-17 | c39b06e | Verified | [260417-dea-correcao-fase-1-criar-tabelas-fila-de-de](./quick/260417-dea-correcao-fase-1-criar-tabelas-fila-de-de/) |
 | 260417-dne | Fase 2 — Service layer filaDevedor.js: 7 funcoes, lock otimista, calcularFatorCorrecao(igpm), 19/19 testes passando | 2026-04-17 | 22e9b1f | Complete | [260417-dne-fase02-fila-devedor-backend-logica-servi](./quick/260417-dne-fase02-fila-devedor-backend-logica-servi/) |
+| 260417-e59 | CR-01 validateUUID/validateBigInt em 5 funções + CR-02 giro_carteira_dias acessível (max date) — 32/32 testes | 2026-04-17 | 217e29c | Complete | [260417-e59-corrigir-criticals-filadevedor-cr01-cr02](./quick/260417-e59-corrigir-criticals-filadevedor-cr01-cr02/) |
