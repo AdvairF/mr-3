@@ -1,9 +1,27 @@
 import { dbGet, dbInsert, dbUpdate, dbDelete, sb } from "../config/supabase.js";
 import { calcularFatorCorrecao } from "../utils/correcao.js";
 
+// ─── Validação de IDs (CR-01) ─────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function validateUUID(id, label = "id") {
+  if (!id || typeof id !== "string" || !UUID_RE.test(id)) {
+    throw new Error(`${label} inválido: esperado UUID, recebido: ${JSON.stringify(id)}`);
+  }
+}
+
+function validateBigInt(id, label = "id") {
+  const n = Number(id);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${label} inválido: esperado inteiro positivo, recebido: ${JSON.stringify(id)}`);
+  }
+}
+
 // ─── 1. calcularScorePrioridade ───────────────────────────────
 async function calcularScorePrioridade(contratoId) {
   try {
+    validateUUID(contratoId, "contratoId");
+
     const contratos = await dbGet("contratos", `select=id,valor_original&id=eq.${contratoId}`);
     if (!contratos.length) throw new Error(`Contrato ${contratoId} nao encontrado`);
     const valorOriginal = Number(contratos[0].valor_original) || 0;
@@ -78,6 +96,8 @@ async function entrarNaFila() {
 // ─── 3. proximoDevedor ────────────────────────────────────────
 async function proximoDevedor(operadorId, _tentativa = 1) {
   try {
+    validateUUID(operadorId, "operadorId");
+
     const hoje = new Date().toISOString().slice(0, 10);
 
     const items = await dbGet(
@@ -135,6 +155,9 @@ async function proximoDevedor(operadorId, _tentativa = 1) {
 // ─── 4. registrarEvento ───────────────────────────────────────
 async function registrarEvento(contratoId, operadorId, dadosEvento) {
   try {
+    validateUUID(contratoId, "contratoId");
+    validateUUID(operadorId, "operadorId");
+
     const { tipo_evento, descricao, telefone_usado, data_promessa, giro_carteira_dias } = dadosEvento;
 
     const eventoPayload = {
@@ -151,18 +174,8 @@ async function registrarEvento(contratoId, operadorId, dadosEvento) {
     const resultado = await dbInsert("eventos_andamento", eventoPayload);
     const evento = Array.isArray(resultado) ? resultado[0] : resultado;
 
-    if (tipo_evento === "PROMESSA_PAGAMENTO" && data_promessa) {
-      await sb(
-        "fila_cobranca",
-        "PATCH",
-        {
-          bloqueado_ate: data_promessa,
-          status_fila: "ACIONADO",
-          updated_at: new Date().toISOString(),
-        },
-        `?contrato_id=eq.${contratoId}&status_fila=eq.EM_ATENDIMENTO`
-      );
-    } else if (tipo_evento === "ACORDO") {
+    // Acordo: finaliza contrato e remove da fila
+    if (tipo_evento === "ACORDO") {
       await sb(
         "contratos",
         "PATCH",
@@ -175,12 +188,27 @@ async function registrarEvento(contratoId, operadorId, dadosEvento) {
         { status_fila: "REMOVIDO", updated_at: new Date().toISOString() },
         `?contrato_id=eq.${contratoId}`
       );
-    } else if (giro_carteira_dias > 0) {
-      const bloqueadoAte = new Date(
-        Date.now() + giro_carteira_dias * 24 * 60 * 60 * 1000
-      )
+      return { success: true, data: evento, error: null };
+    }
+
+    // CR-02: calcular bloqueado_ate considerando AMBOS os fatores independentemente
+    let bloqueadoAte = null;
+
+    if (tipo_evento === "PROMESSA_PAGAMENTO" && data_promessa) {
+      bloqueadoAte = data_promessa;
+    }
+
+    if (giro_carteira_dias > 0) {
+      const giroData = new Date(Date.now() + giro_carteira_dias * 24 * 60 * 60 * 1000)
         .toISOString()
         .slice(0, 10);
+      // Usar a maior data (mais restritiva)
+      if (!bloqueadoAte || giroData > bloqueadoAte) {
+        bloqueadoAte = giroData;
+      }
+    }
+
+    if (bloqueadoAte !== null) {
       await sb(
         "fila_cobranca",
         "PATCH",
@@ -189,7 +217,7 @@ async function registrarEvento(contratoId, operadorId, dadosEvento) {
           status_fila: "ACIONADO",
           updated_at: new Date().toISOString(),
         },
-        `?contrato_id=eq.${contratoId}`
+        `?contrato_id=eq.${contratoId}&status_fila=eq.EM_ATENDIMENTO`
       );
     }
 
@@ -202,6 +230,10 @@ async function registrarEvento(contratoId, operadorId, dadosEvento) {
 // ─── 5. reciclarContratos ─────────────────────────────────────
 async function reciclarContratos(filtros = {}, equipeId = null) {
   try {
+    if (filtros.devedor_id !== undefined) {
+      validateBigInt(filtros.devedor_id, "devedor_id");
+    }
+
     const filaAtiva = await dbGet(
       "fila_cobranca",
       "select=contrato_id&status_fila=in.(AGUARDANDO,EM_ATENDIMENTO)"
@@ -262,6 +294,9 @@ async function reciclarContratos(filtros = {}, equipeId = null) {
 // ─── 6. removerDaFila ─────────────────────────────────────────
 async function removerDaFila(filaId, motivo, usuarioId) {
   try {
+    validateUUID(filaId, "filaId");
+    validateUUID(usuarioId, "usuarioId");
+
     const resultado = await dbUpdate("fila_cobranca", filaId, {
       status_fila: "REMOVIDO",
       updated_at: new Date().toISOString(),

@@ -149,6 +149,85 @@ async function runTests() {
   } else {
     console.log("  SKIP: nenhum item na fila para remover");
   }
+
+  // ── Preparar contrato fresh para testes CR-02 ──────────────
+  // Precisamos de contrato em fila EM_ATENDIMENTO para cada sub-teste
+  async function prepararFilaEmAtendimento() {
+    // Reentrar na fila (cria AGUARDANDO para o contrato de teste)
+    await filaDevedor.entrarNaFila();
+    // Forçar diretamente o item do contrato de teste para EM_ATENDIMENTO
+    // (proximoDevedor poderia pegar outro contrato de maior score)
+    const filaItems = await dbGet(
+      "fila_cobranca",
+      `contrato_id=eq.${testIds.contrato}&status_fila=eq.AGUARDANDO`
+    );
+    if (filaItems.length) {
+      await sb("fila_cobranca", "PATCH",
+        { status_fila: "EM_ATENDIMENTO", operador_id: testIds.operador, updated_at: new Date().toISOString() },
+        `?id=eq.${filaItems[0].id}`
+      );
+    }
+  }
+
+  // TEST 6 (CR-02): PROMESSA_PAGAMENTO sozinha
+  console.log("\n--- TEST 6: registrarEvento — PROMESSA_PAGAMENTO sozinha ---");
+  await prepararFilaEmAtendimento();
+  const promessaData = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const r6 = await filaDevedor.registrarEvento(testIds.contrato, testIds.operador, {
+    tipo_evento: "PROMESSA_PAGAMENTO",
+    descricao: "Teste CR-02 promessa sozinha",
+    data_promessa: promessaData,
+  });
+  assert("T6 retorno success", r6.success === true);
+  const fila6 = (await dbGet("fila_cobranca", `contrato_id=eq.${testIds.contrato}&order=updated_at.desc&limit=1`))[0];
+  assert("T6 bloqueado_ate = data_promessa", fila6?.bloqueado_ate === promessaData);
+  assert("T6 status_fila = ACIONADO", fila6?.status_fila === "ACIONADO");
+
+  // TEST 7 (CR-02): giro_carteira_dias sozinho (sem promessa)
+  console.log("\n--- TEST 7: registrarEvento — giro_carteira_dias sozinho ---");
+  await prepararFilaEmAtendimento();
+  const giroDias = 10;
+  const giroEsperado = new Date(Date.now() + giroDias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const r7 = await filaDevedor.registrarEvento(testIds.contrato, testIds.operador, {
+    tipo_evento: "SEM_CONTATO",
+    descricao: "Teste CR-02 giro sozinho",
+    giro_carteira_dias: giroDias,
+  });
+  assert("T7 retorno success", r7.success === true);
+  const fila7 = (await dbGet("fila_cobranca", `contrato_id=eq.${testIds.contrato}&order=updated_at.desc&limit=1`))[0];
+  assert("T7 bloqueado_ate = hoje + giro_dias", fila7?.bloqueado_ate === giroEsperado);
+  assert("T7 status_fila = ACIONADO", fila7?.status_fila === "ACIONADO");
+
+  // TEST 8 (CR-02): AMBOS juntos — deve usar a maior data
+  console.log("\n--- TEST 8: registrarEvento — PROMESSA + giro (usar maior data) ---");
+  await prepararFilaEmAtendimento();
+  // promessa = +5 dias, giro = 20 dias → giro é maior
+  const promessa8 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const giro8Esperado = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const r8 = await filaDevedor.registrarEvento(testIds.contrato, testIds.operador, {
+    tipo_evento: "PROMESSA_PAGAMENTO",
+    descricao: "Teste CR-02 ambos — giro maior",
+    data_promessa: promessa8,
+    giro_carteira_dias: 20,
+  });
+  assert("T8 retorno success", r8.success === true);
+  const fila8 = (await dbGet("fila_cobranca", `contrato_id=eq.${testIds.contrato}&order=updated_at.desc&limit=1`))[0];
+  assert("T8 bloqueado_ate = max(promessa, giro) = giro", fila8?.bloqueado_ate === giro8Esperado);
+
+  // TEST 9 (CR-01): IDs inválidos retornam success=false
+  console.log("\n--- TEST 9: validateUUID/validateBigInt — IDs inválidos ---");
+  const rInj1 = await filaDevedor.calcularScorePrioridade("nao-um-uuid");
+  assert("T9 contratoId inválido → success=false", rInj1.success === false);
+  assert("T9 error descritivo presente", typeof rInj1.error === "string" && rInj1.error.length > 0);
+
+  const rInj2 = await filaDevedor.proximoDevedor("' OR 1=1 --");
+  assert("T9 operadorId injection → success=false", rInj2.success === false);
+
+  const rInj3 = await filaDevedor.registrarEvento("nao-uuid", testIds.operador, { tipo_evento: "SEM_CONTATO" });
+  assert("T9 registrarEvento contratoId inválido → success=false", rInj3.success === false);
+
+  const rInj4 = await filaDevedor.removerDaFila("nao-uuid", "motivo", testIds.operador);
+  assert("T9 removerDaFila filaId inválido → success=false", rInj4.success === false);
 }
 
 // Main
