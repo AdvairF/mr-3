@@ -52,9 +52,14 @@ const SCORE_STATUS = {
   em_negociacao: 40,
 };
 
+function calcularValorFaceDevedor(devedor) {
+  const soma = (devedor.dividas || []).reduce((s, d) => s + (Number(d.valor_total) || 0), 0);
+  return soma || Number(devedor.valor_original) || Number(devedor.valor_nominal) || 0;
+}
+
 function calcularScoreDevedor(devedor) {
   const bonus = SCORE_STATUS[devedor.status] || 0;
-  const valor = Number(devedor.valor_total) || 0;
+  const valor = calcularValorFaceDevedor(devedor);
   const criado = devedor.created_at ? new Date(devedor.created_at) : new Date();
   const diasCadastro = Math.floor((Date.now() - criado) / 86400000);
   return bonus + (valor / 100) + (diasCadastro * 0.5);
@@ -119,10 +124,10 @@ async function listarDevedoresParaFila(filtros = {}) {
       );
     }
     if (filtros.valor_min != null) {
-      resultado = resultado.filter((d) => (Number(d.valor_total) || 0) >= filtros.valor_min);
+      resultado = resultado.filter((d) => calcularValorFaceDevedor(d) >= filtros.valor_min);
     }
     if (filtros.valor_max != null) {
-      resultado = resultado.filter((d) => (Number(d.valor_total) || 0) <= filtros.valor_max);
+      resultado = resultado.filter((d) => calcularValorFaceDevedor(d) <= filtros.valor_max);
     }
 
     // Buscar últimos eventos por devedor + total de eventos hoje

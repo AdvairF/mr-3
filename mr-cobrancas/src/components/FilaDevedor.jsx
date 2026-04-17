@@ -5,6 +5,7 @@ import Btn from "./ui/Btn.jsx";
 import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
 import { STATUS_DEV } from "../utils/constants.js";
+import { calcularValorFace, calcularResumoFinanceiro } from "../utils/devedorCalc.js";
 
 // ─── Status ativos para fila ──────────────────────────────────
 const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
@@ -103,6 +104,41 @@ function UltimoAtendimentoCell({ ultimoEvento }) {
   );
 }
 
+// ─── DividaCell ───────────────────────────────────────────────
+function DividaCell({ devedor }) {
+  const face = calcularValorFace(devedor);
+  const qtd = (devedor.dividas || []).length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ fontWeight: 700, color: face > 0 ? "#dc2626" : "#64748b", fontSize: 13 }}>
+        {fmtBRL(face)}
+      </span>
+      {Number(devedor.valor_original) > 0 && Math.abs(face - Number(devedor.valor_original)) > 1 && (
+        <span style={{ fontSize: 10, color: "#94a3b8" }}>Orig: {fmtBRL(devedor.valor_original)}</span>
+      )}
+      {qtd > 0 && (
+        <span style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", background: "#ede9fe", padding: "1px 5px", borderRadius: 99, alignSelf: "flex-start" }}>
+          {qtd} dívida{qtd > 1 ? "s" : ""}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── CredorCell ───────────────────────────────────────────────
+function CredorCell({ devedor, credores }) {
+  const credor = (credores || []).find(c => String(c.id) === String(devedor.credor_id));
+  const primeiraDiv = (devedor.dividas || [])[0];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {credor && <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{credor.nome}</span>}
+      {devedor.numero_processo && <span style={{ fontSize: 10, color: "#6366f1" }}>Proc: {devedor.numero_processo}</span>}
+      {primeiraDiv?.descricao && <span style={{ fontSize: 10, color: "#94a3b8" }}>{primeiraDiv.descricao}</span>}
+      {!credor && !devedor.numero_processo && !primeiraDiv?.descricao && <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>}
+    </div>
+  );
+}
+
 // ─── TELA 1: FilaPainel (Supervisor) ─────────────────────────
 function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
   const [devedores, setDevedores] = useState([]);
@@ -181,7 +217,7 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
   const cntAtendidosHoje = devedores.filter(d =>
     d._ultimo_evento?.data_evento?.slice(0, 10) === hojeCC
   ).length;
-  const valorTotalAberto = devedores.reduce((s, d) => s + (Number(d.valor_total) || 0), 0);
+  const valorTotalAberto = devedores.reduce((s, d) => s + calcularValorFace(d), 0);
 
   const cards = [
     { label: "Pendentes", valor: cntPendentes, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
@@ -203,7 +239,7 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
       devedoresFiltrados.sort((a, b) => {
         const pd = (priOrd[a._prioridade] ?? 2) - (priOrd[b._prioridade] ?? 2);
         if (pd !== 0) return pd;
-        const vd = (Number(b.valor_total) || 0) - (Number(a.valor_total) || 0);
+        const vd = calcularValorFace(b) - calcularValorFace(a);
         if (vd !== 0) return vd;
         return (a.created_at || "").localeCompare(b.created_at || "");
       });
@@ -308,6 +344,7 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
                 <th style={th}>CPF/CNPJ</th>
                 <th style={th}>Status</th>
                 <th style={th}>Valor Dívida</th>
+                <th style={th}>Título / Credor</th>
                 <th style={th}>Último Atendimento</th>
                 <th style={th}>Dias s/ contato</th>
                 <th style={th}>Prioridade</th>
@@ -333,7 +370,8 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
                   </td>
                   <td style={td}>{d.cpf_cnpj || "—"}</td>
                   <td style={td}><StatusBadge status={d.status} /></td>
-                  <td style={{ ...td, fontWeight: 700, color: "#dc2626" }}>{fmtBRL(d.valor_total)}</td>
+                  <td style={td}><DividaCell devedor={d} /></td>
+                  <td style={td}><CredorCell devedor={d} credores={credores} /></td>
                   <td style={td}><UltimoAtendimentoCell ultimoEvento={d._ultimo_evento} /></td>
                   <td style={{ ...td, textAlign: "center" }}>{d._dias_sem_contato !== null ? `${d._dias_sem_contato}d` : "—"}</td>
                   <td style={td}><PriorityBadge prioridade={d._prioridade} /></td>
@@ -483,6 +521,7 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
   const { fila, devedor: devedorInicial, contrato, parcelas, eventos: evtsIniciais } = dadosIniciais;
   const [devedor, setDevedor] = useState(devedorInicial);
   const [eventos, setEventos] = useState(evtsIniciais || []);
+  const [pagamentos, setPagamentos] = useState([]);
   const [eventoRegistrado, setEventoRegistrado] = useState(false);
   const [modalEvento, setModalEvento] = useState(false);
   const [modalInfo, setModalInfo] = useState(false);
@@ -491,16 +530,20 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
   const [proximando, setProximando] = useState(false);
   const [alterandoStatus, setAlterandoStatus] = useState(false);
 
-  // Carregar eventos por devedor_id
+  // Carregar eventos e pagamentos_parciais por devedor_id
   useEffect(() => {
     if (!devedorInicial?.id) return;
     setDevedor(devedorInicial);
     setEventos(evtsIniciais || []);
+    setPagamentos([]);
     setEventoRegistrado(false);
-    // Buscar eventos mais recentes
-    dbGet("eventos_andamento", `devedor_id=eq.${devedorInicial.id}&order=data_evento.desc&limit=50`)
-      .then(rows => { if (Array.isArray(rows)) setEventos(rows); })
-      .catch(() => {});
+    Promise.all([
+      dbGet("eventos_andamento", `devedor_id=eq.${devedorInicial.id}&order=data_evento.desc&limit=50`),
+      dbGet("pagamentos_parciais", `devedor_id=eq.${devedorInicial.id}&order=data_pagamento.asc`),
+    ]).then(([evRows, pgRows]) => {
+      if (Array.isArray(evRows)) setEventos(evRows);
+      if (Array.isArray(pgRows)) setPagamentos(pgRows);
+    }).catch(() => {});
   }, [devedorInicial?.id]);
 
   function F(k, v) { setForm(f => ({ ...f, [k]: v })); }
@@ -605,44 +648,64 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        {/* Dados da dívida */}
-        <div style={{ background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e8f0f7" }}>
-          <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>💰 Dívida</p>
-          {devedor ? (
-            <div style={{ fontSize: 13, color: "#374151", display: "grid", gap: 6 }}>
-              {devedor.valor_total && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#64748b" }}>Valor Total</span>
-                  <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(devedor.valor_total)}</span>
-                </div>
-              )}
-              {devedor.valor_nominal && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#64748b" }}>Valor Nominal</span>
-                  <span>{fmtBRL(devedor.valor_nominal)}</span>
-                </div>
-              )}
-              {devedor.descricao_divida && (
-                <div>
-                  <span style={{ color: "#64748b", display: "block", marginBottom: 2 }}>Descrição</span>
-                  <span style={{ fontSize: 12, color: "#374151" }}>{devedor.descricao_divida}</span>
-                </div>
-              )}
-              {devedor.data_origem_divida && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#64748b" }}>Data Origem</span>
-                  <span>{fmtData(devedor.data_origem_divida)}</span>
-                </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Dias Cadastro</span>
-                <span style={{ fontWeight: 600 }}>{diasDesde(devedor.created_at)} dias</span>
-              </div>
+      {/* Resumo financeiro completo */}
+      {devedor && (() => {
+        const hoje = new Date().toISOString().slice(0, 10);
+        const r = calcularResumoFinanceiro(devedor, pagamentos, hoje);
+        const dividas = (devedor.dividas || []).filter(d => !d._nominal && !d._so_custas);
+        return (
+          <div style={{ background: "linear-gradient(135deg,#fff5f5 0%,#fff 100%)", borderRadius: 16, padding: "18px 20px", border: "1px solid #fecaca", marginBottom: 16 }}>
+            <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>💰 Resumo Financeiro</p>
+            {/* Saldo destaque */}
+            <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", marginBottom: 12, border: "1px solid #fca5a5", textAlign: "center" }}>
+              <p style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 2 }}>Saldo Devedor Atualizado</p>
+              <p style={{ fontSize: 26, fontWeight: 800, color: "#dc2626", fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1.2 }}>{fmtBRL(r.saldo)}</p>
             </div>
-          ) : <p style={{ color: "#94a3b8", fontSize: 13 }}>Sem dados de dívida</p>}
-        </div>
+            {/* Breakdown */}
+            <div style={{ display: "grid", gap: 5, fontSize: 12 }}>
+              {[
+                ["Valor Original", fmtBRL(r.valorOriginal), "#374151"],
+                ["Encargos (Multa + Juros + Correção)", fmtBRL(r.encargos), "#f59e0b"],
+                ["Total Pago", r.totalPago > 0 ? fmtBRL(r.totalPago) : "—", "#10b981"],
+                ["Dias em Atraso", r.diasEmAtraso > 0 ? `${r.diasEmAtraso} dias` : "—", "#6366f1"],
+              ].map(([k, v, cor]) => (
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #f1f5f9" }}>
+                  <span style={{ color: "#64748b" }}>{k}</span>
+                  <span style={{ fontWeight: 600, color: cor }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            {/* Dívidas cadastradas */}
+            {dividas.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Dívidas Cadastradas ({dividas.length})</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {dividas.map((div, i) => {
+                    const dataVenc = div.data_vencimento || div.data_origem;
+                    const diasAtraso = dataVenc ? Math.max(0, Math.floor((Date.now() - new Date(dataVenc + "T12:00:00")) / 86400000)) : null;
+                    return (
+                      <div key={i} style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px", fontSize: 11, border: "1px solid #e2e8f0" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                          <span style={{ fontWeight: 600, color: "#374151" }}>{div.descricao || `Dívida ${i + 1}`}</span>
+                          <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(div.valor_total)}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: 10, color: "#94a3b8", flexWrap: "wrap" }}>
+                          {dataVenc && <span>Venc: {fmtData(dataVenc)}</span>}
+                          {diasAtraso !== null && <span style={{ color: diasAtraso > 90 ? "#dc2626" : "#f59e0b" }}>{diasAtraso}d atraso</span>}
+                          {div.indexador && div.indexador !== "nenhum" && <span>Idx: {div.indexador.toUpperCase()}</span>}
+                          {div.juros_am > 0 && <span>Juros: {div.juros_am}% a.m.</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
+      <div style={{ marginBottom: 16 }}>
         {/* Histórico de eventos */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e8f0f7", maxHeight: 260, overflowY: "auto" }}>
           <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>📋 Histórico</p>
