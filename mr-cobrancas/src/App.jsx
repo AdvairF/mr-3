@@ -26,7 +26,9 @@ import {
   JUROS_OPTIONS,
   JUROS_LABEL,
   ULTIMA_COMPETENCIA_INDICES,
+  calcularArt523,
 } from "./utils/correcao.js";
+import Art523Option from "./components/Art523Option.jsx";
 import {
   buscarIndicesBCB,
   salvarCacheIndices,
@@ -3241,7 +3243,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       juros_tipo: nd.juros_tipo || "fixo_1", juros_am: parseFloat(nd.juros_am) || 1, honorarios_pct: parseFloat(nd.honorarios_pct) || 20,
       data_inicio_atualizacao: nd.data_inicio_atualizacao || dataVenc,
       despesas: parseFloat(nd.despesas) || 0, observacoes: nd.observacoes || "",
-      custas: nd.custas || []
+      custas: nd.custas || [],
+      art523_opcao: nd.art523_opcao || "nao_aplicar",
     };
     const dividas = [...(sel.dividas || []), divida];
     const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
@@ -3350,6 +3353,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       observacoes: div.observacoes || "",
       parcelas: div.parcelas || [],
       custas: div.custas || [],
+      art523_opcao: div.art523_opcao || "nao_aplicar",
     });
   }
 
@@ -3375,6 +3379,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         honorarios_pct: parseFloat(ndEdit.honorarios_pct || "0"),
         despesas: parseFloat(ndEdit.despesas || "0"),
         observacoes: ndEdit.observacoes || "",
+        art523_opcao: ndEdit.art523_opcao || "nao_aplicar",
       };
     });
     const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
@@ -3731,6 +3736,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                             <Inp label="Honorários (%)" value={ndEdit.honorarios_pct} onChange={v => NDE("honorarios_pct", v)} type="number" />
                             <Inp label="Despesas (R$)" value={ndEdit.despesas} onChange={v => NDE("despesas", v)} type="number" />
                           </div>
+                          <Art523Option value={ndEdit.art523_opcao || "nao_aplicar"} onChange={v => NDE("art523_opcao", v)} />
                           {ndEdit.juros_tipo === "taxa_legal_406" && (
                             <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
                               <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
@@ -3816,6 +3822,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                     <Inp label="Honorários (%)" value={nd.honorarios_pct} onChange={v => ND("honorarios_pct", v)} type="number" />
                     <Inp label="Despesas (R$)" value={nd.despesas} onChange={v => ND("despesas", v)} type="number" />
                   </div>
+                  <Art523Option value={nd.art523_opcao || "nao_aplicar"} onChange={v => ND("art523_opcao", v)} />
                   {nd.juros_tipo === "taxa_legal_406" && (
                     <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
                       <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
@@ -5008,6 +5015,8 @@ function Calculadora({ devedores, credores = [] }) {
   // Encargos extras
   const [encargos, setEncargos] = useState("0");
   const [bonificacao, setBonificacao] = useState("0");
+  // Art. 523 §1º CPC
+  const [art523Opcao, setArt523Opcao] = useState("nao_aplicar");
   // Resultado
   const [resultado, setResultado] = useState(null);
   const [dividasSel, setDividasSel] = useState([]);
@@ -5043,6 +5052,7 @@ function Calculadora({ devedores, credores = [] }) {
     indexador, jurosTipo, jurosAM, multa, baseMulta,
     encargos, bonificacao,
     honorariosPct, incluirHonorarios,
+    art523Opcao,
     dividasSel, devId,
   ]);
 
@@ -5158,14 +5168,17 @@ function Calculadora({ devedores, credores = [] }) {
       const multaVal = baseParaMulta * (parseFloat(multa) || 0) / 100;
       const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
       const honorariosVal = subtotal * honPct / 100;
-      const total = subtotal + honorariosVal;
+      const subtotalComHon = subtotal + honorariosVal;
+      const art523Res = calcularArt523(subtotalComHon, art523Opcao);
+      const total = subtotalComHon + art523Res.total_art523;
       const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
         correcaoPeriodos: correcaoPeriodosSimples,
         juros, jurosPeriodos: jurosPeriodosSimples,
         multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
-        honorarios: honorariosVal, honPct, subtotal, total,
+        honorarios: honorariosVal, honPct, subtotal, subtotalComHon, total,
+        art523: art523Res,
         meses, dias, fatorCorrecao, linhasMes, jurosTipo,
         mesesDeflacao, mesesDeflacaoDetalhe,
         dividasDetalhe: [],
@@ -5275,7 +5288,9 @@ function Calculadora({ devedores, credores = [] }) {
 
     const totalPC = totalValorOriginal + totalCorrecao;
     const subtotal = totalPC + totalJuros + totalMulta + encargosVal - bonificacaoVal;
-    const total = subtotal + totalHonorarios;
+    const subtotalComHon = subtotal + totalHonorarios;
+    const art523Res = calcularArt523(subtotalComHon, art523Opcao);
+    const total = subtotalComHon + art523Res.total_art523;
     const mesesGlobal = dividasDetalhe.length > 0 ? Math.max(...dividasDetalhe.map(d => d.meses)) : 0;
 
     setResultado({
@@ -5285,7 +5300,8 @@ function Calculadora({ devedores, credores = [] }) {
       juros: totalJuros, multa: totalMulta,
       encargos: encargosVal, bonificacao: bonificacaoVal,
       honorarios: totalHonorarios, honPct,
-      subtotal, total,
+      subtotal, subtotalComHon, total,
+      art523: art523Res,
       meses: mesesGlobal, dias: 0,
       linhasMes: todasLinhas,
       dividasDetalhe,
@@ -5360,14 +5376,17 @@ function Calculadora({ devedores, credores = [] }) {
       const multaVal = baseParaMulta * (parseFloat(multa) || 0) / 100;
       const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
       const honorariosVal = subtotal * honPct / 100;
-      const total = subtotal + honorariosVal;
+      const subtotalComHon = subtotal + honorariosVal;
+      const art523Res = calcularArt523(subtotalComHon, art523Opcao);
+      const total = subtotalComHon + art523Res.total_art523;
       const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
         correcaoPeriodos: correcaoPeriodosSimples,
         juros, jurosPeriodos: jurosPeriodosSimples,
         multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
-        honorarios: honorariosVal, honPct, subtotal, total,
+        honorarios: honorariosVal, honPct, subtotal, subtotalComHon, total,
+        art523: art523Res,
         meses, dias, fatorCorrecao, linhasMes, jurosTipo,
         mesesDeflacao, mesesDeflacaoDetalhe,
         dividasDetalhe: [],
@@ -5477,7 +5496,9 @@ function Calculadora({ devedores, credores = [] }) {
 
     const totalPC = totalValorOriginal + totalCorrecao;
     const subtotal = totalPC + totalJuros + totalMulta + encargosVal - bonificacaoVal;
-    const total = subtotal + totalHonorarios;
+    const subtotalComHon = subtotal + totalHonorarios;
+    const art523Res = calcularArt523(subtotalComHon, art523Opcao);
+    const total = subtotalComHon + art523Res.total_art523;
     const mesesGlobal = dividasDetalhe.length > 0 ? Math.max(...dividasDetalhe.map(d => d.meses)) : 0;
 
     setResultado({
@@ -5487,7 +5508,8 @@ function Calculadora({ devedores, credores = [] }) {
       juros: totalJuros, multa: totalMulta,
       encargos: encargosVal, bonificacao: bonificacaoVal,
       honorarios: totalHonorarios, honPct,
-      subtotal, total,
+      subtotal, subtotalComHon, total,
+      art523: art523Res,
       meses: mesesGlobal, dias: 0,
       linhasMes: todasLinhas,
       dividasDetalhe,
@@ -5695,7 +5717,9 @@ function Calculadora({ devedores, credores = [] }) {
         ...(resultado.encargos > 0 ? [["Encargos", fmt(resultado.encargos)]] : []),
         ...(resultado.bonificacao > 0 ? [["Bonificação (-)", fmt(resultado.bonificacao)]] : []),
         ...(resultado.honorarios > 0 ? [["Honorários Advocatícios (" + honorariosPct + "%)", fmt(resultado.honorarios)]] : []),
-        ["TOTAL ATUALIZADO", fmt(resultado.total)],
+        ...(resultado.art523?.multa > 0 ? [["Art. 523 §1º CPC - Multa 10%", fmt(resultado.art523.multa)]] : []),
+        ...(resultado.art523?.honorarios_sucumbenciais > 0 ? [["Art. 523 §1º CPC - Honorários 10%", fmt(resultado.art523.honorarios_sucumbenciais)]] : []),
+        [resultado.art523?.total_art523 > 0 ? "TOTAL FINAL (c/ Art. 523 CPC)" : "TOTAL ATUALIZADO", fmt(resultado.total)],
       ];
       mem.forEach(([k, v], mi) => {
         const isTotal = mi === mem.length - 1;
@@ -5908,6 +5932,9 @@ function Calculadora({ devedores, credores = [] }) {
             {incluirHonorarios && valorOriginal && <p style={{ fontSize: 11, color: "#7c3aed", marginTop: 6 }}>≈ {fmt(parseFloat(valorOriginal || 0) * (parseFloat(honorariosPct) || 0) / 100)} estimado sobre o valor original</p>}
           </div>
 
+          {/* Art. 523 §1º CPC */}
+          <Art523Option value={art523Opcao} onChange={setArt523Opcao} />
+
           {/* Painel de última atualização dos índices */}
           <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
             <p style={{ fontSize: 10, fontWeight: 700, color: "#0369a1", marginBottom: 6, textTransform: "uppercase", letterSpacing: ".04em" }}>📅 Última Atualização dos Índices</p>
@@ -5979,8 +6006,27 @@ function Calculadora({ devedores, credores = [] }) {
                       <span style={{ fontSize: 12, fontWeight: 700, color: c }}>{fmt(v)}</span>
                     </div>
                   ))}
+                  {resultado.art523 && resultado.art523.total_art523 > 0 && (
+                    <>
+                      <div style={{ borderTop: "1px solid rgba(255,255,255,.15)", margin: "4px 0", paddingTop: 4 }}>
+                        <span style={{ fontSize: 10, color: "#fb923c", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>⚖️ Art. 523 §1º CPC</span>
+                      </div>
+                      {resultado.art523.multa > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 10px", background: "rgba(251,146,60,.12)", borderRadius: 8 }}>
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>Multa 10% (Art. 523)</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#fb923c" }}>{fmt(resultado.art523.multa)}</span>
+                        </div>
+                      )}
+                      {resultado.art523.honorarios_sucumbenciais > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 10px", background: "rgba(251,146,60,.12)", borderRadius: 8 }}>
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,.55)" }}>Honorários 10% (Art. 523)</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#fb923c" }}>{fmt(resultado.art523.honorarios_sucumbenciais)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                   <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", background: "rgba(255,255,255,.15)", borderRadius: 8, marginTop: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>TOTAL ATUALIZADO</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{resultado.art523?.total_art523 > 0 ? "TOTAL FINAL (c/ Art. 523)" : "TOTAL ATUALIZADO"}</span>
                     <span style={{ fontSize: 14, fontWeight: 800, color: "#a5f3fc" }}>{fmt(resultado.total)}</span>
                   </div>
                 </div>

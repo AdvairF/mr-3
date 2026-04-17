@@ -449,3 +449,25 @@ export function calcularFatorCorrecaoDetalhado(indexador, dataInicio, dataFim) {
   }
   return { fator, mesesConsiderados, mesesDeflacao: mesesDeflacaoDetalhe.length, mesesDeflacaoDetalhe };
 }
+
+// ─── Art. 523 §1º CPC — Multa + Honorários de Cumprimento de Sentença ────────
+// Aplica multa de 10% e/ou honorários de 10% sobre o valor total atualizado
+// quando o devedor não paga voluntariamente no prazo de 15 dias (Art. 523 CPC).
+//
+// opcao: 'multa_honorarios' | 'apenas_multa' | 'nao_aplicar'
+export function calcularArt523(valorBase, opcao) {
+  const resultado = {
+    multa: 0,
+    honorarios_sucumbenciais: 0,
+    total_art523: 0,
+    opcao: opcao || "nao_aplicar",
+  };
+  if (opcao === "multa_honorarios") {
+    resultado.multa = valorBase * 0.10;
+    resultado.honorarios_sucumbenciais = valorBase * 0.10;
+  } else if (opcao === "apenas_multa") {
+    resultado.multa = valorBase * 0.10;
+  }
+  resultado.total_art523 = resultado.multa + resultado.honorarios_sucumbenciais;
+  return resultado;
+}

@@ -3,11 +3,13 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import {
   calcularFatorCorrecao,
   calcularJurosAcumulados,
+  calcularArt523,
   INDICE_OPTIONS,
   IDX_LABEL,
   JUROS_OPTIONS,
   JUROS_LABEL,
 } from "../utils/correcao.js";
+import Art523Option from "./Art523Option.jsx";
 import { fmt, fmtDate } from "../utils/formatters.js";
 import { dbGet, dbInsert, dbDelete, dbUpdate } from "../config/supabase.js";
 
@@ -242,7 +244,15 @@ function useCalculo({ devedores, credores }) {
   const [regimeJuros, setRegimeJuros] = useState("composto");
   const [baseMulta, setBaseMulta] = useState("original");
   const [resultado, setResultado] = useState(null);
-  const [tipoPeticao, setTipoPeticao] = useState("cobranca");
+  const [tipoPeticao, setTipoPeticaoRaw] = useState("cobranca");
+  const [art523Opcao, setArt523Opcao] = useState("nao_aplicar");
+
+  function setTipoPeticao(t) {
+    setTipoPeticaoRaw(t);
+    // Cumprimento de sentença → pré-selecionar multa + honorários Art. 523
+    if (t === "cumprimento") setArt523Opcao("multa_honorarios");
+    else setArt523Opcao("nao_aplicar");
+  }
   const [nomeAdvogado, setNomeAdvogado] = useState("");
   const [oab, setOab] = useState("");
   const [ufAdv, setUfAdv] = useState("GO");
@@ -288,7 +298,9 @@ function useCalculo({ devedores, credores }) {
       const multaVal = PC * (parseFloat(multa) || 0) / 100;
       const sub = PC + jRes.juros + multaVal;
       const hon = sub * (parseFloat(honorariosPct) || 0) / 100;
-      const res = { valorOriginal: PV, correcao, principalCorrigido: PC, juros: jRes.juros, multa: multaVal, honorarios: hon, honPct: parseFloat(honorariosPct)||0, subtotal: sub, total: sub + hon, meses: jRes.meses, dividasDetalhe: [] };
+      const subtotalComHon = sub + hon;
+      const art523Res = calcularArt523(subtotalComHon, art523Opcao);
+      const res = { valorOriginal: PV, correcao, principalCorrigido: PC, juros: jRes.juros, multa: multaVal, honorarios: hon, honPct: parseFloat(honorariosPct)||0, subtotal: sub, subtotalComHon, total: subtotalComHon + art523Res.total_art523, art523: art523Res, meses: jRes.meses, dividasDetalhe: [] };
       setResultado(res);
       return res;
     }
@@ -323,14 +335,16 @@ function useCalculo({ devedores, credores }) {
 
     const totalPC   = totalVO + totalCorr;
     const subtotal  = totalPC + totalJuros + totalMulta;
-    const total     = subtotal + totalHon;
+    const subtotalComHon = subtotal + totalHon;
+    const art523Res = calcularArt523(subtotalComHon, art523Opcao);
+    const total     = subtotalComHon + art523Res.total_art523;
     const mesesGlobal = dividasDetalhe.length > 0 ? Math.max(...dividasDetalhe.map(d => d.meses)) : 0;
-    const res = { valorOriginal:totalVO, correcao:totalCorr, principalCorrigido:totalPC, juros:totalJuros, multa:totalMulta, honorarios:totalHon, honPct, subtotal, total, meses:mesesGlobal, dividasDetalhe };
+    const res = { valorOriginal:totalVO, correcao:totalCorr, principalCorrigido:totalPC, juros:totalJuros, multa:totalMulta, honorarios:totalHon, honPct, subtotal, subtotalComHon, total, art523: art523Res, meses:mesesGlobal, dividasDetalhe };
     setResultado(res);
     return res;
   }
 
-  const config = { indexador, jurosTipo, jurosAM, multa, honorariosPct, regimeJuros, baseMulta, nomeAdvogado, oab, uf: ufAdv, comarca, varaJuizo, cidade: cidadePeticao, descontoPct };
+  const config = { indexador, jurosTipo, jurosAM, multa, honorariosPct, regimeJuros, baseMulta, nomeAdvogado, oab, uf: ufAdv, comarca, varaJuizo, cidade: cidadePeticao, descontoPct, art523Opcao };
 
   return {
     devId, setDevId, devedor, credor, dividasDevedor, dividasSel, setDividasSel,
@@ -340,6 +354,7 @@ function useCalculo({ devedores, credores }) {
     tipoPeticao, setTipoPeticao, nomeAdvogado, setNomeAdvogado,
     oab, setOab, ufAdv, setUfAdv, comarca, setComarca,
     varaJuizo, setVaraJuizo, cidadePeticao, setCidadePeticao,
+    art523Opcao, setArt523Opcao,
     descontoPct, setDescontoPct, resultado, setResultado, calcular, config,
   };
 }
@@ -416,6 +431,7 @@ function PainelCalculo({ c, devedores }) {
               <option value="corrigido">Corrigido</option>
             </select></div>
         </div>
+        <Art523Option value={c.art523Opcao} onChange={v => { c.setArt523Opcao(v); c.setResultado(null); }} />
         <button onClick={c.calcular} disabled={!c.devId} style={{ ...S.btnPrimary, opacity: c.devId?1:0.5, cursor:c.devId?"pointer":"not-allowed" }}>
           🧮 Calcular Débito Atualizado
         </button>
@@ -837,14 +853,22 @@ function gerarTextoPeticao({ tipo, devedor, credor, resultado, config, dataCalcu
   const descDiv  = devedor?.descricao_divida || "contrato/título de crédito";
   const dataOri  = devedor?.data_origem_divida || devedor?.data_recebimento_carteira || "";
 
+  const art523Linha = resultado?.art523?.total_art523 > 0
+    ? `${resultado.art523.multa > 0 ? `\n  Art. 523 §1º CPC - Multa (10%):   ${fmtBRL(resultado.art523.multa)}` : ""}${resultado.art523.honorarios_sucumbenciais > 0 ? `\n  Art. 523 §1º CPC - Honor. (10%):  ${fmtBRL(resultado.art523.honorarios_sucumbenciais)}` : ""}`
+    : "";
+
   const bloco = `
   Principal:               ${valorOriginal}
   Correção (${idxLabel}, ${meses}m): ${valorCorrecao}
   Juros (${jurosLabel}): ${valorJuros}
   Multa (${config.multa||"2"}%):         ${valorMulta}
-  Honorários (${config.honorariosPct||"20"}%):  ${valorHon}
+  Honorários (${config.honorariosPct||"20"}%):  ${valorHon}${art523Linha}
   ─────────────────────────────────
   TOTAL:                   ${totalGeral}`;
+
+  const textoArt523 = resultado?.art523?.total_art523 > 0
+    ? `\nConsiderando o descumprimento voluntário no prazo do Art. 523 do CPC, aplica-se ao débito a multa de 10% (dez por cento)${resultado.art523.honorarios_sucumbenciais > 0 ? " e honorários advocatícios de 10% (dez por cento), totalizando acréscimo de 20% sobre o valor atualizado," : ","} conforme §1º do mesmo dispositivo.`
+    : "";
 
   if (tipo === "cobranca") return `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA ${juizo.toUpperCase()}
 COMARCA DE ${comarca.toUpperCase()} — ${uf.toUpperCase()}
@@ -908,6 +932,33 @@ III — PEDIDOS: a) Citação para pagar em 3 dias úteis ou nomear bens (art. 8
 
 Valor da execução: ${totalGeral}. Nestes termos, pede deferimento.
 ${cidade}, ${dataHoje}. ${nomeAdv} | OAB/${uf} nº ${oab}`;
+
+  if (tipo === "cumprimento") return `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA ${juizo.toUpperCase()}
+COMARCA DE ${comarca.toUpperCase()} — ${uf.toUpperCase()}
+
+${(credor?.nome||"EXEQUENTE").toUpperCase()}, ${qualCred}, por seu advogado ${nomeAdv}, OAB/${uf} nº ${oab}, vem, com fundamento no art. 523 do CPC, requerer o
+
+CUMPRIMENTO DE SENTENÇA
+
+em face de ${(devedor?.nome||"EXECUTADO").toUpperCase()}, ${qualDev}.
+
+I — DOS FATOS
+A presente execução decorre de título judicial consubstanciado em ${descDiv}. Intimado(a) para pagar no prazo de 15 (quinze) dias (art. 523 CPC), o(a) Executado(a) não efetuou o pagamento voluntário.
+
+II — DO DÉBITO EXEQUENDO (até ${fmtDataCurta(dataCalculo)})${bloco}
+${textoArt523}
+
+III — DOS PEDIDOS
+a) Expedição de mandado de penhora e avaliação de bens do(a) Executado(a);
+b) Inclusão da multa de 10% e honorários de 10% previstos no art. 523, §1º, CPC, pelo descumprimento voluntário;
+c) Condenação nas custas e demais despesas processuais.
+
+Valor da execução: ${totalGeral} (${extenso(resultado?.total||0)}).
+
+Nestes termos, pede deferimento.
+${cidade}, ${dataHoje}.
+
+${nomeAdv} | OAB/${uf} nº ${oab}`;
 
   if (tipo === "notificacao") return `NOTIFICAÇÃO EXTRAJUDICIAL
 
