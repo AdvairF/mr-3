@@ -6,8 +6,6 @@ import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
 import { STATUS_DEV } from "../utils/constants.js";
 import { calcularValorFace, calcularResumoFinanceiro, calcularDetalheEncargos } from "../utils/devedorCalc.js";
-import { calcularArt523 } from "../utils/correcao.js";
-import Art523Option from "./Art523Option.jsx";
 
 // ─── Status ativos para fila ──────────────────────────────────
 const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
@@ -567,11 +565,6 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
   const [salvando, setSalvando] = useState(false);
   const [proximando, setProximando] = useState(false);
   const [alterandoStatus, setAlterandoStatus] = useState(false);
-  const [art523Opcao, setArt523Opcao] = useState(() => {
-    const divs = devedorInicial?.dividas || [];
-    const opcao = divs.find(d => d.art523_opcao && d.art523_opcao !== "nao_aplicar")?.art523_opcao;
-    return opcao || "nao_aplicar";
-  });
 
   // Carregar eventos e pagamentos_parciais por devedor_id
   useEffect(() => {
@@ -695,8 +688,6 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
       {devedor && (() => {
         const hoje = new Date().toISOString().slice(0, 10);
         const det = calcularDetalheEncargos(devedor, pagamentos, hoje);
-        const art523Res = calcularArt523(det.saldoAtualizado, art523Opcao);
-        const totalComArt523 = det.saldoAtualizado + art523Res.total_art523;
         const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #f1f5f9" };
         const labelStyle = { color: "#64748b", fontSize: 12 };
         const valStyle = (cor) => ({ fontWeight: 600, color: cor, fontSize: 12 });
@@ -796,30 +787,24 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
               )}
             </div>
 
-            {/* Art. 523 §1º CPC */}
-            <div style={{ marginTop: 12 }}>
-              <Art523Option value={art523Opcao} onChange={setArt523Opcao} />
-              {art523Res.total_art523 > 0 && (
-                <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10, padding: "10px 14px", marginTop: -6 }}>
-                  {art523Res.multa > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                      <span style={{ color: "#9a3412" }}>Multa Art. 523 (10%)</span>
-                      <span style={{ fontWeight: 700, color: "#c2410c" }}>{fmtBRL(art523Res.multa)}</span>
-                    </div>
-                  )}
-                  {art523Res.honorarios_sucumbenciais > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                      <span style={{ color: "#9a3412" }}>Honorários Art. 523 (10%)</span>
-                      <span style={{ fontWeight: 700, color: "#c2410c" }}>{fmtBRL(art523Res.honorarios_sucumbenciais)}</span>
-                    </div>
-                  )}
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800, borderTop: "1px solid #fed7aa", marginTop: 6, paddingTop: 6 }}>
-                    <span style={{ color: "#7c2d12" }}>TOTAL FINAL (c/ Art. 523)</span>
-                    <span style={{ color: "#c2410c" }}>{fmtBRL(totalComArt523)}</span>
+            {/* Art. 523 §1º CPC — breakdown dos valores já incluídos no saldo */}
+            {det.art523 && det.art523.total > 0 && (
+              <div style={{ marginTop: 12, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10, padding: "10px 14px" }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#9a3412", marginBottom: 6 }}>⚖️ Art. 523 §1º CPC — incluído no saldo</p>
+                {det.art523.multa > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
+                    <span style={{ color: "#9a3412" }}>Multa Art. 523 (10%)</span>
+                    <span style={{ fontWeight: 700, color: "#c2410c" }}>{fmtBRL(det.art523.multa)}</span>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+                {det.art523.honorarios > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
+                    <span style={{ color: "#9a3412" }}>Honorários Art. 523 (10%)</span>
+                    <span style={{ fontWeight: 700, color: "#c2410c" }}>{fmtBRL(det.art523.honorarios)}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Dívidas cadastradas */}
             {det.detalhePorDivida.length > 0 && (

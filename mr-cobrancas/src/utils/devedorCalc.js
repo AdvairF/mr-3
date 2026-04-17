@@ -6,7 +6,7 @@
  * mesmo cálculo de correção monetária e juros).
  */
 
-import { calcularFatorCorrecao, calcularJurosAcumulados, calcularJurosArt406, calcularJurosArt406_12aa, calcularFatorCorrecao_INPC_IPCA } from "./correcao.js";
+import { calcularFatorCorrecao, calcularJurosAcumulados, calcularJurosArt406, calcularJurosArt406_12aa, calcularFatorCorrecao_INPC_IPCA, calcularArt523 } from "./correcao.js";
 
 /**
  * Parse seguro de devedor.dividas.
@@ -142,7 +142,9 @@ export function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
       saldo = pcFinal + jurosFinal + multaFinal + honorariosFinal;
     }
 
-    saldoTotal += Math.max(0, saldo);
+    const saldoDiv = Math.max(0, saldo);
+    const art523Div = calcularArt523(saldoDiv, div.art523_opcao || "nao_aplicar");
+    saldoTotal += saldoDiv + art523Div.total_art523;
   }
 
   return saldoTotal;
@@ -169,6 +171,8 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
   let totalHonorarios = 0;
   let totalCustasOriginal = 0;
   let totalCustasAtualizado = 0;
+  let totalArt523Multa = 0;
+  let totalArt523Honorarios = 0;
 
   const detalhePorDivida = [];
 
@@ -246,6 +250,9 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
     totalCustasAtualizado += custasAtualizadoDiv;
 
     const saldoTeoricoDivida = pv + correcaoValor + jurosValor + multaValor + honorariosValor + (custasAtualizadoDiv - custasOrigDiv);
+    const art523DivDet = calcularArt523(saldoTeoricoDivida, div.art523_opcao || "nao_aplicar");
+    totalArt523Multa += art523DivDet.multa;
+    totalArt523Honorarios += art523DivDet.honorarios_sucumbenciais;
 
     detalhePorDivida.push({
       descricao: div.descricao || `Dívida ${detalhePorDivida.length + 1}`,
@@ -262,7 +269,8 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
       multa: multaValor,
       honorarios: honorariosValor,
       custas: custasDiv.length > 0 ? { original: custasOrigDiv, atualizado: custasAtualizadoDiv } : null,
-      saldoTeorico: saldoTeoricoDivida,
+      art523: art523DivDet,
+      saldoTeorico: saldoTeoricoDivida + art523DivDet.total_art523,
       dataVencimento: div.data_vencimento || div.data_origem,
     });
   }
@@ -284,7 +292,7 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
   const valorOriginal = calcularValorFace(devedor);
   const saldoAtualizado = calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje);
   const totalPago = (pagamentos || []).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  const totalEncargos = totalMulta + totalJuros + totalCorrecao + totalHonorarios + (totalCustasAtualizado - totalCustasOriginal);
+  const totalEncargos = totalMulta + totalJuros + totalCorrecao + totalHonorarios + (totalCustasAtualizado - totalCustasOriginal) + totalArt523Multa + totalArt523Honorarios;
 
   const datasVencimento = parseDividas(devedor?.dividas)
     .map((d) => d.data_vencimento || d.data_origem)
@@ -302,6 +310,7 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
     correcao: { valor: totalCorrecao },
     honorarios: { valor: totalHonorarios },
     custas: { original: totalCustasOriginal, atualizado: totalCustasAtualizado },
+    art523: { multa: totalArt523Multa, honorarios: totalArt523Honorarios, total: totalArt523Multa + totalArt523Honorarios },
     totalEncargos,
     totalPago,
     saldoAtualizado,
