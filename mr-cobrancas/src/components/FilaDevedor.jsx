@@ -176,6 +176,7 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
   const [salvandoEvento, setSalvandoEvento] = useState(false);
   const [filtroAtendimento, setFiltroAtendimento] = useState("pendentes");
   const [totalEventosHoje, setTotalEventosHoje] = useState(0);
+  const [hoveredRow, setHoveredRow] = useState(null);
   const pollRef = useRef(null);
 
   const carregar = useCallback(async (silencioso = false) => {
@@ -374,11 +375,22 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
               </tr>
             </thead>
             <tbody>
-              {devedoresFiltrados.map(d => (
-                <tr key={d.id} style={{
-                  borderBottom: "1px solid #f1f5f9",
-                  background: d._em_atendimento ? "rgba(245,158,11,.06)" : d._bloqueado ? "rgba(239,68,68,.04)" : "#fff",
-                }}>
+              {devedoresFiltrados.map(d => {
+                const isHovered = hoveredRow === d.id;
+                const bgBase = d._em_atendimento ? "rgba(245,158,11,.06)" : d._bloqueado ? "rgba(239,68,68,.04)" : "#fff";
+                const bgHover = d._em_atendimento ? "rgba(245,158,11,.12)" : d._bloqueado ? "rgba(239,68,68,.08)" : "#f0f4ff";
+                return (
+                <tr key={d.id}
+                  onClick={() => onAbrirAtendimento(d)}
+                  onMouseEnter={() => setHoveredRow(d.id)}
+                  onMouseLeave={() => setHoveredRow(null)}
+                  style={{
+                    borderBottom: "1px solid #f1f5f9",
+                    background: isHovered ? bgHover : bgBase,
+                    cursor: "pointer",
+                    transition: "background .15s",
+                    borderLeft: isHovered ? "3px solid #f97316" : "3px solid transparent",
+                  }}>
                   <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                       <span>{d.nome}</span>
@@ -397,29 +409,32 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
                   <td style={{ ...td, textAlign: "center" }}>{d._dias_sem_contato !== null ? `${d._dias_sem_contato}d` : "—"}</td>
                   <td style={td}><PriorityBadge prioridade={d._prioridade} /></td>
                   <td style={td}>{d.telefone || "—"}</td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 4 }}>
+                  <td style={td} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                       {d.telefone && (
-                        <a href={`tel:${d.telefone}`} title="Ligar" style={{ textDecoration: "none" }}>
+                        <a href={`tel:${d.telefone}`} title="Ligar" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
                           <Btn sm outline>📞</Btn>
                         </a>
                       )}
                       {d.telefone && (
-                        <a href={`https://wa.me/55${d.telefone.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(d.nome)}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ textDecoration: "none" }}>
+                        <a href={`https://wa.me/55${d.telefone.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(d.nome)}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
                           <Btn sm outline>💬</Btn>
                         </a>
                       )}
                       {d.email && (
-                        <a href={`mailto:${d.email}`} title="Email" style={{ textDecoration: "none" }}>
+                        <a href={`mailto:${d.email}`} title="Email" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
                           <Btn sm outline>📧</Btn>
                         </a>
                       )}
-                      <Btn sm outline onClick={() => setModalEvento(d)} title="Registrar Evento">✏️</Btn>
-                      <Btn sm onClick={() => onAbrirAtendimento(d)} color="#f97316" title="Abrir atendimento">👁</Btn>
+                      <Btn sm outline onClick={e => { e.stopPropagation(); setModalEvento(d); }} title="Registrar Evento">✏️</Btn>
+                      {isHovered && (
+                        <span style={{ color: "#f97316", fontWeight: 700, fontSize: 14, marginLeft: 2 }}>›</span>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
