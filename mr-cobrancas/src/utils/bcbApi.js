@@ -51,7 +51,7 @@ function normalizarSerie(bcbData) {
 }
 
 // ─── Buscar todos os índices do BCB ──────────────────────────────────────────
-export async function buscarIndicesBCB(anos = 15) {
+export async function buscarIndicesBCB(anos = 31) {
   const fim = new Date();
   const inicio = new Date();
   inicio.setFullYear(inicio.getFullYear() - anos);
