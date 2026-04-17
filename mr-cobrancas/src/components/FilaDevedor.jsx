@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
-import { dbGet, dbInsert } from "../config/supabase.js";
+import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
 
 // ─── PriorityBadge ────────────────────────────────────────────
@@ -43,7 +43,7 @@ function statusLabel(s) {
 }
 
 // ─── TELA 1: FilaPainel (Supervisor) ─────────────────────────
-function FilaPainel({ operadorId, credores }) {
+function FilaPainel({ usuarioId, credores }) {
   const [itens, setItens] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
@@ -87,7 +87,7 @@ function FilaPainel({ operadorId, credores }) {
   async function handleRemoverSelecionados() {
     if (!selecionados.length) return;
     for (const id of selecionados) {
-      await filaDevedor.removerDaFila(id, "Remoção em massa pelo supervisor", operadorId);
+      await filaDevedor.removerDaFila(id, "Remoção em massa pelo supervisor", usuarioId);
     }
     toast.success(`${selecionados.length} item(s) removido(s)`);
     setSelecionados([]);
@@ -194,11 +194,28 @@ function FilaPainel({ operadorId, credores }) {
                   </td>
                   <td style={td}>{item.bloqueado_ate ? fmtData(item.bloqueado_ate) : "—"}</td>
                   <td style={td}>
-                    <Btn sm outline onClick={async () => {
-                      const r = await filaDevedor.removerDaFila(item.id, "Removido pelo supervisor", operadorId);
-                      if (r.success) { toast.success("Removido"); await carregar(); }
-                      else toast.error(r.error);
-                    }}>Remover</Btn>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {item.devedor?.telefone && (
+                        <a href={`tel:${item.devedor.telefone}`} title="Ligar" style={{ textDecoration: "none" }}>
+                          <Btn sm outline>📞</Btn>
+                        </a>
+                      )}
+                      {item.devedor?.telefone && (
+                        <a href={`https://wa.me/55${item.devedor.telefone.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(item.devedor?.nome || "")}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ textDecoration: "none" }}>
+                          <Btn sm outline>💬</Btn>
+                        </a>
+                      )}
+                      {item.devedor?.email && (
+                        <a href={`mailto:${item.devedor.email}`} title="Email" style={{ textDecoration: "none" }}>
+                          <Btn sm outline>📧</Btn>
+                        </a>
+                      )}
+                      <Btn sm danger onClick={async () => {
+                        const r = await filaDevedor.removerDaFila(item.id, "Removido pelo supervisor", usuarioId);
+                        if (r.success) { toast.success("Removido"); await carregar(); }
+                        else toast.error(r.error);
+                      }}>Remover</Btn>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -214,7 +231,7 @@ const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#6
 const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
 
 // ─── TELA 2: FilaOperador (Lobby) ────────────────────────────
-function FilaOperador({ operadorId, onIniciar }) {
+function FilaOperador({ usuarioId, onIniciar }) {
   const [contagem, setContagem] = useState(null);
   const [prioridadeAtual, setPrioridadeAtual] = useState(null);
   const [iniciando, setIniciando] = useState(false);
@@ -234,7 +251,7 @@ function FilaOperador({ operadorId, onIniciar }) {
 
   async function iniciar() {
     setIniciando(true);
-    const r = await filaDevedor.proximoDevedor(operadorId);
+    const r = await filaDevedor.proximoDevedor(usuarioId);
     if (!r.success) { toast.error("Erro: " + r.error); setIniciando(false); return; }
     if (!r.data) { toast("Fila vazia no momento.", { icon: "📭" }); setIniciando(false); return; }
     onIniciar(r.data);
@@ -281,7 +298,7 @@ const TIPOS_EVENTO = [
   { v: "RECADO", l: "Recado" },
 ];
 
-function FilaAtendimento({ operadorId, dadosIniciais, onProximo, onSair }) {
+function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
   const { fila, devedor, contrato, parcelas, eventos: evtsIniciais } = dadosIniciais;
   const [eventos, setEventos] = useState(evtsIniciais || []);
   const [eventoRegistrado, setEventoRegistrado] = useState(false);
@@ -314,7 +331,7 @@ function FilaAtendimento({ operadorId, dadosIniciais, onProximo, onSair }) {
       data_promessa: form.data_promessa || undefined,
       giro_carteira_dias: form.giro_carteira_dias ? Number(form.giro_carteira_dias) : undefined,
     };
-    const r = await filaDevedor.registrarEvento(contrato.id, operadorId, dados);
+    const r = await filaDevedor.registrarEvento(contrato.id, usuarioId, dados);
     if (r.success) {
       toast.success("Evento registrado!");
       setEventos(evs => [{ ...r.data, tipo_evento: form.tipo_evento, descricao: form.descricao, data_evento: new Date().toISOString() }, ...evs]);
@@ -329,7 +346,7 @@ function FilaAtendimento({ operadorId, dadosIniciais, onProximo, onSair }) {
 
   async function proximo() {
     setProximando(true);
-    const r = await filaDevedor.proximoDevedor(operadorId);
+    const r = await filaDevedor.proximoDevedor(usuarioId);
     if (!r.success) { toast.error("Erro: " + r.error); setProximando(false); return; }
     if (!r.data) { toast("Fila vazia.", { icon: "📭" }); onProximo(null); setProximando(false); return; }
     onProximo(r.data);
@@ -672,26 +689,8 @@ function FilaHistorico() {
 // ─── FilaDevedor (container principal) ───────────────────────
 export default function FilaDevedor({ user, devedores, credores }) {
   const [view, setView] = useState("painel");
-  const [operadorId, setOperadorId] = useState(null);
   const [atendimentoDados, setAtendimentoDados] = useState(null);
-
-  useEffect(() => {
-    async function resolverOperador() {
-      try {
-        const ops = await dbGet("operadores", `usuario_id=eq.${user.id}&ativo=eq.true`);
-        if (ops.length) {
-          setOperadorId(ops[0].id);
-        } else {
-          const op = await dbInsert("operadores", { usuario_id: user.id, ativo: true });
-          const criado = Array.isArray(op) ? op[0] : op;
-          setOperadorId(criado.id);
-        }
-      } catch (e) {
-        toast.error("Erro ao configurar operador: " + e.message);
-      }
-    }
-    resolverOperador();
-  }, [user.id]);
+  const usuarioId = user.id;
 
   function handleIniciar(dados) {
     setAtendimentoDados(dados);
@@ -705,17 +704,6 @@ export default function FilaDevedor({ user, devedores, credores }) {
       setAtendimentoDados(null);
       setView("operador");
     }
-  }
-
-  if (!operadorId) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 300 }}>
-        <div style={{ textAlign: "center", color: "#64748b" }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>⚙️</div>
-          <p style={{ fontSize: 14 }}>Configurando operador...</p>
-        </div>
-      </div>
-    );
   }
 
   const tabs = [
@@ -753,11 +741,11 @@ export default function FilaDevedor({ user, devedores, credores }) {
         </div>
       )}
 
-      {view === "painel" && <FilaPainel operadorId={operadorId} credores={credores} />}
-      {view === "operador" && <FilaOperador operadorId={operadorId} onIniciar={handleIniciar} />}
+      {view === "painel" && <FilaPainel usuarioId={usuarioId} credores={credores} />}
+      {view === "operador" && <FilaOperador usuarioId={usuarioId} onIniciar={handleIniciar} />}
       {view === "atendimento" && atendimentoDados && (
         <FilaAtendimento
-          operadorId={operadorId}
+          usuarioId={usuarioId}
           dadosIniciais={atendimentoDados}
           onProximo={handleProximo}
           onSair={() => { setView("operador"); setAtendimentoDados(null); }}

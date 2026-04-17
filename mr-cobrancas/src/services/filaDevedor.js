@@ -94,9 +94,9 @@ async function entrarNaFila() {
 }
 
 // ─── 3. proximoDevedor ────────────────────────────────────────
-async function proximoDevedor(operadorId, _tentativa = 1) {
+async function proximoDevedor(usuarioId, _tentativa = 1) {
   try {
-    validateUUID(operadorId, "operadorId");
+    validateBigInt(usuarioId, "usuarioId");
 
     const hoje = new Date().toISOString().slice(0, 10);
 
@@ -116,7 +116,7 @@ async function proximoDevedor(operadorId, _tentativa = 1) {
       "PATCH",
       {
         status_fila: "EM_ATENDIMENTO",
-        operador_id: operadorId,
+        usuario_id: Number(usuarioId),
         data_acionamento: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
@@ -153,16 +153,16 @@ async function proximoDevedor(operadorId, _tentativa = 1) {
 }
 
 // ─── 4. registrarEvento ───────────────────────────────────────
-async function registrarEvento(contratoId, operadorId, dadosEvento) {
+async function registrarEvento(contratoId, usuarioId, dadosEvento) {
   try {
     validateUUID(contratoId, "contratoId");
-    validateUUID(operadorId, "operadorId");
+    validateBigInt(usuarioId, "usuarioId");
 
     const { tipo_evento, descricao, telefone_usado, data_promessa, giro_carteira_dias } = dadosEvento;
 
     const eventoPayload = {
       contrato_id: contratoId,
-      operador_id: operadorId,
+      usuario_id: Number(usuarioId),
       tipo_evento,
       data_evento: new Date().toISOString(),
     };
@@ -295,7 +295,7 @@ async function reciclarContratos(filtros = {}, equipeId = null) {
 async function removerDaFila(filaId, motivo, usuarioId) {
   try {
     validateUUID(filaId, "filaId");
-    validateUUID(usuarioId, "usuarioId");
+    validateBigInt(usuarioId, "usuarioId");
 
     const resultado = await dbUpdate("fila_cobranca", filaId, {
       status_fila: "REMOVIDO",
@@ -308,7 +308,7 @@ async function removerDaFila(filaId, motivo, usuarioId) {
     if (contratoId) {
       await dbInsert("eventos_andamento", {
         contrato_id: contratoId,
-        operador_id: usuarioId,
+        usuario_id: Number(usuarioId),
         tipo_evento: "SEM_CONTATO",
         descricao: "Removido da fila: " + motivo,
         data_evento: new Date().toISOString(),
