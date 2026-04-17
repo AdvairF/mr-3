@@ -321,7 +321,43 @@ async function removerDaFila(filaId, motivo, usuarioId) {
   }
 }
 
-// ─── 7. atualizarValoresAtrasados ─────────────────────────────
+// ─── 7. listarFila ───────────────────────────────────────────
+async function listarFila(filtros = {}) {
+  try {
+    if (filtros.equipe_id !== undefined) validateUUID(filtros.equipe_id, "equipe_id");
+
+    let query = "select=*&order=score_prioridade.desc";
+    if (filtros.equipe_id) query += `&equipe_id=eq.${filtros.equipe_id}`;
+    if (filtros.prioridade) query += `&prioridade=eq.${filtros.prioridade}`;
+    if (filtros.status_fila) query += `&status_fila=eq.${filtros.status_fila}`;
+
+    const items = await dbGet("fila_cobranca", query);
+    if (!items.length) return { success: true, data: [], error: null };
+
+    const contratoIds = [...new Set(items.map((i) => i.contrato_id))];
+    const devedorIds = [...new Set(items.map((i) => i.devedor_id).filter(Boolean))];
+
+    const [contratos, devedores] = await Promise.all([
+      dbGet("contratos", `id=in.(${contratoIds.join(",")})`),
+      devedorIds.length > 0 ? dbGet("devedores", `id=in.(${devedorIds.join(",")})`) : Promise.resolve([]),
+    ]);
+
+    const contratoMap = Object.fromEntries(contratos.map((c) => [c.id, c]));
+    const devedorMap = Object.fromEntries(devedores.map((d) => [String(d.id), d]));
+
+    const enriched = items.map((item) => ({
+      ...item,
+      contrato: contratoMap[item.contrato_id] || null,
+      devedor: devedorMap[String(item.devedor_id)] || null,
+    }));
+
+    return { success: true, data: enriched, error: null };
+  } catch (err) {
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+// ─── 8. atualizarValoresAtrasados ─────────────────────────────
 async function atualizarValoresAtrasados() {
   try {
     const contratos = await dbGet(
@@ -362,5 +398,6 @@ export const filaDevedor = {
   registrarEvento,
   reciclarContratos,
   removerDaFila,
+  listarFila,
   atualizarValoresAtrasados,
 };

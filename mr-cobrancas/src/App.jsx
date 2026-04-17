@@ -44,6 +44,9 @@ import { BadgeDev, BadgeProc } from "./components/ui/Badge.jsx";
 // Módulo de Petições
 import GerarPeticao from "./components/GerarPeticao.jsx";
 
+// Módulo de Fila de Devedor
+import FilaDevedor from "./components/FilaDevedor.jsx";
+
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -202,6 +205,8 @@ const I = {
   plus2: <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>,
   // Petição — balança da justiça
   peticao: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18" /><path d="M3 6l4 8c0 1.1 0 2-1.5 2S4 14.1 4 13" /><path d="M3 6c0-1.1.9-2 2-2h2" /><path d="M21 6l-4 8c0 1.1 0 2 1.5 2s1.5-1.1 1.5-2" /><path d="M21 6c0-1.1-.9-2-2-2h-2" /><path d="M7 21h10" /></svg>,
+  // Fila de Cobrança — lista com bullet points
+  fila: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
 };
 // ═══════════════════════════════════════════════════════════════
 // useConfirm HOOK — modal de confirmação customizado
@@ -8159,6 +8164,7 @@ export default function App() {
     { id: "relatorios", label: "Relatórios", icon: I.rel, color: "#10b981", bg: "rgba(16,185,129,.18)" },
     { id: "lembretes", label: "Lembretes", icon: I.bell, color: "#ef4444", bg: "rgba(239,68,68,.18)" },
     { id: "regua", label: "Régua", icon: I.regua2, color: "#0891b2", bg: "rgba(8,145,178,.18)" },
+    { id: "fila", label: "Fila de Cobrança", icon: I.fila, color: "#f97316", bg: "rgba(249,115,22,.18)" },
     { id: "peticao", label: "Petições", icon: I.peticao, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
     ...(isAdmin ? [
       { id: "usuarios", label: "Usuários", icon: I.users2, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
@@ -8175,6 +8181,7 @@ export default function App() {
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;
       case "lembretes": return <Lembretes devedores={devedores} credores={credores} user={user} />;
       case "regua": return <Regua devedores={devedores} credores={credores} user={user} />;
+      case "fila": return <FilaDevedor user={user} devedores={devedores} credores={credores} />;
       case "peticao": return <GerarPeticao devedores={devedores} credores={credores} />;
       case "usuarios": return isAdmin ? <GestaoUsuarios user={user} /> : null;
       case "auditoria": return isAdmin ? <AuditoriaLog user={user} /> : null;
