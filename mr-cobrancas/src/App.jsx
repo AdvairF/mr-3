@@ -5821,7 +5821,8 @@ function Calculadora({ devedores, credores = [] }) {
             {indexador === "inpc_ipca" && (
               <div style={{ gridColumn: "span 2", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#065f46", lineHeight: 1.6 }}>
                 <strong>📊 Correção com regime temporal — Lei 14.905/2024:</strong><br />
-                • Até 29/08/2024: INPC acumulado &nbsp;•&nbsp; A partir de 30/08/2024: IPCA acumulado
+                • Até 29/08/2024: INPC acumulado &nbsp;•&nbsp; A partir de 30/08/2024: IPCA acumulado<br />
+                <span style={{ color: "#6b7280" }}>⚠️ Para espelhar a Tabela TJGO (INPC puro), selecione o indexador <strong>INPC</strong>.</span>
               </div>
             )}
             {/* Juros */}
@@ -5972,6 +5973,39 @@ function Calculadora({ devedores, credores = [] }) {
                 </div>
               </div>
 
+              {/* ── Fórmula de cálculo passo a passo ── */}
+              {resultado.fatorCorrecao && resultado.correcao > 0 && resultado.juros > 0 && (
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: "14px 16px" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>Fórmula de Cálculo</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                      <span style={{ color: "#94a3b8" }}>Valor original</span>
+                      <span style={{ fontWeight: 600 }}>{fmt(resultado.valorOriginal)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                      <span style={{ color: "#94a3b8" }}>× Fator {IDX_LABEL[indexador]}</span>
+                      <span style={{ fontWeight: 600 }}>{resultado.fatorCorrecao.toFixed(8)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0 3px", borderTop: "1px solid #e2e8f0", marginTop: 2 }}>
+                      <span style={{ fontWeight: 700, color: "#7c3aed" }}>= Principal corrigido</span>
+                      <span style={{ fontWeight: 700, color: "#7c3aed" }}>{fmt(resultado.principalCorrigido)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                      <span style={{ color: "#94a3b8" }}>× Taxa juros acumulada (sobre valor corrigido)</span>
+                      <span style={{ fontWeight: 600 }}>{(resultado.juros / resultado.principalCorrigido * 100).toFixed(4)}%</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0 3px", borderTop: "1px solid #e2e8f0", marginTop: 2 }}>
+                      <span style={{ fontWeight: 700, color: "#d97706" }}>= Juros de mora</span>
+                      <span style={{ fontWeight: 700, color: "#d97706" }}>{fmt(resultado.juros)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 10px", background: "#e0f2fe", borderRadius: 8, marginTop: 4 }}>
+                      <span style={{ fontWeight: 800, color: "#0369a1", fontSize: 12 }}>= TOTAL ATUALIZADO</span>
+                      <span style={{ fontWeight: 800, color: "#0369a1", fontSize: 13 }}>{fmt(resultado.total)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* ── Breakdown correção INPC→IPCA por regime ── */}
               {resultado.correcaoPeriodos && resultado.correcaoPeriodos.length > 0 && (
                 <div style={{ background: "#f0fdf4", borderRadius: 14, padding: "14px 16px", border: "1px solid #bbf7d0" }}>
@@ -5995,9 +6029,12 @@ function Calculadora({ devedores, credores = [] }) {
               {/* ── Breakdown juros Art. 406 CC por regime ── */}
               {resultado.jurosPeriodos && resultado.jurosPeriodos.length > 0 && (
                 <div style={{ background: "#f0f4ff", borderRadius: 14, padding: "14px 16px", border: "1px solid #c7d2fe" }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", marginBottom: 2, textTransform: "uppercase", letterSpacing: ".04em" }}>
                     {resultado.jurosTipo === "taxa_legal_406_12" ? "⚖️ Juros — Art. 406 CC (Regime Simplificado Lei 14.905/2024)" : "⚖️ Juros Legais — Art. 406 CC (STJ Tema 1368 + Lei 14.905/2024)"}
                   </p>
+                  {resultado.principalCorrigido != null && (
+                    <p style={{ fontSize: 10, color: "#6366f1", marginTop: 0, marginBottom: 8 }}>Base de cálculo: {fmt(resultado.principalCorrigido)} (valor corrigido)</p>
+                  )}
                   {resultado.jurosPeriodos.map((p, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "5px 8px", background: "rgba(99,102,241,.07)", borderRadius: 8, marginBottom: 4 }}>
                       <div>
@@ -6011,6 +6048,14 @@ function Calculadora({ devedores, credores = [] }) {
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#3730a3" }}>Total Juros</span>
                     <span style={{ fontSize: 12, fontWeight: 800, color: "#4f46e5" }}>{fmt(resultado.juros)}</span>
                   </div>
+                </div>
+              )}
+
+              {/* ── Compatibilidade TJGO ── */}
+              {indexador === "inpc" && jurosTipo === "taxa_legal_406_12" && resultado && (
+                <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13 }}>✅</span>
+                  <span style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>Configuração compatível com Tabela TJGO — INPC puro + 1% a.m. até jul/2024</span>
                 </div>
               )}
 
