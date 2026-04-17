@@ -1982,7 +1982,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
   if (dividas.length > 0) {
     y = checkPage(y, 25);
     y = cabecalhoSecao("3. DÍVIDAS — VALORES ATUALIZADOS EM " + new Date().toLocaleDateString("pt-BR"), y);
-    const idxMap = { igpm: "IGP-M", ipca: "IPCA", selic: "SELIC", inpc: "INPC", nenhum: "Sem correção" };
+    const idxMap = { igpm: "IGP-M", ipca: "IPCA", selic: "SELIC", inpc: "INPC", inpc_ipca: "IPCA (pós-30/08/24); antes INPC", nenhum: "Sem correção" };
     let totalGeralDiv = 0, totalGeralCorr = 0, totalGeralJuros = 0, totalGeralMulta = 0, totalGeralHon = 0;
 
     dividas.forEach((div, di) => {
@@ -5062,7 +5062,7 @@ function Calculadora({ devedores, credores = [] }) {
   }
 
   // Labels de índice
-  const IDX_LABEL = { igpm: "IGP-M", ipca: "IPCA", selic: "SELIC/CDI", inpc: "INPC", nenhum: "Sem correção" };
+  const IDX_LABEL = { igpm: "IGP-M", ipca: "IPCA", selic: "SELIC/CDI", inpc: "INPC", inpc_ipca: "IPCA (pós-30/08/24); antes INPC", nenhum: "Sem correção" };
 
   function loadDev(id) {
     setDevId(id); setDividasSel([]); setResultado(null);
@@ -5815,9 +5815,15 @@ function Calculadora({ devedores, credores = [] }) {
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Indexador</label>
               <select value={indexador} onChange={e => setIndexador(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", fontFamily: "Plus Jakarta Sans" }}>
-                {[["igpm", "IGP-M"], ["ipca", "IPCA"], ["selic", "SELIC/CDI"], ["inpc", "INPC"], ["nenhum", "Sem correção"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {INDICE_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
               </select>
             </div>
+            {indexador === "inpc_ipca" && (
+              <div style={{ gridColumn: "span 2", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#065f46", lineHeight: 1.6 }}>
+                <strong>📊 Correção com regime temporal — Lei 14.905/2024:</strong><br />
+                • Até 29/08/2024: INPC acumulado &nbsp;•&nbsp; A partir de 30/08/2024: IPCA acumulado
+              </div>
+            )}
             {/* Juros */}
             <div>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Taxa de Juros</label>
