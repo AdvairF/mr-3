@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-pg3: Piso zero todos os índices — deflação ignorada, 14 meses no caso teste
+Last activity: 2026-04-17 - Completed quick task 260417-r4s: Art. 523 §1º CPC — multa 10% + honorários 10% em Calculadora, Dívida, FilaDevedor, GerarPeticao
 
 ## Status
 
@@ -38,3 +38,6 @@ Last activity: 2026-04-17 - Completed quick task 260417-pg3: Piso zero todos os 
 | 260417-p4p | UI Calculadora: fórmula INPC→corrigido→juros, base de cálculo no painel juros, badge TJGO, aviso inpc_ipca | 2026-04-17 | aef74ee | Complete | — |
 | 260417-p3q | Fix INPC: dados BCB reais 2011-2026 (58 erros nos estáticos) + cap mês não publicado — fator 1.71025887 = TJGO exato | 2026-04-17 | 1bb57b0 | Complete | — |
 | 260417-pg3 | Piso zero todos os índices: deflação ignorada (Art. 406 §3º CC), 14 meses afetados no caso teste, painel visual + badge TJGO atualizado | 2026-04-17 | 761abe8 | Complete | — |
+| 260417-ph4 | Histórico BCB desde 1995: INPC 192 meses (1995-2010) + IGP-M 300 meses (1995-2019) + bcbApi 31 anos — fator 2004 alinhado TJGO | 2026-04-17 | dfcf2a5 | Complete | — |
+| 260417-qi5 | Fix cache bust v2 + botão Atualizar usa 31 anos (era hardcoded 10) — invalida cache v1 do browser, divergência 2,29→3,29 resolvida | 2026-04-17 | 500337c | Complete | — |
+| 260417-r4s | Art. 523 §1º CPC: componente reutilizável, calcularArt523(), Calculadora + Dívida edit + FilaDevedor + GerarPeticao, template cumprimento sentença | 2026-04-17 | 5e5fa25 | Complete | — |
