@@ -111,11 +111,11 @@ export function obterTaxaJurosMes(chaveMes, jurosTipo = "fixo_1", jurosAM = 1) {
   switch (jurosTipo) {
     case "taxa_legal_406": {
       // STJ Tema 1368 + Lei 14.905/2024
-      // Período 1 — CC/1916:  até jan/2003  → 0,5% a.m.
-      // Período 2 — Art. 406 CC/2002: fev/2003 a ago/2024 → 1% a.m.
-      // Período 3 — Lei 14.905/2024:  a partir set/2024 → max(0, SELIC - IPCA)
+      // Período 1 — CC/1916 Art. 1.063: até jan/2003  → 0,5% a.m.
+      // Período 2 — Art. 406 CC/2002 (STJ Tema 1368): fev/2003 a ago/2024 → SELIC
+      // Período 3 — Lei 14.905/2024: a partir set/2024 → max(0, SELIC - IPCA)
       if (chaveMes <= "2003-01") return 0.005;
-      if (chaveMes <= "2024-08") return 0.01;
+      if (chaveMes <= "2024-08") return getIndicesMerged().selic[chaveMes] ?? TAXA_MEDIA.selic;
       const selic = getIndicesMerged().selic[chaveMes] ?? TAXA_MEDIA.selic;
       const ipca  = (INDICES.ipca[chaveMes]) ?? TAXA_MEDIA.ipca;
       return Math.max(0, selic - ipca);
@@ -158,6 +158,90 @@ export function calcularJurosAcumulados({ principal = 0, dataInicio, dataFim, ju
     juros: regime === "simples" ? jurosSimples : principal * (fatorComposto - 1),
     meses,
   };
+}
+
+/**
+ * Calcula juros Art. 406 CC com breakdown por regime temporal (STJ Tema 1368 + Lei 14.905/2024).
+ * Retorna o total e um array de períodos com regime, datas, valor e taxa acumulada.
+ *
+ * @param {number} principal
+ * @param {string} dataInicio "YYYY-MM-DD"
+ * @param {string} dataFim    "YYYY-MM-DD"
+ * @returns {{ jurosTotal: number, periodos: Array }}
+ */
+export function calcularJurosArt406(principal, dataInicio, dataFim) {
+  if (!principal || !dataInicio || !dataFim || dataInicio >= dataFim) {
+    return { jurosTotal: 0, periodos: [] };
+  }
+
+  const CUT1 = "2003-02-01"; // início do período 2 (fev/2003)
+  const CUT2 = "2024-09-01"; // início do período 3 (set/2024)
+
+  const periodos = [];
+  let jurosTotal = 0;
+
+  // PERÍODO 1: CC/1916 Art. 1.063 — 0,5% a.m. (até jan/2003)
+  const fimP1 = dataFim < CUT1 ? dataFim : CUT1;
+  if (dataInicio < fimP1) {
+    const { juros, meses } = calcularJurosAcumulados({
+      principal, dataInicio, dataFim: fimP1,
+      jurosTipo: "taxa_legal_406", regime: "simples",
+    });
+    if (meses > 0) {
+      periodos.push({
+        regime: "0,5% a.m. (CC/1916 Art. 1.063)",
+        inicio: dataInicio,
+        fim: fimP1,
+        valor: juros,
+        meses,
+        taxaAcum: principal > 0 ? juros / principal : 0,
+      });
+      jurosTotal += juros;
+    }
+  }
+
+  // PERÍODO 2: Art. 406 CC/2002 — SELIC (STJ Tema 1368) — fev/2003 a ago/2024
+  const inicioP2 = dataInicio > CUT1 ? dataInicio : CUT1;
+  const fimP2 = dataFim < CUT2 ? dataFim : CUT2;
+  if (inicioP2 < fimP2) {
+    const { juros, meses } = calcularJurosAcumulados({
+      principal, dataInicio: inicioP2, dataFim: fimP2,
+      jurosTipo: "taxa_legal_406", regime: "simples",
+    });
+    if (meses > 0) {
+      periodos.push({
+        regime: "SELIC (STJ Tema 1368)",
+        inicio: inicioP2,
+        fim: fimP2,
+        valor: juros,
+        meses,
+        taxaAcum: principal > 0 ? juros / principal : 0,
+      });
+      jurosTotal += juros;
+    }
+  }
+
+  // PERÍODO 3: Lei 14.905/2024 — Taxa Legal (SELIC − IPCA, mín 0) — a partir set/2024
+  const inicioP3 = dataInicio > CUT2 ? dataInicio : CUT2;
+  if (inicioP3 < dataFim) {
+    const { juros, meses } = calcularJurosAcumulados({
+      principal, dataInicio: inicioP3, dataFim,
+      jurosTipo: "taxa_legal_406", regime: "simples",
+    });
+    if (meses > 0) {
+      periodos.push({
+        regime: "Taxa Legal (Lei 14.905/2024)",
+        inicio: inicioP3,
+        fim: dataFim,
+        valor: juros,
+        meses,
+        taxaAcum: principal > 0 ? juros / principal : 0,
+      });
+      jurosTotal += juros;
+    }
+  }
+
+  return { jurosTotal, periodos };
 }
 
 export function calcularFatorCorrecao(indexador, dataInicio, dataFim) {

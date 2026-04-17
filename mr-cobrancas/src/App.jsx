@@ -13,6 +13,7 @@ import { setAuditUser, logAudit } from "./utils/auditLog.js";
 import {
   calcularFatorCorrecao,
   calcularJurosAcumulados,
+  calcularJurosArt406,
   obterTaxaJurosMes,
   setIndicesOverride,
   INDICES,
@@ -5084,16 +5085,23 @@ function Calculadora({ devedores, credores = [] }) {
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
       const jurosAMNum = parseFloat(jurosAM) || 0;
-      const juros = (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0))
-        ? calcularJurosAcumulados({
-            principal: principalCorrigido,
-            dataInicio: dataIniStr || dataCalculo,
-            dataFim: dataCalculo,
-            jurosTipo,
-            jurosAM: jurosAMNum,
-            regime: "simples",
-          }).juros
-        : 0;
+      let juros = 0;
+      let jurosPeriodosSimples = null;
+      const _dataIniJuros = dataIniStr || dataCalculo;
+      if (jurosTipo === "taxa_legal_406" && _dataIniJuros < dataCalculo) {
+        const art406 = calcularJurosArt406(principalCorrigido, _dataIniJuros, dataCalculo);
+        juros = art406.jurosTotal;
+        jurosPeriodosSimples = art406.periodos;
+      } else if (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0)) {
+        juros = calcularJurosAcumulados({
+          principal: principalCorrigido,
+          dataInicio: _dataIniJuros,
+          dataFim: dataCalculo,
+          jurosTipo,
+          jurosAM: jurosAMNum,
+          regime: "simples",
+        }).juros;
+      }
       const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
       const multaVal = baseParaMulta * (parseFloat(multa) || 0) / 100;
       const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
@@ -5102,7 +5110,8 @@ function Calculadora({ devedores, credores = [] }) {
       const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
-        juros, multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
+        juros, jurosPeriodos: jurosPeriodosSimples,
+        multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
         meses, dias, fatorCorrecao, linhasMes, jurosTipo,
         dividasDetalhe: [],
@@ -5139,16 +5148,22 @@ function Calculadora({ devedores, credores = [] }) {
       const pcDiv = PV + corrDiv;
 
       // Juros usando taxa da dívida
-      const jurosDiv = (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0))
-        ? calcularJurosAcumulados({
-            principal: pcDiv,
-            dataInicio: dataIni,
-            dataFim: dataCalculo,
-            jurosTipo: jTipo,
-            jurosAM: jAM,
-            regime: "simples",
-          }).juros
-        : 0;
+      let jurosDiv = 0;
+      let jurosPeriodosDiv = null;
+      if (jTipo === "taxa_legal_406" && dataIni < dataCalculo) {
+        const art406Div = calcularJurosArt406(pcDiv, dataIni, dataCalculo);
+        jurosDiv = art406Div.jurosTotal;
+        jurosPeriodosDiv = art406Div.periodos;
+      } else if (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0)) {
+        jurosDiv = calcularJurosAcumulados({
+          principal: pcDiv,
+          dataInicio: dataIni,
+          dataFim: dataCalculo,
+          jurosTipo: jTipo,
+          jurosAM: jAM,
+          regime: "simples",
+        }).juros;
+      }
 
       // Multa usando % da dívida
       const baseM = baseMulta === "corrigido" ? pcDiv : PV;
@@ -5175,9 +5190,10 @@ function Calculadora({ devedores, credores = [] }) {
         descricao: div.descricao || "Dívida",
         dataIni, meses, dias,
         valor: PV, correcao: corrDiv, principalCorrigido: pcDiv,
-        juros: jurosDiv, multa: multaDiv, honorarios: honDiv,
+        juros: jurosDiv, jurosPeriodos: jurosPeriodosDiv,
+        multa: multaDiv, honorarios: honDiv,
         total: pcDiv + jurosDiv + multaDiv + honDiv,
-        indexador: idxDiv, jurosAM: jAM, multaPct: mPct,
+        indexador: idxDiv, jurosAM: jAM, multaPct: mPct, jurosTipo: jTipo,
       });
     }
 
@@ -5240,16 +5256,23 @@ function Calculadora({ devedores, credores = [] }) {
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
       const jurosAMNum = parseFloat(jurosAM) || 0;
-      const juros = (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0))
-        ? calcularJurosAcumulados({
-            principal: principalCorrigido,
-            dataInicio: dataIniStr || dataCalculo,
-            dataFim: dataCalculo,
-            jurosTipo,
-            jurosAM: jurosAMNum,
-            regime: "simples",
-          }).juros
-        : 0;
+      let juros = 0;
+      let jurosPeriodosSimples = null;
+      const _dataIniJuros = dataIniStr || dataCalculo;
+      if (jurosTipo === "taxa_legal_406" && _dataIniJuros < dataCalculo) {
+        const art406 = calcularJurosArt406(principalCorrigido, _dataIniJuros, dataCalculo);
+        juros = art406.jurosTotal;
+        jurosPeriodosSimples = art406.periodos;
+      } else if (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0)) {
+        juros = calcularJurosAcumulados({
+          principal: principalCorrigido,
+          dataInicio: _dataIniJuros,
+          dataFim: dataCalculo,
+          jurosTipo,
+          jurosAM: jurosAMNum,
+          regime: "simples",
+        }).juros;
+      }
       const baseParaMulta = baseMulta === "corrigido" ? principalCorrigido : PV;
       const multaVal = baseParaMulta * (parseFloat(multa) || 0) / 100;
       const subtotal = principalCorrigido + juros + multaVal + encargosVal - bonificacaoVal;
@@ -5258,7 +5281,8 @@ function Calculadora({ devedores, credores = [] }) {
       const linhasMes = [];
       return setResultado({
         valorOriginal: PV, correcao, principalCorrigido,
-        juros, multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
+        juros, jurosPeriodos: jurosPeriodosSimples,
+        multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
         meses, dias, fatorCorrecao, linhasMes, jurosTipo,
         dividasDetalhe: [],
@@ -5295,16 +5319,22 @@ function Calculadora({ devedores, credores = [] }) {
       const pcDiv = PV + corrDiv;
 
       // Juros usando taxa da dívida
-      const jurosDiv = (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0))
-        ? calcularJurosAcumulados({
-            principal: pcDiv,
-            dataInicio: dataIni,
-            dataFim: dataCalculo,
-            jurosTipo: jTipo,
-            jurosAM: jAM,
-            regime: "simples",
-          }).juros
-        : 0;
+      let jurosDiv = 0;
+      let jurosPeriodosDiv = null;
+      if (jTipo === "taxa_legal_406" && dataIni < dataCalculo) {
+        const art406Div = calcularJurosArt406(pcDiv, dataIni, dataCalculo);
+        jurosDiv = art406Div.jurosTotal;
+        jurosPeriodosDiv = art406Div.periodos;
+      } else if (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0)) {
+        jurosDiv = calcularJurosAcumulados({
+          principal: pcDiv,
+          dataInicio: dataIni,
+          dataFim: dataCalculo,
+          jurosTipo: jTipo,
+          jurosAM: jAM,
+          regime: "simples",
+        }).juros;
+      }
 
       // Multa usando % da dívida
       const baseM = baseMulta === "corrigido" ? pcDiv : PV;
@@ -5331,9 +5361,10 @@ function Calculadora({ devedores, credores = [] }) {
         descricao: div.descricao || "Dívida",
         dataIni, meses, dias,
         valor: PV, correcao: corrDiv, principalCorrigido: pcDiv,
-        juros: jurosDiv, multa: multaDiv, honorarios: honDiv,
+        juros: jurosDiv, jurosPeriodos: jurosPeriodosDiv,
+        multa: multaDiv, honorarios: honDiv,
         total: pcDiv + jurosDiv + multaDiv + honDiv,
-        indexador: idxDiv, jurosAM: jAM, multaPct: mPct,
+        indexador: idxDiv, jurosAM: jAM, multaPct: mPct, jurosTipo: jTipo,
       });
     }
 
@@ -5827,7 +5858,7 @@ function Calculadora({ devedores, credores = [] }) {
                     ["Valor Original", resultado.valorOriginal, "#94a3b8"],
                     ...(resultado.correcao > 0 ? [["Correção (" + IDX_LABEL[indexador] + ")", resultado.correcao, "#818cf8"]] : []),
                     ...(resultado.correcao > 0 ? [["Principal Corrigido", resultado.principalCorrigido, "#c4b5fd"]] : []),
-                    ...(resultado.juros > 0 ? [["Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"]] : []),
+                    ...(resultado.juros > 0 ? [[resultado.jurosTipo === "taxa_legal_406" ? "Juros (Art. 406 CC — STJ Tema 1368)" : "Juros (" + jurosAM + "%am simples)", resultado.juros, "#fbbf24"]] : []),
                     ...(resultado.multa > 0 ? [["Multa (" + multa + "% s/ " + (baseMulta === "corrigido" ? "corrigido" : "original") + ")", resultado.multa, "#f87171"]] : []),
                     ...(resultado.encargos > 0 ? [["Encargos", resultado.encargos, "#f97316"]] : []),
                     ...(resultado.bonificacao > 0 ? [["Bonificação (-)", resultado.bonificacao, "#34d399"]] : []),
@@ -5844,6 +5875,26 @@ function Calculadora({ devedores, credores = [] }) {
                   </div>
                 </div>
               </div>
+
+              {/* ── Breakdown juros Art. 406 CC por regime ── */}
+              {resultado.jurosPeriodos && resultado.jurosPeriodos.length > 0 && (
+                <div style={{ background: "#f0f4ff", borderRadius: 14, padding: "14px 16px", border: "1px solid #c7d2fe" }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#4f46e5", marginBottom: 8, textTransform: "uppercase", letterSpacing: ".04em" }}>⚖️ Juros Legais — Art. 406 CC (STJ Tema 1368 + Lei 14.905/2024)</p>
+                  {resultado.jurosPeriodos.map((p, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "5px 8px", background: "rgba(99,102,241,.07)", borderRadius: 8, marginBottom: 4 }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#3730a3", display: "block" }}>{i < resultado.jurosPeriodos.length - 1 ? "├" : "└"} {p.regime}</span>
+                        <span style={{ fontSize: 10, color: "#6366f1" }}>{p.meses} meses · taxa acum. {(p.taxaAcum * 100).toFixed(4)}%</span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#4f46e5", whiteSpace: "nowrap", marginLeft: 8 }}>{fmt(p.valor)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderTop: "1px solid #c7d2fe", marginTop: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#3730a3" }}>Total Juros</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "#4f46e5" }}>{fmt(resultado.juros)}</span>
+                  </div>
+                </div>
+              )}
 
               {/* ── PLANILHA estilo imagem: Prestação por linha ── */}
               {(() => {

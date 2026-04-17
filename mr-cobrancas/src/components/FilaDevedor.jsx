@@ -805,10 +805,23 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
                           {div.dataVencimento && <span>Venc: {fmtData(div.dataVencimento)}</span>}
                           {diasAtraso !== null && <span style={{ color: diasAtraso > 90 ? "#dc2626" : "#f59e0b" }}>{diasAtraso}d atraso</span>}
                           {div.indexador && div.indexador !== "nenhum" && <span>Idx: {div.indexador.toUpperCase()}</span>}
-                          {div.jurosAM > 0 && <span>Juros: {div.jurosAM}% a.m.</span>}
+                          {div.jurosTipo === "taxa_legal_406"
+                            ? <span style={{ color: "#6366f1", fontWeight: 600 }}>Juros: Art. 406 CC</span>
+                            : div.jurosAM > 0 && <span>Juros: {div.jurosAM}% a.m.</span>}
                           {div.multaPct > 0 && <span>Multa: {div.multaPct}%</span>}
                           {div.honorariosPct > 0 && <span>Honor: {div.honorariosPct}%</span>}
                         </div>
+                        {div.jurosPeriodos && div.jurosPeriodos.length > 0 && (
+                          <div style={{ background: "#f0f4ff", borderRadius: 6, padding: "4px 8px", marginBottom: 4, fontSize: 10 }}>
+                            <span style={{ fontWeight: 700, color: "#6366f1", display: "block", marginBottom: 2 }}>Juros Legais (Art. 406 CC) — {fmtBRL(div.juros)}</span>
+                            {div.jurosPeriodos.map((p, pi) => (
+                              <div key={pi} style={{ color: "#475569", display: "flex", justifyContent: "space-between" }}>
+                                <span>├ {p.regime} ({p.meses}m — {(p.taxaAcum * 100).toFixed(2)}%)</span>
+                                <span style={{ fontWeight: 600, color: "#6366f1" }}>{fmtBRL(p.valor)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {div.custas && (
                           <div style={{ color: "#6366f1", fontSize: 10, marginBottom: 2 }}>
                             └ Custas: {fmtBRL(div.custas.original)} → Atualizado: {fmtBRL(div.custas.atualizado)}

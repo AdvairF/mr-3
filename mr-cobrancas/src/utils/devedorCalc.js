@@ -6,7 +6,7 @@
  * mesmo cálculo de correção monetária e juros).
  */
 
-import { calcularFatorCorrecao, calcularJurosAcumulados } from "./correcao.js";
+import { calcularFatorCorrecao, calcularJurosAcumulados, calcularJurosArt406 } from "./correcao.js";
 
 /**
  * Parse seguro de devedor.dividas.
@@ -185,21 +185,28 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
     let jurosValor = 0;
     let multaValor = 0;
     let honorariosValor = 0;
+    let jurosPeriodos = null;
 
     if (dataInicio && dataInicio < hoje) {
       const fator = calcularFatorCorrecao(indexador, dataInicio, hoje);
       correcaoValor = pv * (fator - 1);
       const pcSaldo = pv + correcaoValor;
 
-      const { juros } = calcularJurosAcumulados({
-        principal: pcSaldo,
-        dataInicio,
-        dataFim: hoje,
-        jurosTipo,
-        jurosAM,
-        regime: "simples",
-      });
-      jurosValor = juros;
+      if (jurosTipo === "taxa_legal_406") {
+        const art406 = calcularJurosArt406(pcSaldo, dataInicio, hoje);
+        jurosValor = art406.jurosTotal;
+        jurosPeriodos = art406.periodos;
+      } else {
+        const { juros } = calcularJurosAcumulados({
+          principal: pcSaldo,
+          dataInicio,
+          dataFim: hoje,
+          jurosTipo,
+          jurosAM,
+          regime: "simples",
+        });
+        jurosValor = juros;
+      }
       multaValor = pcSaldo * (multaPct / 100);
       honorariosValor = (pcSaldo + jurosValor + multaValor) * (honorariosPct / 100);
     }
@@ -232,11 +239,13 @@ export function calcularDetalheEncargos(devedor, pagamentos, hoje) {
       descricao: div.descricao || `Dívida ${detalhePorDivida.length + 1}`,
       valorOriginal: pv,
       indexador,
+      jurosTipo,
       multaPct,
       jurosAM,
       honorariosPct,
       correcao: correcaoValor,
       juros: jurosValor,
+      jurosPeriodos,
       multa: multaValor,
       honorarios: honorariosValor,
       custas: custasDiv.length > 0 ? { original: custasOrigDiv, atualizado: custasAtualizadoDiv } : null,
