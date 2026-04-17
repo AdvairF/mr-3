@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-16 - Completed quick task 260416-oez: Dashboard filtro período + cards e tabela de recebimentos
+Last activity: 2026-04-17 - Completed quick task 260417-cym: Testar conexao MCP Supabase + executar schema DDL Kanban (6 tabelas)
 
 ## Status
 
@@ -18,3 +18,5 @@ Last activity: 2026-04-16 - Completed quick task 260416-oez: Dashboard filtro pe
 | 260416-q9w | Substituir coluna Acordos por dias Atraso no painel devedores — badge 5 tiers + sort | 2026-04-16 | fb1a927 | Needs Review | [260416-q9w-substituir-acordos-por-dias-atraso](./quick/260416-q9w-substituir-acordos-por-dias-atraso/) |
 | 260416-nrx | Modal perfil + alterar senha — clicar avatar sidebar abre modal com dados e troca de senha | 2026-04-16 | 0774bb6 | Complete | [260416-nrx-pagina-perfil-alterar-senha](./quick/260416-nrx-pagina-perfil-alterar-senha/) |
 | 260416-oez | Dashboard filtro período + 3 cards recebimentos + tabela últimos pagamentos | 2026-04-16 | 1109629 | Complete | [260416-oez-dashboard-filtro-periodo-recebimentos](./quick/260416-oez-dashboard-filtro-periodo-recebimentos/) |
+| 260416-rdb | Corrigir dashboard: Recuperado R$0, filtro período, cards clicáveis | 2026-04-16 | bc4e6bd | Complete | [260416-rdb-corrigir-dashboard-recebimentos-filtros](./quick/260416-rdb-corrigir-dashboard-recebimentos-filtros/) |
+| 260417-cym | Testar conexao MCP Supabase + schema DDL Kanban: 6 tabelas, RLS, 20 indexes, 7 seed rows | 2026-04-17 | — | Complete | [260417-cym-testar-conexao-mcp-supabase-e-executar-s](./quick/260417-cym-testar-conexao-mcp-supabase-e-executar-s/) |
