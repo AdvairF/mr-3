@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-i3m: Valor dívida real + devedorCalc.js + resumo financeiro completo na tela de atendimento
+Last activity: 2026-04-17 - Completed quick task 260417-p4p: UI Calculadora — fórmula INPC→corrigido→juros, badge TJGO, aviso inpc_ipca
 
 ## Status
 
@@ -29,3 +29,10 @@ Last activity: 2026-04-17 - Completed quick task 260417-i3m: Valor dívida real 
 | 260417-g7k | Fix FK usuario_id: drop constraints eventos_andamento+fila_cobranca, extractUsuario helper, usuario_nome/email text | 2026-04-17 | fc8649a | Complete | [260417-g7k-fix-fk-usuario-eventos-andamento](./quick/260417-g7k-fix-fk-usuario-eventos-andamento/) |
 | 260417-h5p | Filtro atendimentos (4 tabs), AtendimentoBadge, UltimoAtendimentoCell, valor_total, counters, Dias s/ contato | 2026-04-17 | 2c07d1c | Complete | [260417-h5p-filtro-atendimentos-valor-divida-fila](./quick/260417-h5p-filtro-atendimentos-valor-divida-fila/) |
 | 260417-i3m | Valor dívida real (devedorCalc.js), DividaCell, CredorCell, FilaAtendimento resumo financeiro completo | 2026-04-17 | 3932c0a | Complete | [260417-i3m-valor-divida-real-fila-resumo-financeiro](./quick/260417-i3m-valor-divida-real-fila-resumo-financeiro/) |
+| 260417-j4n | Detalhar encargos atendimento: calcularDetalheEncargos, breakdown multa/juros/correção/honorários/custas por dívida | 2026-04-17 | ad8661c | Complete | — |
+| 260417-k2p | Taxa Legal Art. 406 CC: regime temporal STJ Tema 1368 em correcao.js, info box formulário, dropdown calculadora | 2026-04-17 | a04ab3a | Complete | — |
+| 260417-l5r | Juros Art. 406 CC precisos: SELIC período 2 (bug fix), calcularJurosArt406 com 3 regimes, breakdown Calculadora e FilaAtendimento | 2026-04-17 | d1e95af | Complete | — |
+| 260417-m3s | Opções simplificadas: taxa_legal_406_12 (12%→TL) e inpc_ipca (INPC→IPCA) com breakdowns, info boxes e painéis na Calculadora | 2026-04-17 | c13e90f | Complete | — |
+| 260417-n7q | Fix: dropdown indexador Calculadora usa INDICE_OPTIONS (era hardcoded, faltava inpc_ipca); IDX_LABEL e idxMap corrigidos | 2026-04-17 | 5a06cdb | Complete | — |
+| 260417-o4p | Alinhar cálculo TJGO: taxa_legal_406_12 CUT → ago/2024 (jul é último 1%); BCB 15 anos; juros 119.90% vs TJGO 119.71% | 2026-04-17 | e25d1df | Complete | — |
+| 260417-p4p | UI Calculadora: fórmula INPC→corrigido→juros, base de cálculo no painel juros, badge TJGO, aviso inpc_ipca | 2026-04-17 | aef74ee | Complete | — |
