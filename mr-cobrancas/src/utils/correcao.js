@@ -99,7 +99,7 @@ export const IDX_LABEL = Object.fromEntries(INDICE_OPTIONS.map(({ v, l }) => [v,
 
 export const JUROS_OPTIONS = [
   { v:"taxa_legal_406", l:"Taxa Legal (Art. 406 CC) — STJ Tema 1368" },
-  { v:"taxa_legal_406_12", l:"Taxa Legal/art.406 CC: a partir de 30/08/24; antes 12%" },
+  { v:"taxa_legal_406_12", l:"Taxa Legal/art.406 CC: a partir de ago/2024; antes 1% a.m." },
   { v:"legal_classico", l:"0,5% a.m. até 01/2003 e 1% a.m. após" },
   { v:"fixo_05", l:"0,5% a.m. (6% a.a.)" },
   { v:"fixo_1", l:"1% a.m. (12% a.a.)" },
@@ -124,9 +124,9 @@ export function obterTaxaJurosMes(chaveMes, jurosTipo = "fixo_1", jurosAM = 1) {
     }
     case "taxa_legal_406_12": {
       // Lei 14.905/2024 — regime simplificado (2 períodos):
-      // Período 1: até ago/2024 → 1% a.m. (12% a.a.)
-      // Período 2: a partir set/2024 → max(0, SELIC - IPCA)
-      if (chaveMes <= "2024-08") return 0.01;
+      // Período 1: até jul/2024 → 1% a.m. (12% a.a.)  [TJGO: "1% a.m. até 07/2024"]
+      // Período 2: a partir ago/2024 → max(0, SELIC - IPCA)
+      if (chaveMes <= "2024-07") return 0.01;
       const selicTL = getIndicesMerged().selic[chaveMes] ?? TAXA_MEDIA.selic;
       const ipcaTL  = (INDICES.ipca[chaveMes]) ?? TAXA_MEDIA.ipca;
       return Math.max(0, selicTL - ipcaTL);
@@ -257,19 +257,19 @@ export function calcularJurosArt406(principal, dataInicio, dataFim) {
 
 /**
  * Calcula juros Art. 406 CC com regime simplificado (Lei 14.905/2024) — 2 períodos:
- * Período 1: até ago/2024 → 1% a.m. (12% a.a.)
- * Período 2: a partir set/2024 → Taxa Legal (SELIC − IPCA, mín 0)
+ * Período 1: até jul/2024 → 1% a.m. (12% a.a.)  [TJGO: "1% a.m. até 07/2024"]
+ * Período 2: a partir ago/2024 → Taxa Legal (SELIC − IPCA, mín 0)
  */
 export function calcularJurosArt406_12aa(principal, dataInicio, dataFim) {
   if (!principal || !dataInicio || !dataFim || dataInicio >= dataFim) {
     return { jurosTotal: 0, periodos: [] };
   }
 
-  const CUT = "2024-09-01"; // início do período 2 (set/2024)
+  const CUT = "2024-08-01"; // início do período 2 (ago/2024) — TJGO: "1% a.m. até 07/2024"
   const periodos = [];
   let jurosTotal = 0;
 
-  // PERÍODO 1: 1% a.m. até ago/2024
+  // PERÍODO 1: 1% a.m. até jul/2024
   const fimP1 = dataFim < CUT ? dataFim : CUT;
   if (dataInicio < fimP1) {
     const { juros, meses } = calcularJurosAcumulados({
@@ -278,7 +278,7 @@ export function calcularJurosArt406_12aa(principal, dataInicio, dataFim) {
     });
     if (meses > 0) {
       periodos.push({
-        regime: "1% a.m. (12% a.a.)",
+        regime: "1% a.m. (até jul/2024)",
         inicio: dataInicio,
         fim: fimP1,
         valor: juros,

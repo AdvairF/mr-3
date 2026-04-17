@@ -3742,8 +3742,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                           {ndEdit.juros_tipo === "taxa_legal_406_12" && (
                             <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
                               <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
-                              • Até 29/08/2024: 1% a.m. (12% a.a.)<br />
-                              • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
+                              • Até jul/2024: 1% a.m. (12% a.a.)<br />
+                              • A partir de ago/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
                               Base: Art. 406 CC com redação dada pela Lei nº 14.905/2024.
                             </div>
                           )}
@@ -3827,8 +3827,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   {nd.juros_tipo === "taxa_legal_406_12" && (
                     <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
                       <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
-                      • Até 29/08/2024: 1% a.m. (12% a.a.)<br />
-                      • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
+                      • Até jul/2024: 1% a.m. (12% a.a.)<br />
+                      • A partir de ago/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
                       Base: Art. 406 CC com redação dada pela Lei nº 14.905/2024.
                     </div>
                   )}
@@ -5847,7 +5847,7 @@ function Calculadora({ devedores, credores = [] }) {
           {jurosTipo === "taxa_legal_406_12" && (
             <div style={{ marginBottom: 10, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
               <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
-              • Até 29/08/2024: 1% a.m. (12% a.a.) &nbsp;•&nbsp; A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º
+              • Até jul/2024: 1% a.m. (12% a.a.) &nbsp;•&nbsp; A partir de ago/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º
             </div>
           )}
 
