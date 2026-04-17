@@ -52,9 +52,25 @@ const SCORE_STATUS = {
   em_negociacao: 40,
 };
 
+function parseDividasSvc(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
+  }
+  return [];
+}
+
 function calcularValorFaceDevedor(devedor) {
-  const soma = (devedor.dividas || []).reduce((s, d) => s + (Number(d.valor_total) || 0), 0);
-  return soma || Number(devedor.valor_original) || Number(devedor.valor_nominal) || 0;
+  const dividas = parseDividasSvc(devedor.dividas);
+  if (dividas.length > 0) {
+    const soma = dividas.reduce((s, d) => {
+      const v = parseFloat(d?.valor_total ?? d?.valor_original ?? 0);
+      return s + (isNaN(v) ? 0 : v);
+    }, 0);
+    if (soma > 0) return soma;
+  }
+  return parseFloat(devedor.valor_original ?? devedor.valor_divida ?? devedor.valor_nominal ?? 0) || 0;
 }
 
 function calcularScoreDevedor(devedor) {

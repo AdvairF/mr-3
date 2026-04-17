@@ -104,10 +104,20 @@ function UltimoAtendimentoCell({ ultimoEvento }) {
   );
 }
 
+// ─── helper: parse seguro de dividas (string JSON ou array) ──
+function parseDividas(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
+  }
+  return [];
+}
+
 // ─── DividaCell ───────────────────────────────────────────────
 function DividaCell({ devedor }) {
   const face = calcularValorFace(devedor);
-  const qtd = (devedor.dividas || []).length;
+  const qtd = parseDividas(devedor.dividas).length;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <span style={{ fontWeight: 700, color: face > 0 ? "#dc2626" : "#64748b", fontSize: 13 }}>
@@ -128,7 +138,7 @@ function DividaCell({ devedor }) {
 // ─── CredorCell ───────────────────────────────────────────────
 function CredorCell({ devedor, credores }) {
   const credor = (credores || []).find(c => String(c.id) === String(devedor.credor_id));
-  const primeiraDiv = (devedor.dividas || [])[0];
+  const primeiraDiv = parseDividas(devedor.dividas)[0];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {credor && <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{credor.nome}</span>}
@@ -652,7 +662,7 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
       {devedor && (() => {
         const hoje = new Date().toISOString().slice(0, 10);
         const r = calcularResumoFinanceiro(devedor, pagamentos, hoje);
-        const dividas = (devedor.dividas || []).filter(d => !d._nominal && !d._so_custas);
+        const dividas = parseDividas(devedor.dividas).filter(d => !d._nominal && !d._so_custas);
         return (
           <div style={{ background: "linear-gradient(135deg,#fff5f5 0%,#fff 100%)", borderRadius: 16, padding: "18px 20px", border: "1px solid #fecaca", marginBottom: 16 }}>
             <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>💰 Resumo Financeiro</p>

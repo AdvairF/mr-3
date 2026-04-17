@@ -9,6 +9,25 @@
 import { calcularFatorCorrecao, calcularJurosAcumulados } from "./correcao.js";
 
 /**
+ * Parse seguro de devedor.dividas.
+ * O PostgREST via fetch raw pode retornar JSONB como string não parseada.
+ * Aceita: Array | string JSON | null/undefined → sempre retorna Array.
+ */
+function parseDividas(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/**
  * Valor de face da dívida (sem encargos): soma dos valores originais das
  * dívidas cadastradas ou fallback para valor_original/valor_nominal.
  *
@@ -16,11 +35,16 @@ import { calcularFatorCorrecao, calcularJurosAcumulados } from "./correcao.js";
  * @returns {number}
  */
 export function calcularValorFace(devedor) {
-  const soma = (devedor.dividas || []).reduce(
-    (s, d) => s + (Number(d.valor_total) || 0),
-    0
-  );
-  return soma || Number(devedor.valor_original) || Number(devedor.valor_nominal) || 0;
+  if (!devedor) return 0;
+  const dividas = parseDividas(devedor.dividas);
+  if (dividas.length > 0) {
+    const soma = dividas.reduce((s, d) => {
+      const v = parseFloat(d?.valor_total ?? d?.valor_original ?? 0);
+      return s + (isNaN(v) ? 0 : v);
+    }, 0);
+    if (soma > 0) return soma;
+  }
+  return parseFloat(devedor.valor_original ?? devedor.valor_divida ?? devedor.valor_nominal ?? 0) || 0;
 }
 
 /**
@@ -33,13 +57,13 @@ export function calcularValorFace(devedor) {
  * @returns {number} saldo final
  */
 export function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
-  const dividasCalc = (devedor.dividas || []).filter(
+  const dividasCalc = parseDividas(devedor?.dividas).filter(
     (d) => !d._nominal && !d._so_custas
   );
   if (!dividasCalc.length)
-    return devedor.valor_original || devedor.valor_nominal || 0;
+    return parseFloat(devedor?.valor_original ?? devedor?.valor_nominal ?? 0) || 0;
 
-  const pgtoRestantes = [...pagamentos]
+  const pgtoRestantes = [...(pagamentos || [])]
     .sort((a, b) =>
       (a.data_pagamento || "").localeCompare(b.data_pagamento || "")
     )
@@ -143,11 +167,11 @@ export function calcularResumoFinanceiro(devedor, pagamentos, hoje) {
   const encargos = Math.max(0, saldo - valorOriginal + totalPago);
 
   // Dias em atraso: da data de vencimento mais antiga até hoje
-  const datasVencimento = (devedor.dividas || [])
+  const datasVencimento = parseDividas(devedor?.dividas)
     .map((d) => d.data_vencimento || d.data_origem)
     .filter(Boolean)
     .sort();
-  const dataVencMaisAntiga = datasVencimento[0] || devedor.data_origem_divida || null;
+  const dataVencMaisAntiga = datasVencimento[0] || devedor?.data_origem_divida || null;
   const diasEmAtraso = dataVencMaisAntiga
     ? Math.max(0, Math.floor((Date.now() - new Date(dataVencMaisAntiga + "T12:00:00")) / 86400000))
     : 0;
