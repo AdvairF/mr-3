@@ -811,7 +811,8 @@ function FilaHistorico() {
 export default function FilaDevedor({ user, devedores, credores }) {
   const [view, setView] = useState("painel");
   const [atendimentoDados, setAtendimentoDados] = useState(null);
-  const usuarioId = user.id;
+  // Passar objeto completo para que os serviços gravem nome/email sem depender de FK
+  const usuario = { id: user.id, nome: user.nome || user.nome_completo || user.email, email: user.email };
 
   function handleIniciar(dados) {
     setAtendimentoDados(dados);
@@ -868,11 +869,11 @@ export default function FilaDevedor({ user, devedores, credores }) {
         </div>
       )}
 
-      {view === "painel" && <FilaPainel usuarioId={usuarioId} credores={credores} onAbrirAtendimento={handleAbrirAtendimento} />}
-      {view === "operador" && <FilaOperador usuarioId={usuarioId} onIniciar={handleIniciar} />}
+      {view === "painel" && <FilaPainel usuarioId={usuario} credores={credores} onAbrirAtendimento={handleAbrirAtendimento} />}
+      {view === "operador" && <FilaOperador usuarioId={usuario} onIniciar={handleIniciar} />}
       {view === "atendimento" && atendimentoDados && (
         <FilaAtendimento
-          usuarioId={usuarioId}
+          usuarioId={usuario}
           dadosIniciais={atendimentoDados}
           onProximo={handleProximo}
           onSair={() => { setView("painel"); setAtendimentoDados(null); }}

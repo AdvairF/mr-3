@@ -17,6 +17,29 @@ function validateBigInt(id, label = "id") {
   }
 }
 
+// ─── Helper: extrai { id, nome, email } de número ou objeto usuario ──
+// Aceita: número/string (BIGINT), UUID string, ou objeto { id, nome, email }
+// usuario_id só é definido se for BIGINT válido (sem FK — seguro para qualquer valor)
+function extractUsuario(u) {
+  if (!u) return { uid: null, uNome: null, uEmail: null };
+  if (typeof u === "object") {
+    const raw = u.id ?? null;
+    const n = Number(raw);
+    return {
+      uid: Number.isInteger(n) && n > 0 ? n : null,
+      uNome: u.nome || u.email || null,
+      uEmail: u.email || null,
+    };
+  }
+  // Número ou string
+  const n = Number(u);
+  return {
+    uid: Number.isInteger(n) && n > 0 ? n : null,
+    uNome: null,
+    uEmail: null,
+  };
+}
+
 // ─── Status ativos e terminais ────────────────────────────────
 const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
 const STATUS_TERMINAIS = ["acordo_firmado", "pago_integral", "pago_parcial", "irrecuperavel", "ajuizado"];
@@ -190,7 +213,7 @@ async function entrarNaFila() {
 // ─── 4. proximoDevedor ────────────────────────────────────────
 async function proximoDevedor(usuarioId, _tentativa = 1) {
   try {
-    validateBigInt(usuarioId, "usuarioId");
+    const { uid, uNome, uEmail } = extractUsuario(usuarioId);
 
     const hoje = new Date().toISOString().slice(0, 10);
 
@@ -219,7 +242,9 @@ async function proximoDevedor(usuarioId, _tentativa = 1) {
         "PATCH",
         {
           status_fila: "EM_ATENDIMENTO",
-          usuario_id: Number(usuarioId),
+          usuario_id: uid,
+          usuario_nome: uNome,
+          usuario_email: uEmail,
           data_acionamento: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -235,7 +260,9 @@ async function proximoDevedor(usuarioId, _tentativa = 1) {
       const inserted = await dbInsert("fila_cobranca", {
         devedor_id: devedor.id,
         status_fila: "EM_ATENDIMENTO",
-        usuario_id: Number(usuarioId),
+        usuario_id: uid,
+        usuario_nome: uNome,
+        usuario_email: uEmail,
         score_prioridade: devedor._score,
         prioridade: devedor._prioridade,
         data_acionamento: new Date().toISOString(),
@@ -265,13 +292,15 @@ async function proximoDevedor(usuarioId, _tentativa = 1) {
 async function registrarEvento(devedorId, usuarioId, dadosEvento) {
   try {
     validateBigInt(devedorId, "devedorId");
-    validateBigInt(usuarioId, "usuarioId");
+    const { uid, uNome, uEmail } = extractUsuario(usuarioId);
 
     const { tipo_evento, descricao, telefone_usado, data_promessa, giro_carteira_dias } = dadosEvento;
 
     const eventoPayload = {
       devedor_id: Number(devedorId),
-      usuario_id: Number(usuarioId),
+      usuario_id: uid,
+      usuario_nome: uNome,
+      usuario_email: uEmail,
       tipo_evento,
       data_evento: new Date().toISOString(),
     };
@@ -333,7 +362,7 @@ async function registrarEvento(devedorId, usuarioId, dadosEvento) {
 async function alterarStatusDevedor(devedorId, novoStatus, usuarioId) {
   try {
     validateBigInt(devedorId, "devedorId");
-    validateBigInt(usuarioId, "usuarioId");
+    const { uid, uNome, uEmail } = extractUsuario(usuarioId);
 
     await sb(
       "devedores",
@@ -355,7 +384,9 @@ async function alterarStatusDevedor(devedorId, novoStatus, usuarioId) {
     // Registrar evento de mudança de status
     await dbInsert("eventos_andamento", {
       devedor_id: Number(devedorId),
-      usuario_id: Number(usuarioId),
+      usuario_id: uid,
+      usuario_nome: uNome,
+      usuario_email: uEmail,
       tipo_evento: "CONTATO_COM_CLIENTE",
       descricao: `Status alterado para: ${novoStatus}`,
       data_evento: new Date().toISOString(),
@@ -431,7 +462,7 @@ async function reciclarContratos(filtros = {}, equipeId = null) {
 async function removerDaFila(filaId, motivo, usuarioId) {
   try {
     validateUUID(filaId, "filaId");
-    validateBigInt(usuarioId, "usuarioId");
+    const { uid, uNome, uEmail } = extractUsuario(usuarioId);
 
     const resultado = await dbUpdate("fila_cobranca", filaId, {
       status_fila: "REMOVIDO",
@@ -444,7 +475,9 @@ async function removerDaFila(filaId, motivo, usuarioId) {
     if (devedorId) {
       await dbInsert("eventos_andamento", {
         devedor_id: Number(devedorId),
-        usuario_id: Number(usuarioId),
+        usuario_id: uid,
+        usuario_nome: uNome,
+        usuario_email: uEmail,
         tipo_evento: "SEM_CONTATO",
         descricao: "Removido da fila: " + motivo,
         data_evento: new Date().toISOString(),
