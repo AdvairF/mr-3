@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-f03: Fase 3 UI Fila de Devedor — 5 telas, FilaDevedor.jsx, deploy produção mrcobrancas.com.br
+Last activity: 2026-04-17 - Completed quick task 260417-exu: Simplificar fila — remover bridge operadores, usuario_id direto, botões ação rápida
 
 ## Status
 
@@ -24,3 +24,4 @@ Last activity: 2026-04-17 - Completed quick task 260417-f03: Fase 3 UI Fila de D
 | 260417-dne | Fase 2 — Service layer filaDevedor.js: 7 funcoes, lock otimista, calcularFatorCorrecao(igpm), 19/19 testes passando | 2026-04-17 | 22e9b1f | Complete | [260417-dne-fase02-fila-devedor-backend-logica-servi](./quick/260417-dne-fase02-fila-devedor-backend-logica-servi/) |
 | 260417-e59 | CR-01 validateUUID/validateBigInt em 5 funções + CR-02 giro_carteira_dias acessível (max date) — 32/32 testes | 2026-04-17 | 217e29c | Complete | [260417-e59-corrigir-criticals-filadevedor-cr01-cr02](./quick/260417-e59-corrigir-criticals-filadevedor-cr01-cr02/) |
 | 260417-f03 | Fase 3 — UI completa Fila de Devedor: 5 telas, FilaDevedor.jsx, listarFila(), menu laranja, deploy mrcobrancas.com.br | 2026-04-17 | 3f9e668 | Complete | [260417-f03-fase03-fila-devedor-ui](./quick/260417-f03-fase03-fila-devedor-ui/) |
+| 260417-exu | Simplificar fila: remover bridge operadores, usuario_id BIGINT direto, 4 migrations, botões ação rápida 📞💬📧 | 2026-04-17 | 6e44c12 | Complete | [260417-exu-simplificar-fila-sem-operadores](./quick/260417-exu-simplificar-fila-sem-operadores/) |
