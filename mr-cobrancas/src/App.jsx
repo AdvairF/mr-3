@@ -12,6 +12,7 @@ import { maskCPF, maskCNPJ, maskTel, maskCEP } from "./utils/masks.js";
 import { setAuditUser, logAudit } from "./utils/auditLog.js";
 import {
   calcularFatorCorrecao,
+  calcularFatorCorrecaoDetalhado,
   calcularJurosAcumulados,
   calcularJurosArt406,
   calcularJurosArt406_12aa,
@@ -5115,13 +5116,18 @@ function Calculadora({ devedores, credores = [] }) {
       const dias = dataIniStr ? Math.max(0, Math.floor((dFim - dIni) / 86400000)) : 0;
       let fatorCorrecao = 1;
       let correcaoPeriodosSimples = null;
+      let mesesDeflacao = 0;
+      let mesesDeflacaoDetalhe = [];
       if (dataIniStr && indexador !== "nenhum") {
         if (indexador === "inpc_ipca") {
           const r = calcularFatorCorrecao_INPC_IPCA(dataIniStr, dataCalculo);
           fatorCorrecao = r.fator;
           correcaoPeriodosSimples = r.periodos;
         } else {
-          fatorCorrecao = calcularFatorCorrecao(indexador, dataIniStr, dataCalculo);
+          const det = calcularFatorCorrecaoDetalhado(indexador, dataIniStr, dataCalculo);
+          fatorCorrecao = det.fator;
+          mesesDeflacao = det.mesesDeflacao;
+          mesesDeflacaoDetalhe = det.mesesDeflacaoDetalhe;
         }
       }
       const correcao = PV * fatorCorrecao - PV;
@@ -5161,6 +5167,7 @@ function Calculadora({ devedores, credores = [] }) {
         multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
         meses, dias, fatorCorrecao, linhasMes, jurosTipo,
+        mesesDeflacao, mesesDeflacaoDetalhe,
         dividasDetalhe: [],
       });
     }
@@ -5311,13 +5318,18 @@ function Calculadora({ devedores, credores = [] }) {
       const dias = dataIniStr ? Math.max(0, Math.floor((dFim - dIni) / 86400000)) : 0;
       let fatorCorrecao = 1;
       let correcaoPeriodosSimples = null;
+      let mesesDeflacao = 0;
+      let mesesDeflacaoDetalhe = [];
       if (dataIniStr && indexador !== "nenhum") {
         if (indexador === "inpc_ipca") {
           const r = calcularFatorCorrecao_INPC_IPCA(dataIniStr, dataCalculo);
           fatorCorrecao = r.fator;
           correcaoPeriodosSimples = r.periodos;
         } else {
-          fatorCorrecao = calcularFatorCorrecao(indexador, dataIniStr, dataCalculo);
+          const det = calcularFatorCorrecaoDetalhado(indexador, dataIniStr, dataCalculo);
+          fatorCorrecao = det.fator;
+          mesesDeflacao = det.mesesDeflacao;
+          mesesDeflacaoDetalhe = det.mesesDeflacaoDetalhe;
         }
       }
       const correcao = PV * fatorCorrecao - PV;
@@ -5357,6 +5369,7 @@ function Calculadora({ devedores, credores = [] }) {
         multa: multaVal, encargos: encargosVal, bonificacao: bonificacaoVal,
         honorarios: honorariosVal, honPct, subtotal, total,
         meses, dias, fatorCorrecao, linhasMes, jurosTipo,
+        mesesDeflacao, mesesDeflacaoDetalhe,
         dividasDetalhe: [],
       });
     }
@@ -6051,11 +6064,44 @@ function Calculadora({ devedores, credores = [] }) {
                 </div>
               )}
 
+              {/* ── Deflação ignorada (piso zero) ── */}
+              {resultado?.mesesDeflacao > 0 && (
+                <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: 13 }}>⚖️</span>
+                    <span style={{ fontSize: 11, color: "#92400e", fontWeight: 700 }}>
+                      {resultado.mesesDeflacao} {resultado.mesesDeflacao === 1 ? "mês com deflação ignorado" : "meses com deflação ignorados"} (piso zero)
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 10, color: "#78350f", margin: "0 0 4px" }}>
+                    Correção monetária não pode diminuir a dívida — índice negativo tratado como zero (Art. 406 §3º CC).
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {resultado.mesesDeflacaoDetalhe.map(m => (
+                      <span key={m.mes} style={{ fontSize: 10, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "1px 5px", color: "#92400e" }}>
+                        {m.mes} ({(m.taxa * 100).toFixed(2)}%)
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* ── Compatibilidade TJGO ── */}
               {indexador === "inpc" && jurosTipo === "taxa_legal_406_12" && resultado && (
-                <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13 }}>✅</span>
-                  <span style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>Configuração compatível com Tabela TJGO — INPC puro + 1% a.m. até jul/2024</span>
+                <div style={{ background: resultado.mesesDeflacao > 0 ? "#f0f9ff" : "#f0fdf4", border: resultado.mesesDeflacao > 0 ? "1px solid #bae6fd" : "1px solid #86efac", borderRadius: 10, padding: "8px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13 }}>{resultado.mesesDeflacao > 0 ? "ℹ️" : "✅"}</span>
+                    <span style={{ fontSize: 11, color: resultado.mesesDeflacao > 0 ? "#0369a1" : "#15803d", fontWeight: 600 }}>
+                      {resultado.mesesDeflacao > 0
+                        ? "Configuração INPC + 1% a.m. (piso zero aplicado — ligeiramente acima do TJGO)"
+                        : "Configuração compatível com Tabela TJGO — INPC puro + 1% a.m. até jul/2024"}
+                    </span>
+                  </div>
+                  {resultado.mesesDeflacao > 0 && (
+                    <p style={{ fontSize: 10, color: "#0369a1", margin: "4px 0 0 21px" }}>
+                      O TJGO considera deflação normalmente. Com piso zero, o resultado será um pouco maior.
+                    </p>
+                  )}
                 </div>
               )}
 

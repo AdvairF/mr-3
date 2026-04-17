@@ -1,3 +1,10 @@
+// ─── PISO ZERO — Correção monetária não pode diminuir a dívida ────────────────
+// Jurisprudência pacificada + Art. 406 §3º CC: índice negativo (deflação) = zero.
+function pisoZero(taxa) {
+  const t = Number(taxa);
+  return isNaN(t) || t < 0 ? 0 : t;
+}
+
 // ─── OVERRIDE DINÂMICO (BCB API) ─────────────────────────────
 // Mescla com INDICES estáticos quando disponível.
 let _overrides = {};
@@ -162,7 +169,7 @@ export function calcularJurosAcumulados({ principal = 0, dataInicio, dataFim, ju
 
   while (atual < fim) {
     const chaveMes = `${atual.getFullYear()}-${String(atual.getMonth() + 1).padStart(2, "0")}`;
-    const taxaMes = obterTaxaJurosMes(chaveMes, jurosTipo, jurosAM);
+    const taxaMes = pisoZero(obterTaxaJurosMes(chaveMes, jurosTipo, jurosAM));
     if (regime === "simples") jurosSimples += principal * taxaMes;
     else fatorComposto *= 1 + taxaMes;
     atual.setMonth(atual.getMonth() + 1);
@@ -338,8 +345,8 @@ export function calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim) {
     const fim1 = new Date(fimP1 + "T12:00:00");
     while (atual < fim1) {
       const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
-      const taxa = merged.inpc?.[chave];
-      f1 *= (1 + (taxa !== undefined ? taxa : TAXA_MEDIA.inpc));
+      const taxa = merged.inpc?.[chave] ?? TAXA_MEDIA.inpc;
+      f1 *= (1 + pisoZero(taxa));
       atual.setMonth(atual.getMonth() + 1);
     }
     fatorTotal *= f1;
@@ -354,8 +361,8 @@ export function calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim) {
     const fim2 = new Date(dataFim + "T12:00:00");
     while (atual < fim2) {
       const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
-      const taxa = merged.ipca?.[chave];
-      f2 *= (1 + (taxa !== undefined ? taxa : TAXA_MEDIA.ipca));
+      const taxa = merged.ipca?.[chave] ?? TAXA_MEDIA.ipca;
+      f2 *= (1 + pisoZero(taxa));
       atual.setMonth(atual.getMonth() + 1);
     }
     fatorTotal *= f2;
@@ -366,22 +373,37 @@ export function calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim) {
 }
 
 export function calcularFatorCorrecao(indexador, dataInicio, dataFim) {
-  if(indexador==="nenhum") return 1;
-  if(indexador==="inpc_ipca") return calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim).fator;
+  return calcularFatorCorrecaoDetalhado(indexador, dataInicio, dataFim).fator;
+}
+
+/**
+ * Calcula o fator de correção com estatísticas de deflação.
+ * Aplica piso zero: índice negativo (deflação) = 0, conforme jurisprudência
+ * pacificada e Art. 406 §3º CC (correção monetária não pode diminuir a dívida).
+ *
+ * @returns {{ fator, mesesConsiderados, mesesDeflacao, mesesDeflacaoDetalhe }}
+ */
+export function calcularFatorCorrecaoDetalhado(indexador, dataInicio, dataFim) {
+  if(indexador==="nenhum") return { fator:1, mesesConsiderados:0, mesesDeflacao:0, mesesDeflacaoDetalhe:[] };
+  if(indexador==="inpc_ipca") return { fator: calcularFatorCorrecao_INPC_IPCA(dataInicio, dataFim).fator, mesesConsiderados:0, mesesDeflacao:0, mesesDeflacaoDetalhe:[] };
   const tabela = getIndicesMerged()[indexador];
   // Último mês disponível — parar antes de meses ainda não publicados (evita fallback indevido)
   const keys = Object.keys(tabela || {});
   const ultimaComp = keys.length > 0 ? keys.sort().pop() : (ULTIMA_COMPETENCIA_INDICES[indexador] || "1900-01");
   let fator = 1;
+  let mesesConsiderados = 0;
+  const mesesDeflacaoDetalhe = [];
   let atual = new Date(dataInicio+"T12:00:00");
   const fim  = new Date(dataFim+"T12:00:00");
   while(atual < fim) {
     const chave = `${atual.getFullYear()}-${String(atual.getMonth()+1).padStart(2,"0")}`;
     if(chave > ultimaComp) break; // Mês ainda não publicado — parar aqui
-    const taxa = tabela?.[chave];
-    if(taxa !== undefined) { fator *= (1+taxa); }
-    else { fator *= (1+TAXA_MEDIA[indexador]); } // Fallback apenas para período pré-histórico
+    const taxaRaw = tabela?.[chave] ?? TAXA_MEDIA[indexador]; // Fallback apenas para período pré-histórico
+    if(taxaRaw < 0) mesesDeflacaoDetalhe.push({ mes: chave, taxa: taxaRaw });
+    const taxa = pisoZero(taxaRaw);
+    fator *= (1 + taxa);
+    mesesConsiderados++;
     atual.setMonth(atual.getMonth()+1);
   }
-  return fator;
+  return { fator, mesesConsiderados, mesesDeflacao: mesesDeflacaoDetalhe.length, mesesDeflacaoDetalhe };
 }
