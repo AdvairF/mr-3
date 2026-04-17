@@ -1,5 +1,6 @@
 import { dbGet, dbInsert, dbUpdate, dbDelete, sb } from "../config/supabase.js";
 import { calcularFatorCorrecao } from "../utils/correcao.js";
+import { calcularSaldoDevedorAtualizado } from "../utils/devedorCalc.js";
 
 // ─── Validação de IDs (CR-01) ─────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -152,7 +153,7 @@ async function listarDevedoresParaFila(filtros = {}) {
     let totalEventosHoje = 0;
 
     if (devedorIds.length > 0) {
-      const [eventosRecentes, countHoje] = await Promise.all([
+      const [eventosRecentes, countHoje, pagamentosBrutos] = await Promise.all([
         dbGet(
           "eventos_andamento",
           `select=devedor_id,tipo_evento,data_evento,usuario_nome&devedor_id=in.(${devedorIds.join(",")})&order=data_evento.desc&limit=2000`
@@ -161,6 +162,10 @@ async function listarDevedoresParaFila(filtros = {}) {
           "eventos_andamento",
           `select=id&devedor_id=in.(${devedorIds.join(",")})&data_evento=gte.${hojeStr}T00:00:00&limit=1000`
         ),
+        dbGet(
+          "pagamentos_parciais",
+          `select=devedor_id,valor,data_pagamento&devedor_id=in.(${devedorIds.join(",")})&order=data_pagamento.asc`
+        ),
       ]);
 
       for (const ev of eventosRecentes) {
@@ -168,6 +173,21 @@ async function listarDevedoresParaFila(filtros = {}) {
         if (!ultimoEventoMap[key]) ultimoEventoMap[key] = ev; // primeiro = mais recente (order desc)
       }
       totalEventosHoje = countHoje.length;
+
+      // Mapa devedor_id → pagamentos_parciais[]
+      const pgtoMap = {};
+      for (const p of (pagamentosBrutos || [])) {
+        const key = String(p.devedor_id);
+        if (!pgtoMap[key]) pgtoMap[key] = [];
+        pgtoMap[key].push(p);
+      }
+
+      // Enriquecer resultado com _saldo_atualizado e _tem_pagamento_parcial
+      resultado = resultado.map(d => {
+        const pgtos = pgtoMap[String(d.id)] || [];
+        const saldo = calcularSaldoDevedorAtualizado(d, pgtos, hojeStr);
+        return { ...d, _pagamentos: pgtos, _saldo_atualizado: saldo, _tem_pagamento_parcial: pgtos.length > 0 };
+      });
     }
 
     // Adicionar _ultimo_evento e _dias_sem_contato a cada devedor

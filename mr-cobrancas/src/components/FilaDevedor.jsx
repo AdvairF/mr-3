@@ -116,21 +116,32 @@ function parseDividas(raw) {
 
 // ─── DividaCell ───────────────────────────────────────────────
 function DividaCell({ devedor }) {
+  // Usa _saldo_atualizado (computado no serviço com encargos + pagamentos abatidos)
+  // ou cai para calcularValorFace se o campo não existir
+  const saldo = devedor._saldo_atualizado != null ? devedor._saldo_atualizado : calcularValorFace(devedor);
   const face = calcularValorFace(devedor);
   const qtd = parseDividas(devedor.dividas).length;
+  const temParcial = devedor._tem_pagamento_parcial;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <span style={{ fontWeight: 700, color: face > 0 ? "#dc2626" : "#64748b", fontSize: 13 }}>
-        {fmtBRL(face)}
+      <span style={{ fontWeight: 700, color: saldo > 0 ? "#dc2626" : "#64748b", fontSize: 13 }}>
+        {fmtBRL(saldo)}
       </span>
-      {Number(devedor.valor_original) > 0 && Math.abs(face - Number(devedor.valor_original)) > 1 && (
-        <span style={{ fontSize: 10, color: "#94a3b8" }}>Orig: {fmtBRL(devedor.valor_original)}</span>
+      {face > 0 && Math.abs(saldo - face) > 1 && (
+        <span style={{ fontSize: 10, color: "#94a3b8" }}>Orig: {fmtBRL(face)}</span>
       )}
-      {qtd > 0 && (
-        <span style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", background: "#ede9fe", padding: "1px 5px", borderRadius: 99, alignSelf: "flex-start" }}>
-          {qtd} dívida{qtd > 1 ? "s" : ""}
-        </span>
-      )}
+      <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+        {temParcial && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#0f766e", background: "#ccfbf1", padding: "1px 5px", borderRadius: 99 }}>
+            Parcial
+          </span>
+        )}
+        {qtd > 0 && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", background: "#ede9fe", padding: "1px 5px", borderRadius: 99 }}>
+            {qtd} dívida{qtd > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -227,7 +238,7 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
   const cntAtendidosHoje = devedores.filter(d =>
     d._ultimo_evento?.data_evento?.slice(0, 10) === hojeCC
   ).length;
-  const valorTotalAberto = devedores.reduce((s, d) => s + calcularValorFace(d), 0);
+  const valorTotalAberto = devedores.reduce((s, d) => s + (d._saldo_atualizado ?? calcularValorFace(d)), 0);
 
   const cards = [
     { label: "Pendentes", valor: cntPendentes, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
@@ -249,7 +260,7 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
       devedoresFiltrados.sort((a, b) => {
         const pd = (priOrd[a._prioridade] ?? 2) - (priOrd[b._prioridade] ?? 2);
         if (pd !== 0) return pd;
-        const vd = calcularValorFace(b) - calcularValorFace(a);
+        const vd = (b._saldo_atualizado ?? calcularValorFace(b)) - (a._saldo_atualizado ?? calcularValorFace(a));
         if (vd !== 0) return vd;
         return (a.created_at || "").localeCompare(b.created_at || "");
       });
@@ -531,7 +542,7 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
   const { fila, devedor: devedorInicial, contrato, parcelas, eventos: evtsIniciais } = dadosIniciais;
   const [devedor, setDevedor] = useState(devedorInicial);
   const [eventos, setEventos] = useState(evtsIniciais || []);
-  const [pagamentos, setPagamentos] = useState([]);
+  const [pagamentos, setPagamentos] = useState(devedorInicial?._pagamentos || []);
   const [eventoRegistrado, setEventoRegistrado] = useState(false);
   const [modalEvento, setModalEvento] = useState(false);
   const [modalInfo, setModalInfo] = useState(false);
