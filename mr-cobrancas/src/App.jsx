@@ -3727,6 +3727,15 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                             <Inp label="Honorários (%)" value={ndEdit.honorarios_pct} onChange={v => NDE("honorarios_pct", v)} type="number" />
                             <Inp label="Despesas (R$)" value={ndEdit.despesas} onChange={v => NDE("despesas", v)} type="number" />
                           </div>
+                          {ndEdit.juros_tipo === "taxa_legal_406" && (
+                            <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
+                              <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
+                              • Até 10/01/2003: 0,5% a.m. (6% a.a.) — Código Civil de 1916<br />
+                              • 11/01/2003 a 29/08/2024: 1% a.m. (12% a.a.) — Art. 406 CC/2002<br />
+                              • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (nunca negativa) — Lei 14.905/2024<br />
+                              O sistema aplicará automaticamente cada regime conforme o período.
+                            </div>
+                          )}
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <Btn onClick={salvarEdicaoDivida} color="#4f46e5">✅ Salvar alterações</Btn>
@@ -3787,6 +3796,15 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                     <Inp label="Honorários (%)" value={nd.honorarios_pct} onChange={v => ND("honorarios_pct", v)} type="number" />
                     <Inp label="Despesas (R$)" value={nd.despesas} onChange={v => ND("despesas", v)} type="number" />
                   </div>
+                  {nd.juros_tipo === "taxa_legal_406" && (
+                    <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
+                      <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
+                      • Até 10/01/2003: 0,5% a.m. (6% a.a.) — Código Civil de 1916<br />
+                      • 11/01/2003 a 29/08/2024: 1% a.m. (12% a.a.) — Art. 406 CC/2002<br />
+                      • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (nunca negativa) — Lei 14.905/2024<br />
+                      O sistema aplicará automaticamente cada regime conforme o período entre o vencimento e a data de cálculo.
+                    </div>
+                  )}
                   <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>Base oficial carregada no app: IGP-M até {ULTIMA_COMPETENCIA_INDICES.igpm}, IPCA/INPC até {ULTIMA_COMPETENCIA_INDICES.ipca} e Selic até {ULTIMA_COMPETENCIA_INDICES.selic}.</p>
                 </div>
                 {/* Parcelamento — só se quiser parcelar */}
@@ -4986,7 +5004,7 @@ function Calculadora({ devedores, credores = [] }) {
     return () => clearTimeout(timer);
   }, [
     valorOriginal, dataCalculo, dataVencimento,
-    indexador, jurosAM, multa, baseMulta,
+    indexador, jurosTipo, jurosAM, multa, baseMulta,
     encargos, bonificacao,
     honorariosPct, incluirHonorarios,
     dividasSel, devId,
@@ -5066,12 +5084,12 @@ function Calculadora({ devedores, credores = [] }) {
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
       const jurosAMNum = parseFloat(jurosAM) || 0;
-      const juros = jurosAMNum > 0
+      const juros = (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0))
         ? calcularJurosAcumulados({
             principal: principalCorrigido,
             dataInicio: dataIniStr || dataCalculo,
             dataFim: dataCalculo,
-            jurosTipo: "outros",
+            jurosTipo,
             jurosAM: jurosAMNum,
             regime: "simples",
           }).juros
@@ -5120,13 +5138,13 @@ function Calculadora({ devedores, credores = [] }) {
       const corrDiv = PV * fatorCorr - PV;
       const pcDiv = PV + corrDiv;
 
-      // Juros usando taxa da dívida (zero quando jAM não informado)
-      const jurosDiv = jAM > 0
+      // Juros usando taxa da dívida
+      const jurosDiv = (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0))
         ? calcularJurosAcumulados({
             principal: pcDiv,
             dataInicio: dataIni,
             dataFim: dataCalculo,
-            jurosTipo: "outros",
+            jurosTipo: jTipo,
             jurosAM: jAM,
             regime: "simples",
           }).juros
@@ -5222,12 +5240,12 @@ function Calculadora({ devedores, credores = [] }) {
       const correcao = PV * fatorCorrecao - PV;
       const principalCorrigido = PV + correcao;
       const jurosAMNum = parseFloat(jurosAM) || 0;
-      const juros = jurosAMNum > 0
+      const juros = (jurosTipo !== "sem_juros" && (jurosTipo !== "outros" || jurosAMNum > 0))
         ? calcularJurosAcumulados({
             principal: principalCorrigido,
             dataInicio: dataIniStr || dataCalculo,
             dataFim: dataCalculo,
-            jurosTipo: "outros",
+            jurosTipo,
             jurosAM: jurosAMNum,
             regime: "simples",
           }).juros
@@ -5276,13 +5294,13 @@ function Calculadora({ devedores, credores = [] }) {
       const corrDiv = PV * fatorCorr - PV;
       const pcDiv = PV + corrDiv;
 
-      // Juros usando taxa da dívida (zero quando jAM não informado)
-      const jurosDiv = jAM > 0
+      // Juros usando taxa da dívida
+      const jurosDiv = (jTipo !== "sem_juros" && (jTipo !== "outros" || jAM > 0))
         ? calcularJurosAcumulados({
             principal: pcDiv,
             dataInicio: dataIni,
             dataFim: dataCalculo,
-            jurosTipo: "outros",
+            jurosTipo: jTipo,
             jurosAM: jAM,
             regime: "simples",
           }).juros
@@ -5687,10 +5705,24 @@ function Calculadora({ devedores, credores = [] }) {
             </div>
             {/* Juros */}
             <div>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Taxa de Juros</label>
+              <select value={jurosTipo} onChange={e => setJurosTipo(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 12, outline: "none", fontFamily: "Plus Jakarta Sans" }}>
+                {JUROS_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </div>
+          </div>
+          {jurosTipo === "outros" && (
+            <div style={{ marginBottom: 10 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Juros (% ao mês)</label>
               <input type="number" value={jurosAM} onChange={e => setJurosAM(e.target.value)} style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
-          </div>
+          )}
+          {jurosTipo === "taxa_legal_406" && (
+            <div style={{ marginBottom: 10, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
+              <strong>ℹ️ Taxa Legal (Art. 406 CC) — STJ Tema 1368:</strong><br />
+              • Até jan/2003: 0,5% a.m. &nbsp;•&nbsp; Fev/2003 a ago/2024: 1% a.m. &nbsp;•&nbsp; Set/2024 em diante: SELIC − IPCA
+            </div>
+          )}
 
           {/* Multa + base */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
