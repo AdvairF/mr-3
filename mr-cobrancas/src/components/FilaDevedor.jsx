@@ -1,9 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
 import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
+import { STATUS_DEV } from "../utils/constants.js";
+
+// ─── Status ativos para fila ──────────────────────────────────
+const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
+const STATUS_TERMINAIS = ["acordo_firmado", "pago_integral", "pago_parcial", "irrecuperavel", "ajuizado"];
+const TODOS_STATUS = STATUS_DEV;
 
 // ─── PriorityBadge ────────────────────────────────────────────
 function PriorityBadge({ prioridade }) {
@@ -27,9 +33,23 @@ function PriorityBadge({ prioridade }) {
   );
 }
 
+// ─── StatusBadge devedor ──────────────────────────────────────
+function StatusBadge({ status }) {
+  const s = STATUS_DEV.find(x => x.v === status) || { l: status, cor: "#64748b", bg: "#f1f5f9" };
+  return (
+    <span style={{
+      display: "inline-block", background: s.bg, color: s.cor,
+      fontSize: 11, fontWeight: 700, padding: "3px 8px",
+      borderRadius: 99, whiteSpace: "nowrap",
+    }}>
+      {s.l}
+    </span>
+  );
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 function fmtBRL(v) {
-  if (v == null) return "—";
+  if (v == null || v === "") return "—";
   return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 function fmtData(iso) {
@@ -37,88 +57,93 @@ function fmtData(iso) {
   const d = iso.slice(0, 10).split("-");
   return `${d[2]}/${d[1]}/${d[0]}`;
 }
-function statusLabel(s) {
-  const m = { AGUARDANDO: "Aguardando", EM_ATENDIMENTO: "Em Atendimento", ACIONADO: "Acionado", REMOVIDO: "Removido", BLOQUEADO: "Bloqueado" };
-  return m[s] || s;
+function diasDesde(iso) {
+  if (!iso) return 0;
+  return Math.floor((Date.now() - new Date(iso)) / 86400000);
 }
 
+const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px", whiteSpace: "nowrap" };
+const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
+const inpS = { padding: "7px 10px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 12, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151" };
+
 // ─── TELA 1: FilaPainel (Supervisor) ─────────────────────────
-function FilaPainel({ usuarioId, credores }) {
-  const [itens, setItens] = useState([]);
+function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
+  const [devedores, setDevedores] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [atualizando, setAtualizando] = useState(false);
-  const [equipes, setEquipes] = useState([]);
-  const [filtroEquipe, setFiltroEquipe] = useState("");
-  const [filtroPrioridade, setFiltroPrioridade] = useState("");
+  const [busca, setBusca] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState([...STATUS_ATIVOS]);
   const [filtroCredor, setFiltroCredor] = useState("");
+  const [filtroPrioridade, setFiltroPrioridade] = useState("");
+  const [filtroValorMin, setFiltroValorMin] = useState("");
+  const [filtroValorMax, setFiltroValorMax] = useState("");
   const [selecionados, setSelecionados] = useState([]);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const [modalEvento, setModalEvento] = useState(null); // devedor selecionado
+  const [formEvento, setFormEvento] = useState({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
+  const [salvandoEvento, setSalvandoEvento] = useState(false);
+  const pollRef = useRef(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [r, eq] = await Promise.all([
-        filaDevedor.listarFila(),
-        dbGet("equipes", "select=id,nome&ativo=eq.true&order=nome.asc"),
-      ]);
-      if (!r.success) throw new Error(r.error);
-      setItens(r.data);
-      setEquipes(eq);
-    } catch (e) {
-      toast.error("Erro ao carregar fila: " + e.message);
-    }
-    setCarregando(false);
-  }, []);
+  const carregar = useCallback(async (silencioso = false) => {
+    if (!silencioso) setCarregando(true);
+    const filtros = {
+      busca: busca || undefined,
+      status_list: filtroStatus.length ? filtroStatus : undefined,
+      credor_id: filtroCredor || undefined,
+      prioridade: filtroPrioridade || undefined,
+      valor_min: filtroValorMin ? Number(filtroValorMin) : undefined,
+      valor_max: filtroValorMax ? Number(filtroValorMax) : undefined,
+    };
+    const r = await filaDevedor.listarDevedoresParaFila(filtros);
+    if (r.success) setDevedores(r.data);
+    else toast.error("Erro ao carregar fila: " + r.error);
+    if (!silencioso) setCarregando(false);
+  }, [busca, filtroStatus, filtroCredor, filtroPrioridade, filtroValorMin, filtroValorMax]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    carregar();
+    pollRef.current = setInterval(() => carregar(true), 30000);
+    return () => clearInterval(pollRef.current);
+  }, [carregar]);
 
-  async function handleAtualizarFila() {
-    setAtualizando(true);
-    const r = await filaDevedor.entrarNaFila();
+  async function handleRegistrarEvento() {
+    if (!modalEvento || !formEvento.tipo_evento) return;
+    setSalvandoEvento(true);
+    const dados = {
+      tipo_evento: formEvento.tipo_evento,
+      descricao: formEvento.descricao || undefined,
+      telefone_usado: formEvento.telefone_usado || undefined,
+      data_promessa: formEvento.data_promessa || undefined,
+      giro_carteira_dias: formEvento.giro_carteira_dias ? Number(formEvento.giro_carteira_dias) : undefined,
+    };
+    const r = await filaDevedor.registrarEvento(modalEvento.id, usuarioId, dados);
     if (r.success) {
-      toast.success(`Fila atualizada: ${r.data.inseridos} adicionados, ${r.data.atualizados} scores recalculados`);
-      await carregar();
+      toast.success("Evento registrado!");
+      setModalEvento(null);
+      setFormEvento({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
+      await carregar(true);
     } else {
       toast.error("Erro: " + r.error);
     }
-    setAtualizando(false);
+    setSalvandoEvento(false);
   }
 
-  async function handleRemoverSelecionados() {
-    if (!selecionados.length) return;
-    for (const id of selecionados) {
-      await filaDevedor.removerDaFila(id, "Remoção em massa pelo supervisor", usuarioId);
-    }
-    toast.success(`${selecionados.length} item(s) removido(s)`);
-    setSelecionados([]);
-    await carregar();
+  function toggleStatus(s) {
+    setFiltroStatus(prev =>
+      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+    );
   }
 
   // Contadores
-  const totalAguardando = itens.filter(i => i.status_fila === "AGUARDANDO").length;
-  const totalEmAtendimento = itens.filter(i => i.status_fila === "EM_ATENDIMENTO").length;
-  const totalAcionadoHoje = itens.filter(i => i.status_fila === "ACIONADO" && i.data_acionamento?.slice(0, 10) === hoje).length;
-  const totalBloqueados = itens.filter(i => i.bloqueado_ate >= hoje).length;
-
-  // Filtros client-side
-  const itensFiltrados = itens.filter(i => {
-    if (filtroEquipe && i.equipe_id !== filtroEquipe) return false;
-    if (filtroPrioridade && i.prioridade !== filtroPrioridade) return false;
-    if (filtroCredor && i.contrato?.credor_id !== Number(filtroCredor)) return false;
-    return true;
-  });
+  const totalDevedores = devedores.length;
+  const emAtendimento = devedores.filter(d => d._em_atendimento).length;
+  const bloqueados = devedores.filter(d => d._bloqueado).length;
+  const aguardando = totalDevedores - emAtendimento - bloqueados;
 
   const cards = [
-    { label: "Aguardando", valor: totalAguardando, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
-    { label: "Em Atendimento", valor: totalEmAtendimento, cor: "#f59e0b", bg: "rgba(245,158,11,.08)" },
-    { label: "Acionados Hoje", valor: totalAcionadoHoje, cor: "#10b981", bg: "rgba(16,185,129,.08)" },
-    { label: "Bloqueados", valor: totalBloqueados, cor: "#ef4444", bg: "rgba(239,68,68,.08)" },
+    { label: "Aguardando", valor: aguardando, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
+    { label: "Em Atendimento", valor: emAtendimento, cor: "#f59e0b", bg: "rgba(245,158,11,.08)" },
+    { label: "Bloqueados", valor: bloqueados, cor: "#ef4444", bg: "rgba(239,68,68,.08)" },
+    { label: "Total na Fila", valor: totalDevedores, cor: "#10b981", bg: "rgba(16,185,129,.08)" },
   ];
-
-  const sel = (id) => setSelecionados(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
-  const selTodos = () => setSelecionados(itensFiltrados.map(i => i.id));
-
-  const inp = { padding: "7px 10px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 12, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151" };
 
   return (
     <div>
@@ -132,89 +157,103 @@ function FilaPainel({ usuarioId, credores }) {
         ))}
       </div>
 
-      {/* Filtros + ações */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-        <select style={inp} value={filtroEquipe} onChange={e => setFiltroEquipe(e.target.value)}>
-          <option value="">Todas as equipes</option>
-          {equipes.map(eq => <option key={eq.id} value={eq.id}>{eq.nome}</option>)}
-        </select>
-        <select style={inp} value={filtroPrioridade} onChange={e => setFiltroPrioridade(e.target.value)}>
-          <option value="">Todas prioridades</option>
-          <option value="ALTA">Alta</option>
-          <option value="MEDIA">Média</option>
-          <option value="BAIXA">Baixa</option>
-        </select>
-        <select style={inp} value={filtroCredor} onChange={e => setFiltroCredor(e.target.value)}>
-          <option value="">Todos os credores</option>
-          {(credores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </select>
-        <div style={{ flex: 1 }} />
-        {selecionados.length > 0 && (
-          <Btn sm danger onClick={handleRemoverSelecionados}>Remover {selecionados.length} selecionado(s)</Btn>
-        )}
-        <Btn sm onClick={handleAtualizarFila} disabled={atualizando}>
-          {atualizando ? "Atualizando..." : "↻ Atualizar Fila"}
-        </Btn>
+      {/* Filtros */}
+      <div style={{ background: "#f8fafc", borderRadius: 14, padding: "14px 16px", marginBottom: 16, border: "1px solid #e8f0f7" }}>
+        {/* Linha 1: busca + credor + prioridade */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <input
+            style={{ ...inpS, flex: 1, minWidth: 200 }}
+            placeholder="Buscar por nome ou CPF/CNPJ..."
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+          />
+          <select style={inpS} value={filtroCredor} onChange={e => setFiltroCredor(e.target.value)}>
+            <option value="">Todos os credores</option>
+            {(credores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+          <select style={inpS} value={filtroPrioridade} onChange={e => setFiltroPrioridade(e.target.value)}>
+            <option value="">Todas prioridades</option>
+            <option value="ALTA">Alta</option>
+            <option value="MEDIA">Média</option>
+            <option value="BAIXA">Baixa</option>
+          </select>
+          <input style={{ ...inpS, width: 110 }} placeholder="Valor mín" type="number" value={filtroValorMin} onChange={e => setFiltroValorMin(e.target.value)} />
+          <input style={{ ...inpS, width: 110 }} placeholder="Valor máx" type="number" value={filtroValorMax} onChange={e => setFiltroValorMax(e.target.value)} />
+        </div>
+
+        {/* Linha 2: checkboxes de status */}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".4px" }}>Status:</span>
+          {STATUS_ATIVOS.map(s => {
+            const info = STATUS_DEV.find(x => x.v === s);
+            const ativo = filtroStatus.includes(s);
+            return (
+              <label key={s} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12, fontWeight: 600, color: ativo ? info.cor : "#94a3b8" }}>
+                <input type="checkbox" checked={ativo} onChange={() => toggleStatus(s)} style={{ accentColor: info.cor }} />
+                {info?.l}
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       {/* Tabela */}
       {carregando ? (
         <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Carregando fila...</div>
-      ) : itensFiltrados.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum item na fila</div>
+      ) : devedores.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum devedor com status ativo encontrado</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
+          <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>{devedores.length} devedor(es) — atualização automática a cada 30s</p>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#f8fafc" }}>
-                <th style={th}><input type="checkbox" onChange={e => e.target.checked ? selTodos() : setSelecionados([])} /></th>
-                <th style={th}>Cliente</th>
+                <th style={th}>Nome</th>
                 <th style={th}>CPF/CNPJ</th>
-                <th style={th}>Contrato</th>
-                <th style={th}>Valor</th>
-                <th style={th}>Prioridade</th>
                 <th style={th}>Status</th>
-                <th style={th}>Bloqueado até</th>
+                <th style={th}>Valor</th>
+                <th style={th}>Dias</th>
+                <th style={th}>Prioridade</th>
+                <th style={th}>Telefone</th>
                 <th style={th}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {itensFiltrados.map(item => (
-                <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9", background: selecionados.includes(item.id) ? "#fefce8" : "#fff" }}>
-                  <td style={td}><input type="checkbox" checked={selecionados.includes(item.id)} onChange={() => sel(item.id)} /></td>
-                  <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>{item.devedor?.nome || "—"}</td>
-                  <td style={td}>{item.devedor?.cpf_cnpj || "—"}</td>
-                  <td style={td}>{item.contrato?.numero_contrato || "—"}</td>
-                  <td style={td}>{fmtBRL(item.contrato?.valor_atualizado || item.contrato?.valor_original)}</td>
-                  <td style={td}><PriorityBadge prioridade={item.prioridade} /></td>
-                  <td style={td}>
-                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: "#f1f5f9", color: "#64748b" }}>
-                      {statusLabel(item.status_fila)}
-                    </span>
+              {devedores.map(d => (
+                <tr key={d.id} style={{
+                  borderBottom: "1px solid #f1f5f9",
+                  background: d._em_atendimento ? "rgba(245,158,11,.06)" : d._bloqueado ? "rgba(239,68,68,.04)" : "#fff",
+                }}>
+                  <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>
+                    {d.nome}
+                    {d._em_atendimento && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#f59e0b", background: "#FEF3C7", padding: "1px 6px", borderRadius: 99 }}>Em atendimento</span>}
+                    {d._bloqueado && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#FEE2E2", padding: "1px 6px", borderRadius: 99 }}>🔒 Bloqueado até {fmtData(d._fila?.bloqueado_ate)}</span>}
                   </td>
-                  <td style={td}>{item.bloqueado_ate ? fmtData(item.bloqueado_ate) : "—"}</td>
+                  <td style={td}>{d.cpf_cnpj || "—"}</td>
+                  <td style={td}><StatusBadge status={d.status} /></td>
+                  <td style={td}>{fmtBRL(d.valor_total)}</td>
+                  <td style={td}>{diasDesde(d.created_at)}d</td>
+                  <td style={td}><PriorityBadge prioridade={d._prioridade} /></td>
+                  <td style={td}>{d.telefone || "—"}</td>
                   <td style={td}>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      {item.devedor?.telefone && (
-                        <a href={`tel:${item.devedor.telefone}`} title="Ligar" style={{ textDecoration: "none" }}>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {d.telefone && (
+                        <a href={`tel:${d.telefone}`} title="Ligar" style={{ textDecoration: "none" }}>
                           <Btn sm outline>📞</Btn>
                         </a>
                       )}
-                      {item.devedor?.telefone && (
-                        <a href={`https://wa.me/55${item.devedor.telefone.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(item.devedor?.nome || "")}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ textDecoration: "none" }}>
+                      {d.telefone && (
+                        <a href={`https://wa.me/55${d.telefone.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(d.nome)}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ textDecoration: "none" }}>
                           <Btn sm outline>💬</Btn>
                         </a>
                       )}
-                      {item.devedor?.email && (
-                        <a href={`mailto:${item.devedor.email}`} title="Email" style={{ textDecoration: "none" }}>
+                      {d.email && (
+                        <a href={`mailto:${d.email}`} title="Email" style={{ textDecoration: "none" }}>
                           <Btn sm outline>📧</Btn>
                         </a>
                       )}
-                      <Btn sm danger onClick={async () => {
-                        const r = await filaDevedor.removerDaFila(item.id, "Removido pelo supervisor", usuarioId);
-                        if (r.success) { toast.success("Removido"); await carregar(); }
-                        else toast.error(r.error);
-                      }}>Remover</Btn>
+                      <Btn sm outline onClick={() => setModalEvento(d)} title="Registrar Evento">✏️</Btn>
+                      <Btn sm onClick={() => onAbrirAtendimento(d)} color="#f97316" title="Abrir atendimento">👁</Btn>
                     </div>
                   </td>
                 </tr>
@@ -223,12 +262,50 @@ function FilaPainel({ usuarioId, credores }) {
           </table>
         </div>
       )}
+
+      {/* Modal: Registrar Evento rápido */}
+      {modalEvento && (
+        <Modal title={`Registrar Evento — ${modalEvento.nome}`} onClose={() => setModalEvento(null)} width={480}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <label style={lbl}>Tipo do Evento *</label>
+              <select style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.tipo_evento} onChange={e => setFormEvento(f => ({ ...f, tipo_evento: e.target.value }))}>
+                {TIPOS_EVENTO.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>Descrição</label>
+              <textarea style={{ ...inpS, width: "100%", height: 72, resize: "vertical", boxSizing: "border-box" }} value={formEvento.descricao} onChange={e => setFormEvento(f => ({ ...f, descricao: e.target.value }))} placeholder="Descreva o contato..." />
+            </div>
+            {modalEvento.telefone && (
+              <div>
+                <label style={lbl}>Telefone Usado</label>
+                <select style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.telefone_usado} onChange={e => setFormEvento(f => ({ ...f, telefone_usado: e.target.value }))}>
+                  <option value="">— Selecionar —</option>
+                  {[modalEvento.telefone, modalEvento.telefone2, ...(modalEvento.telefones_adicionais || [])].filter(Boolean).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            )}
+            {formEvento.tipo_evento === "PROMESSA_PAGAMENTO" && (
+              <div>
+                <label style={lbl}>Data da Promessa *</label>
+                <input type="date" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.data_promessa} onChange={e => setFormEvento(f => ({ ...f, data_promessa: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
+              </div>
+            )}
+            <div>
+              <label style={lbl}>Giro de Carteira (dias)</label>
+              <input type="number" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.giro_carteira_dias} onChange={e => setFormEvento(f => ({ ...f, giro_carteira_dias: e.target.value }))} placeholder="0 = sem giro" min="0" max="365" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
+            <Btn onClick={handleRegistrarEvento} disabled={salvandoEvento} color="#6366f1">{salvandoEvento ? "Salvando..." : "Registrar Evento"}</Btn>
+            <Btn outline onClick={() => setModalEvento(null)}>Cancelar</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
-
-const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px", whiteSpace: "nowrap" };
-const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
 
 // ─── TELA 2: FilaOperador (Lobby) ────────────────────────────
 function FilaOperador({ usuarioId, onIniciar }) {
@@ -239,10 +316,11 @@ function FilaOperador({ usuarioId, onIniciar }) {
   useEffect(() => {
     async function carregar() {
       try {
-        const r = await filaDevedor.listarFila({ status_fila: "AGUARDANDO" });
+        const r = await filaDevedor.listarDevedoresParaFila({});
         if (r.success) {
-          setContagem(r.data.length);
-          if (r.data.length > 0) setPrioridadeAtual(r.data[0].prioridade);
+          const disponíveis = (r.data || []).filter(d => !d._em_atendimento && !d._bloqueado);
+          setContagem(disponíveis.length);
+          if (disponíveis.length > 0) setPrioridadeAtual(disponíveis[0]._prioridade);
         }
       } catch { setContagem(0); }
     }
@@ -268,7 +346,7 @@ function FilaOperador({ usuarioId, onIniciar }) {
         ) : (
           <>
             <p style={{ fontSize: 48, fontWeight: 800, color: "#f97316", fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1 }}>{contagem}</p>
-            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 8 }}>cliente(s) aguardando</p>
+            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 8 }}>devedor(es) disponíveis</p>
             {prioridadeAtual && (
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
                 <PriorityBadge prioridade={prioridadeAtual} />
@@ -299,7 +377,8 @@ const TIPOS_EVENTO = [
 ];
 
 function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
-  const { fila, devedor, contrato, parcelas, eventos: evtsIniciais } = dadosIniciais;
+  const { fila, devedor: devedorInicial, contrato, parcelas, eventos: evtsIniciais } = dadosIniciais;
+  const [devedor, setDevedor] = useState(devedorInicial);
   const [eventos, setEventos] = useState(evtsIniciais || []);
   const [eventoRegistrado, setEventoRegistrado] = useState(false);
   const [modalEvento, setModalEvento] = useState(false);
@@ -307,19 +386,23 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
   const [form, setForm] = useState({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
   const [salvando, setSalvando] = useState(false);
   const [proximando, setProximando] = useState(false);
+  const [alterandoStatus, setAlterandoStatus] = useState(false);
+
+  // Carregar eventos por devedor_id
+  useEffect(() => {
+    if (!devedorInicial?.id) return;
+    setDevedor(devedorInicial);
+    setEventos(evtsIniciais || []);
+    setEventoRegistrado(false);
+    // Buscar eventos mais recentes
+    dbGet("eventos_andamento", `devedor_id=eq.${devedorInicial.id}&order=data_evento.desc&limit=50`)
+      .then(rows => { if (Array.isArray(rows)) setEventos(rows); })
+      .catch(() => {});
+  }, [devedorInicial?.id]);
 
   function F(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   const telefones = [devedor?.telefone, devedor?.telefone2, ...(devedor?.telefones_adicionais || [])].filter(Boolean);
-
-  const parcelasAtrasadas = (parcelas || []).filter(p => p.status === "ATRASADA");
-  const diasAtraso = parcelasAtrasadas.length > 0 ? (() => {
-    const hoje = new Date();
-    return Math.max(...parcelasAtrasadas.map(p => {
-      const venc = new Date(p.data_vencimento + "T12:00:00");
-      return Math.max(0, Math.floor((hoje - venc) / 86400000));
-    }));
-  })() : 0;
 
   async function registrar() {
     if (!form.tipo_evento) { toast("Selecione o tipo de evento.", { icon: "⚠️" }); return; }
@@ -331,7 +414,7 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
       data_promessa: form.data_promessa || undefined,
       giro_carteira_dias: form.giro_carteira_dias ? Number(form.giro_carteira_dias) : undefined,
     };
-    const r = await filaDevedor.registrarEvento(contrato.id, usuarioId, dados);
+    const r = await filaDevedor.registrarEvento(devedor.id, usuarioId, dados);
     if (r.success) {
       toast.success("Evento registrado!");
       setEventos(evs => [{ ...r.data, tipo_evento: form.tipo_evento, descricao: form.descricao, data_evento: new Date().toISOString() }, ...evs]);
@@ -353,22 +436,65 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
     setProximando(false);
   }
 
+  async function handleAlterarStatus(novoStatus) {
+    setAlterandoStatus(true);
+    const r = await filaDevedor.alterarStatusDevedor(devedor.id, novoStatus, usuarioId);
+    if (r.success) {
+      toast.success("Status atualizado para: " + (STATUS_DEV.find(s => s.v === novoStatus)?.l || novoStatus));
+      setDevedor(d => ({ ...d, status: novoStatus }));
+      setEventos(evs => [{ tipo_evento: "CONTATO_COM_CLIENTE", descricao: `Status: ${novoStatus}`, data_evento: new Date().toISOString() }, ...evs]);
+      // Se terminal, voltar para fila
+      if (STATUS_TERMINAIS.includes(novoStatus)) {
+        toast("Devedor removido da fila.", { icon: "✅" });
+        onSair();
+      }
+    } else {
+      toast.error("Erro: " + r.error);
+    }
+    setAlterandoStatus(false);
+  }
+
   const inpStyle = { width: "100%", padding: "8px 10px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151", boxSizing: "border-box" };
 
   return (
     <div>
       {/* Cabeçalho */}
       <div style={{ background: "#fff", borderRadius: 16, padding: "20px 24px", marginBottom: 16, border: "1px solid #e8f0f7", position: "relative" }}>
-        <div style={{ position: "absolute", top: 16, right: 16 }}>
-          <PriorityBadge prioridade={fila?.prioridade || "MEDIA"} />
+        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "center" }}>
+          <PriorityBadge prioridade={devedor?._prioridade || "BAIXA"} />
         </div>
         <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22, color: "#0f172a", marginBottom: 4 }}>{devedor?.nome || "—"}</p>
-        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", color: "#64748b", fontSize: 13 }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", color: "#64748b", fontSize: 13, marginBottom: 10 }}>
           <span>CPF/CNPJ: <strong style={{ color: "#374151" }}>{devedor?.cpf_cnpj || "—"}</strong></span>
           {telefones.length > 0 && <span>Tel: <strong style={{ color: "#374151" }}>{telefones.join(" | ")}</strong></span>}
           {devedor?.email && <span>Email: <strong style={{ color: "#374151" }}>{devedor.email}</strong></span>}
           {devedor?.cidade && <span>Cidade: <strong style={{ color: "#374151" }}>{devedor.cidade}</strong></span>}
         </div>
+
+        {/* Status + ações rápidas */}
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <StatusBadge status={devedor?.status} />
+          <select
+            style={{ ...inpS, fontSize: 12 }}
+            value={devedor?.status || ""}
+            onChange={e => handleAlterarStatus(e.target.value)}
+            disabled={alterandoStatus}
+            title="Alterar status"
+          >
+            {TODOS_STATUS.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+          </select>
+          {telefones[0] && (
+            <a href={`tel:${telefones[0]}`} style={{ textDecoration: "none" }}>
+              <Btn sm outline>📞 Ligar</Btn>
+            </a>
+          )}
+          {telefones[0] && (
+            <a href={`https://wa.me/55${telefones[0].replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(devedor?.nome || "")}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+              <Btn sm outline>💬 WhatsApp</Btn>
+            </a>
+          )}
+        </div>
+
         {fila?.bloqueado_ate && fila.bloqueado_ate >= new Date().toISOString().slice(0, 10) && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, background: "#FEF3C7", color: "#D97706", fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 99 }}>
             🔒 Promessa Ativa até {fmtData(fila.bloqueado_ate)}
@@ -377,39 +503,41 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        {/* Contratos */}
+        {/* Dados da dívida */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e8f0f7" }}>
-          <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>📄 Contrato</p>
-          {contrato ? (
+          <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>💰 Dívida</p>
+          {devedor ? (
             <div style={{ fontSize: 13, color: "#374151", display: "grid", gap: 6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Número</span>
-                <span style={{ fontWeight: 600 }}>{contrato.numero_contrato || "—"}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Valor Original</span>
-                <span>{fmtBRL(contrato.valor_original)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Valor Atualizado</span>
-                <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(contrato.valor_atualizado)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Parcelas Atrasadas</span>
-                <span style={{ fontWeight: 700, color: "#dc2626" }}>{parcelasAtrasadas.length}</span>
-              </div>
-              {diasAtraso > 0 && (
+              {devedor.valor_total && (
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#64748b" }}>Atraso</span>
-                  <span style={{ fontWeight: 700, color: "#dc2626" }}>{diasAtraso} dias</span>
+                  <span style={{ color: "#64748b" }}>Valor Total</span>
+                  <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(devedor.valor_total)}</span>
+                </div>
+              )}
+              {devedor.valor_nominal && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "#64748b" }}>Valor Nominal</span>
+                  <span>{fmtBRL(devedor.valor_nominal)}</span>
+                </div>
+              )}
+              {devedor.descricao_divida && (
+                <div>
+                  <span style={{ color: "#64748b", display: "block", marginBottom: 2 }}>Descrição</span>
+                  <span style={{ fontSize: 12, color: "#374151" }}>{devedor.descricao_divida}</span>
+                </div>
+              )}
+              {devedor.data_origem_divida && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "#64748b" }}>Data Origem</span>
+                  <span>{fmtData(devedor.data_origem_divida)}</span>
                 </div>
               )}
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Estágio</span>
-                <span style={{ fontWeight: 600 }}>{contrato.estagio}</span>
+                <span style={{ color: "#64748b" }}>Dias Cadastro</span>
+                <span style={{ fontWeight: 600 }}>{diasDesde(devedor.created_at)} dias</span>
               </div>
             </div>
-          ) : <p style={{ color: "#94a3b8", fontSize: 13 }}>Sem dados de contrato</p>}
+          ) : <p style={{ color: "#94a3b8", fontSize: 13 }}>Sem dados de dívida</p>}
         </div>
 
         {/* Histórico de eventos */}
@@ -496,7 +624,7 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
               ["Entrada na Fila", fmtData(fila?.data_entrada_fila)],
               ["Último Acionamento", fmtData(fila?.data_acionamento)],
               ["Score", fila?.score_prioridade?.toFixed(1)],
-              ["Status", statusLabel(fila?.status_fila)],
+              ["Status Fila", fila?.status_fila || "—"],
               ["Bloqueado até", fila?.bloqueado_ate ? fmtData(fila.bloqueado_ate) : "—"],
             ].map(([k, v]) => (
               <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
@@ -516,7 +644,6 @@ const lbl = { display: "block", fontSize: 12, fontWeight: 600, color: "#374151",
 // ─── TELA 4: FilaPesquisa ─────────────────────────────────────
 function FilaPesquisa({ devedores }) {
   const [busca, setBusca] = useState("");
-  const [filtroEstagio, setFiltroEstagio] = useState("");
   const [pagina, setPagina] = useState(1);
   const POR_PAG = 15;
 
@@ -536,12 +663,6 @@ function FilaPesquisa({ devedores }) {
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <input style={{ ...inp2, flex: 1, minWidth: 200 }} placeholder="Buscar por nome ou CPF/CNPJ..." value={busca} onChange={e => { setBusca(e.target.value); setPagina(1); }} />
-        <select style={inp2} value={filtroEstagio} onChange={e => setFiltroEstagio(e.target.value)}>
-          <option value="">Todos os estágios</option>
-          {["novo", "em_localizacao", "notificado", "em_negociacao", "acordo_firmado", "pago_integral", "irrecuperavel", "ajuizado"].map(s => (
-            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-          ))}
-        </select>
       </div>
 
       {visiveis.length === 0 ? (
@@ -567,9 +688,7 @@ function FilaPesquisa({ devedores }) {
                     <td style={td}>{d.cpf_cnpj || "—"}</td>
                     <td style={td}>{d.telefone || "—"}</td>
                     <td style={td}>{d.cidade || "—"}</td>
-                    <td style={td}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: "#f1f5f9", color: "#64748b" }}>{d.status || "—"}</span>
-                    </td>
+                    <td style={td}><StatusBadge status={d.status} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -618,9 +737,9 @@ function FilaHistorico() {
   useEffect(() => { carregar(); }, [carregar]);
 
   function exportCSV() {
-    const header = "Data,Tipo,Descrição,Contrato ID,Operador ID,Promessa\n";
+    const header = "Data,Tipo,Descrição,Devedor ID,Usuário ID,Promessa\n";
     const rows = eventos.map(ev =>
-      [fmtData(ev.data_evento), ev.tipo_evento, (ev.descricao || "").replace(/,/g, ";"), ev.contrato_id, ev.operador_id, ev.data_promessa || ""].join(",")
+      [fmtData(ev.data_evento), ev.tipo_evento, (ev.descricao || "").replace(/,/g, ";"), ev.devedor_id || ev.contrato_id, ev.usuario_id, ev.data_promessa || ""].join(",")
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -659,7 +778,7 @@ function FilaHistorico() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#f8fafc" }}>
-                {["Data", "Tipo", "Descrição", "Contrato", "Promessa"].map(h => (
+                {["Data", "Tipo", "Descrição", "Devedor/Contrato", "Promessa"].map(h => (
                   <th key={h} style={th}>{h}</th>
                 ))}
               </tr>
@@ -674,7 +793,9 @@ function FilaHistorico() {
                     </span>
                   </td>
                   <td style={{ ...td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.descricao || "—"}</td>
-                  <td style={{ ...td, fontFamily: "monospace", fontSize: 10, color: "#94a3b8" }}>{ev.contrato_id?.slice(0, 8)}...</td>
+                  <td style={{ ...td, fontFamily: "monospace", fontSize: 10, color: "#94a3b8" }}>
+                    {ev.devedor_id ? `dev:${ev.devedor_id}` : ev.contrato_id ? `${ev.contrato_id.slice(0, 8)}...` : "—"}
+                  </td>
                   <td style={td}>{ev.data_promessa ? fmtData(ev.data_promessa) : "—"}</td>
                 </tr>
               ))}
@@ -694,6 +815,12 @@ export default function FilaDevedor({ user, devedores, credores }) {
 
   function handleIniciar(dados) {
     setAtendimentoDados(dados);
+    setView("atendimento");
+  }
+
+  // Abrir atendimento direto do Painel (sem pegar da fila)
+  function handleAbrirAtendimento(devedor) {
+    setAtendimentoDados({ fila: devedor._fila || null, devedor, contrato: null, parcelas: [], eventos: [] });
     setView("atendimento");
   }
 
@@ -735,20 +862,20 @@ export default function FilaDevedor({ user, devedores, credores }) {
 
       {view === "atendimento" && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button onClick={() => { setView("operador"); setAtendimentoDados(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 13 }}>‹ Fila</button>
+          <button onClick={() => { setView("painel"); setAtendimentoDados(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 13 }}>‹ Fila</button>
           <span style={{ color: "#d1d5db" }}>›</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Atendimento Ativo</span>
         </div>
       )}
 
-      {view === "painel" && <FilaPainel usuarioId={usuarioId} credores={credores} />}
+      {view === "painel" && <FilaPainel usuarioId={usuarioId} credores={credores} onAbrirAtendimento={handleAbrirAtendimento} />}
       {view === "operador" && <FilaOperador usuarioId={usuarioId} onIniciar={handleIniciar} />}
       {view === "atendimento" && atendimentoDados && (
         <FilaAtendimento
           usuarioId={usuarioId}
           dadosIniciais={atendimentoDados}
           onProximo={handleProximo}
-          onSair={() => { setView("operador"); setAtendimentoDados(null); }}
+          onSair={() => { setView("painel"); setAtendimentoDados(null); }}
         />
       )}
       {view === "pesquisa" && <FilaPesquisa devedores={devedores} />}

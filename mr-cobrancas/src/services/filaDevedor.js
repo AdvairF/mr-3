@@ -17,7 +17,101 @@ function validateBigInt(id, label = "id") {
   }
 }
 
-// ─── 1. calcularScorePrioridade ───────────────────────────────
+// ─── Status ativos e terminais ────────────────────────────────
+const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
+const STATUS_TERMINAIS = ["acordo_firmado", "pago_integral", "pago_parcial", "irrecuperavel", "ajuizado"];
+
+// Bonus de score por status (quanto maior, mais urgente)
+const SCORE_STATUS = {
+  novo: 100,
+  em_localizacao: 80,
+  notificado: 60,
+  em_negociacao: 40,
+};
+
+function calcularScoreDevedor(devedor) {
+  const bonus = SCORE_STATUS[devedor.status] || 0;
+  const valor = Number(devedor.valor_total) || 0;
+  const criado = devedor.created_at ? new Date(devedor.created_at) : new Date();
+  const diasCadastro = Math.floor((Date.now() - criado) / 86400000);
+  return bonus + (valor / 100) + (diasCadastro * 0.5);
+}
+
+function calcularPrioridadeDevedor(score) {
+  return score >= 120 ? "ALTA" : score >= 80 ? "MEDIA" : "BAIXA";
+}
+
+// ─── 1. listarDevedoresParaFila ───────────────────────────────
+async function listarDevedoresParaFila(filtros = {}) {
+  try {
+    // Buscar devedores com status ativo
+    const devedores = await dbGet(
+      "devedores",
+      `select=*&status=in.(${STATUS_ATIVOS.join(",")})&order=created_at.asc`
+    );
+    if (!devedores.length) return { success: true, data: [], error: null };
+
+    // Buscar entradas ativas na fila (para marcar quem está em atendimento ou bloqueado)
+    const devedorIds = devedores.map((d) => d.id);
+    const hoje = new Date().toISOString().slice(0, 10);
+    const filaAtiva = await dbGet(
+      "fila_cobranca",
+      `select=devedor_id,status_fila,bloqueado_ate,usuario_id&devedor_id=in.(${devedorIds.join(",")})&status_fila=in.(AGUARDANDO,EM_ATENDIMENTO,ACIONADO)`
+    );
+
+    // Mapa devedor_id → fila entry mais recente
+    const filaMap = {};
+    for (const f of filaAtiva) {
+      const key = String(f.devedor_id);
+      // Priorizar EM_ATENDIMENTO > ACIONADO > AGUARDANDO
+      if (!filaMap[key] || f.status_fila === "EM_ATENDIMENTO") {
+        filaMap[key] = f;
+      }
+    }
+
+    // Filtros client-side
+    let resultado = devedores.map((d) => {
+      const filaEntry = filaMap[String(d.id)] || null;
+      const bloqueado = filaEntry?.bloqueado_ate && filaEntry.bloqueado_ate >= hoje;
+      const emAtendimento = filaEntry?.status_fila === "EM_ATENDIMENTO";
+      const score = calcularScoreDevedor(d);
+      const prioridade = calcularPrioridadeDevedor(score);
+      return { ...d, _fila: filaEntry, _bloqueado: !!bloqueado, _em_atendimento: emAtendimento, _score: score, _prioridade: prioridade };
+    });
+
+    // Aplicar filtros
+    if (filtros.status_list?.length) {
+      resultado = resultado.filter((d) => filtros.status_list.includes(d.status));
+    }
+    if (filtros.credor_id) {
+      resultado = resultado.filter((d) => String(d.credor_id) === String(filtros.credor_id));
+    }
+    if (filtros.prioridade) {
+      resultado = resultado.filter((d) => d._prioridade === filtros.prioridade);
+    }
+    if (filtros.busca) {
+      const q = filtros.busca.toLowerCase();
+      resultado = resultado.filter(
+        (d) => d.nome?.toLowerCase().includes(q) || d.cpf_cnpj?.toLowerCase().includes(q)
+      );
+    }
+    if (filtros.valor_min != null) {
+      resultado = resultado.filter((d) => (Number(d.valor_total) || 0) >= filtros.valor_min);
+    }
+    if (filtros.valor_max != null) {
+      resultado = resultado.filter((d) => (Number(d.valor_total) || 0) <= filtros.valor_max);
+    }
+
+    // Ordenar por score desc
+    resultado.sort((a, b) => b._score - a._score);
+
+    return { success: true, data: resultado, error: null };
+  } catch (err) {
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+// ─── 2. calcularScorePrioridade (mantido para compatibilidade) ─
 async function calcularScorePrioridade(contratoId) {
   try {
     validateUUID(contratoId, "contratoId");
@@ -55,7 +149,7 @@ async function calcularScorePrioridade(contratoId) {
   }
 }
 
-// ─── 2. entrarNaFila ──────────────────────────────────────────
+// ─── 3. entrarNaFila ──────────────────────────────────────────
 async function entrarNaFila() {
   try {
     const contratos = await dbGet("contratos", "select=id,devedor_id&estagio=eq.ANDAMENTO");
@@ -93,58 +187,71 @@ async function entrarNaFila() {
   }
 }
 
-// ─── 3. proximoDevedor ────────────────────────────────────────
+// ─── 4. proximoDevedor ────────────────────────────────────────
 async function proximoDevedor(usuarioId, _tentativa = 1) {
   try {
     validateBigInt(usuarioId, "usuarioId");
 
     const hoje = new Date().toISOString().slice(0, 10);
 
-    const items = await dbGet(
-      "fila_cobranca",
-      `select=*&status_fila=eq.AGUARDANDO&order=score_prioridade.desc&limit=1&or=(bloqueado_ate.is.null,bloqueado_ate.lt.${hoje})`
+    // Buscar devedores ativos, excluindo quem está EM_ATENDIMENTO ou bloqueado
+    const r = await listarDevedoresParaFila({});
+    if (!r.success) throw new Error(r.error);
+
+    const candidatos = (r.data || []).filter(
+      (d) => !d._em_atendimento && !d._bloqueado
     );
 
-    if (!items.length) {
+    if (!candidatos.length) {
       return { success: true, data: null, error: null };
     }
 
-    const item = items[0];
+    const devedor = candidatos[0]; // já ordenado por score desc
 
-    const updated = await sb(
-      "fila_cobranca",
-      "PATCH",
-      {
+    // Registrar/atualizar entrada na fila como EM_ATENDIMENTO
+    const filaExistente = devedor._fila;
+    let filaEntry;
+
+    if (filaExistente && filaExistente.status_fila === "AGUARDANDO") {
+      // Lock otimista: tentar atualizar
+      const updated = await sb(
+        "fila_cobranca",
+        "PATCH",
+        {
+          status_fila: "EM_ATENDIMENTO",
+          usuario_id: Number(usuarioId),
+          data_acionamento: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        `?devedor_id=eq.${devedor.id}&status_fila=eq.AGUARDANDO`
+      );
+      if (!updated || updated.length === 0) {
+        if (_tentativa >= 3) return { success: true, data: null, error: null };
+        return proximoDevedor(usuarioId, _tentativa + 1);
+      }
+      filaEntry = updated[0];
+    } else {
+      // Criar nova entrada
+      const inserted = await dbInsert("fila_cobranca", {
+        devedor_id: devedor.id,
         status_fila: "EM_ATENDIMENTO",
         usuario_id: Number(usuarioId),
+        score_prioridade: devedor._score,
+        prioridade: devedor._prioridade,
         data_acionamento: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      `?id=eq.${item.id}&status_fila=eq.AGUARDANDO`
-    );
-
-    // Lock otimista: outro operador pegou este item
-    if (!updated || updated.length === 0) {
-      if (_tentativa >= 3) {
-        return { success: true, data: null, error: null };
-      }
-      return proximoDevedor(operadorId, _tentativa + 1);
+      });
+      filaEntry = Array.isArray(inserted) ? inserted[0] : inserted;
     }
 
-    // Enriquecer com dados relacionados
-    const [devedoresArr, contratosArr, parcelas, eventos] = await Promise.all([
-      dbGet("devedores", `id=eq.${item.devedor_id}`),
-      dbGet("contratos", `id=eq.${item.contrato_id}`),
-      dbGet("parcelas", `contrato_id=eq.${item.contrato_id}&order=numero_parcela.asc`),
-      dbGet("eventos_andamento", `contrato_id=eq.${item.contrato_id}&order=data_evento.desc`),
-    ]);
-
-    const devedor = devedoresArr[0] || null;
-    const contrato = contratosArr[0] || null;
+    // Buscar eventos do devedor
+    const eventos = await dbGet(
+      "eventos_andamento",
+      `devedor_id=eq.${devedor.id}&order=data_evento.desc`
+    );
 
     return {
       success: true,
-      data: { fila: updated[0], devedor, contrato, parcelas, eventos },
+      data: { fila: filaEntry, devedor, contrato: null, parcelas: [], eventos },
       error: null,
     };
   } catch (err) {
@@ -152,16 +259,18 @@ async function proximoDevedor(usuarioId, _tentativa = 1) {
   }
 }
 
-// ─── 4. registrarEvento ───────────────────────────────────────
-async function registrarEvento(contratoId, usuarioId, dadosEvento) {
+// ─── 5. registrarEvento ───────────────────────────────────────
+// Aceita devedorId (BIGINT) como identificador principal.
+// contratoId (UUID) é opcional para manter compatibilidade com o fluxo antigo.
+async function registrarEvento(devedorId, usuarioId, dadosEvento) {
   try {
-    validateUUID(contratoId, "contratoId");
+    validateBigInt(devedorId, "devedorId");
     validateBigInt(usuarioId, "usuarioId");
 
     const { tipo_evento, descricao, telefone_usado, data_promessa, giro_carteira_dias } = dadosEvento;
 
     const eventoPayload = {
-      contrato_id: contratoId,
+      devedor_id: Number(devedorId),
       usuario_id: Number(usuarioId),
       tipo_evento,
       data_evento: new Date().toISOString(),
@@ -174,24 +283,18 @@ async function registrarEvento(contratoId, usuarioId, dadosEvento) {
     const resultado = await dbInsert("eventos_andamento", eventoPayload);
     const evento = Array.isArray(resultado) ? resultado[0] : resultado;
 
-    // Acordo: finaliza contrato e remove da fila
+    // Acordo: remover da fila
     if (tipo_evento === "ACORDO") {
-      await sb(
-        "contratos",
-        "PATCH",
-        { estagio: "FINALIZADO", updated_at: new Date().toISOString() },
-        `?id=eq.${contratoId}`
-      );
       await sb(
         "fila_cobranca",
         "PATCH",
         { status_fila: "REMOVIDO", updated_at: new Date().toISOString() },
-        `?contrato_id=eq.${contratoId}`
+        `?devedor_id=eq.${devedorId}`
       );
       return { success: true, data: evento, error: null };
     }
 
-    // CR-02: calcular bloqueado_ate considerando AMBOS os fatores independentemente
+    // CR-02: calcular bloqueado_ate (promessa ou giro, max date)
     let bloqueadoAte = null;
 
     if (tipo_evento === "PROMESSA_PAGAMENTO" && data_promessa) {
@@ -202,7 +305,6 @@ async function registrarEvento(contratoId, usuarioId, dadosEvento) {
       const giroData = new Date(Date.now() + giro_carteira_dias * 24 * 60 * 60 * 1000)
         .toISOString()
         .slice(0, 10);
-      // Usar a maior data (mais restritiva)
       if (!bloqueadoAte || giroData > bloqueadoAte) {
         bloqueadoAte = giroData;
       }
@@ -217,7 +319,7 @@ async function registrarEvento(contratoId, usuarioId, dadosEvento) {
           status_fila: "ACIONADO",
           updated_at: new Date().toISOString(),
         },
-        `?contrato_id=eq.${contratoId}&status_fila=eq.EM_ATENDIMENTO`
+        `?devedor_id=eq.${devedorId}&status_fila=eq.EM_ATENDIMENTO`
       );
     }
 
@@ -227,7 +329,45 @@ async function registrarEvento(contratoId, usuarioId, dadosEvento) {
   }
 }
 
-// ─── 5. reciclarContratos ─────────────────────────────────────
+// ─── 6. alterarStatusDevedor ──────────────────────────────────
+async function alterarStatusDevedor(devedorId, novoStatus, usuarioId) {
+  try {
+    validateBigInt(devedorId, "devedorId");
+    validateBigInt(usuarioId, "usuarioId");
+
+    await sb(
+      "devedores",
+      "PATCH",
+      { status: novoStatus },
+      `?id=eq.${devedorId}`
+    );
+
+    // Se terminal, remover da fila
+    if (STATUS_TERMINAIS.includes(novoStatus)) {
+      await sb(
+        "fila_cobranca",
+        "PATCH",
+        { status_fila: "REMOVIDO", updated_at: new Date().toISOString() },
+        `?devedor_id=eq.${devedorId}&status_fila=in.(AGUARDANDO,EM_ATENDIMENTO,ACIONADO)`
+      );
+    }
+
+    // Registrar evento de mudança de status
+    await dbInsert("eventos_andamento", {
+      devedor_id: Number(devedorId),
+      usuario_id: Number(usuarioId),
+      tipo_evento: "CONTATO_COM_CLIENTE",
+      descricao: `Status alterado para: ${novoStatus}`,
+      data_evento: new Date().toISOString(),
+    });
+
+    return { success: true, data: { novoStatus }, error: null };
+  } catch (err) {
+    return { success: false, data: null, error: err.message };
+  }
+}
+
+// ─── 7. reciclarContratos ─────────────────────────────────────
 async function reciclarContratos(filtros = {}, equipeId = null) {
   try {
     if (filtros.devedor_id !== undefined) {
@@ -238,7 +378,7 @@ async function reciclarContratos(filtros = {}, equipeId = null) {
       "fila_cobranca",
       "select=contrato_id&status_fila=in.(AGUARDANDO,EM_ATENDIMENTO)"
     );
-    const idsNaFila = filaAtiva.map((f) => f.contrato_id);
+    const idsNaFila = filaAtiva.map((f) => f.contrato_id).filter(Boolean);
 
     let contratos;
     if (idsNaFila.length > 0) {
@@ -250,13 +390,9 @@ async function reciclarContratos(filtros = {}, equipeId = null) {
       contratos = await dbGet("contratos", "select=*&estagio=eq.ANDAMENTO");
     }
 
-    // Filtro adicional por dias_sem_contato
     if (filtros.dias_sem_contato) {
       const diasLimite = filtros.dias_sem_contato;
-      const limiteData = new Date(
-        Date.now() - diasLimite * 24 * 60 * 60 * 1000
-      ).toISOString();
-
+      const limiteData = new Date(Date.now() - diasLimite * 24 * 60 * 60 * 1000).toISOString();
       const filtered = [];
       for (const contrato of contratos) {
         const eventos = await dbGet(
@@ -291,7 +427,7 @@ async function reciclarContratos(filtros = {}, equipeId = null) {
   }
 }
 
-// ─── 6. removerDaFila ─────────────────────────────────────────
+// ─── 8. removerDaFila ─────────────────────────────────────────
 async function removerDaFila(filaId, motivo, usuarioId) {
   try {
     validateUUID(filaId, "filaId");
@@ -302,12 +438,12 @@ async function removerDaFila(filaId, motivo, usuarioId) {
       updated_at: new Date().toISOString(),
     });
 
-    const filaItems = await dbGet("fila_cobranca", `select=contrato_id&id=eq.${filaId}`);
-    const contratoId = filaItems[0]?.contrato_id;
+    const filaItems = await dbGet("fila_cobranca", `select=devedor_id,contrato_id&id=eq.${filaId}`);
+    const devedorId = filaItems[0]?.devedor_id;
 
-    if (contratoId) {
+    if (devedorId) {
       await dbInsert("eventos_andamento", {
-        contrato_id: contratoId,
+        devedor_id: Number(devedorId),
         usuario_id: Number(usuarioId),
         tipo_evento: "SEM_CONTATO",
         descricao: "Removido da fila: " + motivo,
@@ -321,7 +457,7 @@ async function removerDaFila(filaId, motivo, usuarioId) {
   }
 }
 
-// ─── 7. listarFila ───────────────────────────────────────────
+// ─── 9. listarFila ───────────────────────────────────────────
 async function listarFila(filtros = {}) {
   try {
     if (filtros.equipe_id !== undefined) validateUUID(filtros.equipe_id, "equipe_id");
@@ -334,11 +470,11 @@ async function listarFila(filtros = {}) {
     const items = await dbGet("fila_cobranca", query);
     if (!items.length) return { success: true, data: [], error: null };
 
-    const contratoIds = [...new Set(items.map((i) => i.contrato_id))];
+    const contratoIds = [...new Set(items.map((i) => i.contrato_id).filter(Boolean))];
     const devedorIds = [...new Set(items.map((i) => i.devedor_id).filter(Boolean))];
 
     const [contratos, devedores] = await Promise.all([
-      dbGet("contratos", `id=in.(${contratoIds.join(",")})`),
+      contratoIds.length > 0 ? dbGet("contratos", `id=in.(${contratoIds.join(",")})`) : Promise.resolve([]),
       devedorIds.length > 0 ? dbGet("devedores", `id=in.(${devedorIds.join(",")})`) : Promise.resolve([]),
     ]);
 
@@ -347,7 +483,7 @@ async function listarFila(filtros = {}) {
 
     const enriched = items.map((item) => ({
       ...item,
-      contrato: contratoMap[item.contrato_id] || null,
+      contrato: item.contrato_id ? contratoMap[item.contrato_id] || null : null,
       devedor: devedorMap[String(item.devedor_id)] || null,
     }));
 
@@ -357,7 +493,7 @@ async function listarFila(filtros = {}) {
   }
 }
 
-// ─── 8. atualizarValoresAtrasados ─────────────────────────────
+// ─── 10. atualizarValoresAtrasados ────────────────────────────
 async function atualizarValoresAtrasados() {
   try {
     const contratos = await dbGet(
@@ -392,10 +528,12 @@ async function atualizarValoresAtrasados() {
 
 // ─── EXPORT ───────────────────────────────────────────────────
 export const filaDevedor = {
+  listarDevedoresParaFila,
   calcularScorePrioridade,
   entrarNaFila,
   proximoDevedor,
   registrarEvento,
+  alterarStatusDevedor,
   reciclarContratos,
   removerDaFila,
   listarFila,
