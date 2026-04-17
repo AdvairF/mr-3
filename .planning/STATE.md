@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-p4p: UI Calculadora — fórmula INPC→corrigido→juros, badge TJGO, aviso inpc_ipca
+Last activity: 2026-04-17 - Completed quick task 260417-p3q: Fix INPC dados BCB reais 2011-2026 — fator 1.71025887 = TJGO exato
 
 ## Status
 
@@ -36,3 +36,4 @@ Last activity: 2026-04-17 - Completed quick task 260417-p4p: UI Calculadora — 
 | 260417-n7q | Fix: dropdown indexador Calculadora usa INDICE_OPTIONS (era hardcoded, faltava inpc_ipca); IDX_LABEL e idxMap corrigidos | 2026-04-17 | 5a06cdb | Complete | — |
 | 260417-o4p | Alinhar cálculo TJGO: taxa_legal_406_12 CUT → ago/2024 (jul é último 1%); BCB 15 anos; juros 119.90% vs TJGO 119.71% | 2026-04-17 | e25d1df | Complete | — |
 | 260417-p4p | UI Calculadora: fórmula INPC→corrigido→juros, base de cálculo no painel juros, badge TJGO, aviso inpc_ipca | 2026-04-17 | aef74ee | Complete | — |
+| 260417-p3q | Fix INPC: dados BCB reais 2011-2026 (58 erros nos estáticos) + cap mês não publicado — fator 1.71025887 = TJGO exato | 2026-04-17 | 1bb57b0 | Complete | — |
