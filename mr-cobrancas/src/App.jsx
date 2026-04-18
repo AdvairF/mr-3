@@ -54,7 +54,7 @@ import GerarPeticao from "./components/GerarPeticao.jsx";
 import FilaDevedor from "./components/FilaDevedor.jsx";
 
 // Cálculo de saldo devedor (compartilhado com FilaDevedor)
-import { calcularSaldoDevedorAtualizado } from "./utils/devedorCalc.js";
+import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos } from "./utils/devedorCalc.js";
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -1827,7 +1827,7 @@ function AbaRelatorio({ sel, user, setSel, setDevedores }) {
 // ═══════════════════════════════════════════════════════════════
 // IMPRIMIR FICHA DO DEVEDOR EM PDF
 // ═══════════════════════════════════════════════════════════════
-async function imprimirFicha(sel, credores, fmt, fmtDate) {
+async function imprimirFicha(sel, credores, pagamentos, fmt, fmtDate) {
   // Carregar jsPDF
   let jsPDF;
   if (window.jspdf?.jsPDF) {
@@ -1979,9 +1979,74 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
     y = hrLine(y);
   }
 
+  // ── RESUMO FINANCEIRO EXECUTIVO ──────────────────────────────
+  const hojeCalc = new Date().toISOString().slice(0, 10);
+  const det = calcularDetalheEncargos(sel, pagamentos || [], hojeCalc);
+  const totalPagoGlobal = det.totalPago;
+  {
+    y = checkPage(y, 70);
+    y = cabecalhoSecao("RESUMO FINANCEIRO EXECUTIVO", y);
+
+    const linhasResumo = [
+      ["Valor Original Total", det.valorOriginal, false, escuro],
+      ["(+) Correção Monetária", det.correcao.valor, false, azul],
+      ["(+) Juros de Mora", det.juros.valor, false, [217,119,6]],
+      ["(+) Multa Contratual", det.multa.valor, false, vermelho],
+      ["(+) Honorários Advocatícios", det.honorarios.valor, false, [180,83,9]],
+      ...(det.custas.atualizado > 0 ? [["(+) Custas Atualizadas", det.custas.atualizado, false, [194,65,12]]] : []),
+      ...(det.art523.multa > 0 ? [["(+) Art. 523 §1º Multa (10%)", det.art523.multa, false, vermelho]] : []),
+      ...(det.art523.honorarios > 0 ? [["(+) Art. 523 §1º Honor. (10%)", det.art523.honorarios, false, vermelho]] : []),
+    ];
+
+    const totalAtualizado = det.saldoAtualizado + totalPagoGlobal;
+
+    linhasResumo.forEach(([label, val]) => {
+      if (val > 0) {
+        y = checkPage(y, 6);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...cinza);
+        doc.text(label, ML + 2, y);
+        doc.setFont("helvetica", "bold"); doc.setTextColor(...escuro);
+        doc.text(fmt(val), MR - 2, y, { align: "right" });
+        y += 5.5;
+      }
+    });
+
+    // Linha separadora
+    doc.setDrawColor(...azul); doc.setLineWidth(0.5);
+    doc.line(ML, y, MR, y); y += 4;
+
+    // Total Atualizado
+    y = checkPage(y, 8);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...azul);
+    doc.text("Total Atualizado", ML + 2, y);
+    doc.text(fmt(totalAtualizado), MR - 2, y, { align: "right" });
+    y += 6;
+
+    // Pagamentos abatidos
+    if (totalPagoGlobal > 0) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...verde);
+      doc.text("(-) Total Pago (parciais)", ML + 2, y);
+      doc.setFont("helvetica", "bold");
+      doc.text(fmt(totalPagoGlobal), MR - 2, y, { align: "right" });
+      y += 5;
+      doc.setDrawColor(...cinza); doc.setLineWidth(0.3);
+      doc.line(ML, y, MR, y); y += 4;
+    }
+
+    // Saldo Final em destaque
+    y = checkPage(y, 14);
+    doc.setFillColor(15, 23, 42);
+    doc.rect(ML, y - 3, MR - ML, 11, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...branco);
+    doc.text("SALDO DEVEDOR FINAL", ML + 3, y + 3);
+    doc.setFontSize(11); doc.setTextColor(74, 222, 128);
+    doc.text(fmt(det.saldoAtualizado), MR - 2, y + 3.5, { align: "right" });
+    y += 14;
+    y = hrLine(y);
+  }
+
   // ── 3. DÍVIDAS COM ATUALIZAÇÃO MONETÁRIA ────────────────────
   const dividas = sel.dividas || [];
-  const hojeCalc = new Date().toISOString().slice(0, 10);
   if (dividas.length > 0) {
     y = checkPage(y, 25);
     y = cabecalhoSecao("3. DÍVIDAS — VALORES ATUALIZADOS EM " + new Date().toLocaleDateString("pt-BR"), y);
@@ -2003,6 +2068,8 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       const subtotal = PC + juros + multaVal;
       const hon = subtotal * honPct;
       const total = subtotal + hon;
+      const art523Div = calcularArt523(total, div.art523_opcao || "nao_aplicar");
+      const totalComArt523 = total + art523Div.total_art523;
 
       totalGeralDiv += PV;
       totalGeralCorr += correcao;
@@ -2019,7 +2086,7 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       doc.text(`${di + 1}. ${div.descricao || "Dívida"}`, ML + 2, y + 1.5);
       // Valor atualizado em destaque
       doc.setTextColor(...azul);
-      doc.text(`Total Atualizado: ${fmt(total)}`, MR - 2, y + 1.5, { align: "right" });
+      doc.text(`Total Atualizado: ${fmt(totalComArt523)}`, MR - 2, y + 1.5, { align: "right" });
       y += 11;
 
       // Linha de detalhes técnicos
@@ -2066,8 +2133,20 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...branco);
       doc.text("TOTAL", MR - 27, y);
       doc.setFontSize(8.5);
-      doc.text(fmt(total), MR - 1, y + 6, { align: "right" });
+      doc.text(fmt(totalComArt523), MR - 1, y + 6, { align: "right" });
       y += 16;
+      // Art. 523 §1º CPC (se aplicado)
+      if (art523Div.total_art523 > 0) {
+        y = checkPage(y, 8);
+        doc.setFillColor(254, 226, 226); doc.rect(ML, y - 2, MR - ML, 7, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...vermelho);
+        const art523Label = div.art523_opcao === "multa_honorarios" ? "Art. 523 §1º CPC — Multa 10% + Honorários 10%"
+          : div.art523_opcao === "so_multa" ? "Art. 523 §1º CPC — Multa 10%"
+          : "Art. 523 §1º CPC";
+        doc.text(art523Label, ML + 2, y + 1.5);
+        doc.text(`Multa: ${fmt(art523Div.multa)}  |  Honor.: ${fmt(art523Div.honorarios_sucumbenciais)}  |  Total: ${fmt(art523Div.total_art523)}`, ML + 2, y + 5);
+        y += 10;
+      }
 
       // Parcelas (máx 5 por dívida no PDF para não explodir)
       const parcs = div.parcelas || [];
@@ -2134,6 +2213,35 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       doc.text(`TOTAL: ${fmt(totalGeralDiv + totalGeralCorr + totalGeralJuros + totalGeralMulta + totalGeralHon)}`, MR - 2, y + 5.5, { align: "right" });
       y += 16;
     }
+    y = hrLine(y);
+  }
+
+  // ── PAGAMENTOS PARCIAIS ───────────────────────────────────────
+  if (pagamentos && pagamentos.length > 0) {
+    y = checkPage(y, 25);
+    y = cabecalhoSecao("PAGAMENTOS PARCIAIS", y);
+    // Cabeçalho da tabela
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+    doc.text("Data", ML + 2, y); doc.text("Valor Pago", ML + 35, y); doc.text("Observação", ML + 70, y);
+    y += 5;
+    let acumuladoPago = 0;
+    const pgtosSorted = [...pagamentos].sort((a, b) => (a.data_pagamento || "").localeCompare(b.data_pagamento || ""));
+    pgtosSorted.forEach((p, pi) => {
+      y = checkPage(y, 7);
+      if (pi % 2 === 0) { doc.setFillColor(248, 250, 252); doc.rect(ML, y - 2, MR - ML, 6, "F"); }
+      acumuladoPago += parseFloat(p.valor) || 0;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...escuro);
+      doc.text(fmtDate(p.data_pagamento), ML + 2, y + 1.5);
+      doc.setFont("helvetica", "bold"); doc.setTextColor(...verde);
+      doc.text(fmt(parseFloat(p.valor) || 0), ML + 35, y + 1.5);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(...cinza);
+      doc.text(String(p.observacao || p.obs || "—").slice(0, 50), ML + 70, y + 1.5);
+      y += 6;
+    });
+    y = checkPage(y, 8);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...verde);
+    doc.text(`Total Pago: ${fmt(acumuladoPago)} em ${pagamentos.length} pagamento(s)`, ML + 2, y);
+    y += 8;
     y = hrLine(y);
   }
 
@@ -2232,6 +2340,32 @@ async function imprimirFicha(sel, credores, fmt, fmtDate) {
       }
       y += 4;
     });
+  }
+
+  // ── FUNDAMENTAÇÃO LEGAL ─────────────────────────────────────
+  {
+    y = checkPage(y, 40);
+    y = cabecalhoSecao("FUNDAMENTAÇÃO LEGAL", y);
+    const hasTaxaLegal = (sel.dividas || []).some(d => d.juros_tipo === "taxa_legal_406" || d.juros_tipo === "taxa_legal_406_12");
+    const hasArt523 = (sel.dividas || []).some(d => d.art523_opcao && d.art523_opcao !== "nao_aplicar");
+    const hasInpc = (sel.dividas || []).some(d => d.indexador === "inpc" || d.indexador === "inpc_ipca");
+    const fundamentos = [
+      { titulo: "Correção Monetária", texto: "Aplicada nos termos do indexador contratado ou determinado judicialmente, com base nos índices oficiais publicados pelo IBGE (INPC/IPCA) ou FGV (IGP-M), conforme dados do SGS/BCB." },
+      ...(hasInpc ? [{ titulo: "Lei 14.905/2024 e STJ Tema 1368", texto: "A partir de 30/08/2024, a correção monetária pelos índices INPC/IPCA segue o regime estabelecido pela Lei 14.905/2024, conforme orientação do STJ no Tema de Recursos Repetitivos 1368." }] : []),
+      ...(hasTaxaLegal ? [{ titulo: "Juros — CC Art. 406 e Selic", texto: "Juros de mora calculados pela Taxa Legal do Art. 406 do Código Civil. Até 04/2012: 1% a.m. (regime STJ). A partir de 05/2012: taxa Selic mensal (STJ Tema 1368). Taxa acumulada com base nos dados mensais do SGS/BCB (série 432)." }] : []),
+      ...(hasArt523 ? [{ titulo: "CPC Art. 523 §1º — Multa e Honorários no Cumprimento de Sentença", texto: "Não impugnado o cumprimento de sentença no prazo de 15 dias (Art. 523 CPC), incide multa de 10% e honorários advocatícios de 10% sobre o valor atualizado da condenação, nos termos do §1º do Art. 523 do CPC/2015." }] : []),
+      { titulo: "Fonte dos Índices", texto: "Todos os índices utilizados são obtidos do Sistema Gerenciador de Séries Temporais do Banco Central do Brasil (BCB/SGS), garantindo fidedignidade e rastreabilidade dos dados." },
+    ];
+    fundamentos.forEach(f => {
+      y = checkPage(y, 16);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...escuro);
+      doc.text(`• ${f.titulo}:`, ML + 2, y); y += 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      const linhas = doc.splitTextToSize(f.texto, MR - ML - 8);
+      linhas.forEach(l => { y = checkPage(y, 5); doc.text(l, ML + 6, y); y += 4.5; });
+      y += 3;
+    });
+    y = hrLine(y);
   }
 
   // ── RODAPÉ EM TODAS AS PÁGINAS ───────────────────────────────
@@ -2971,6 +3105,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   const [nd, setNd] = useState(DIVIDA_VAZIA);
   const [editDivId, setEditDivId] = useState(null);
   const [ndEdit, setNdEdit] = useState(DIVIDA_VAZIA);
+  const [hovDivId, setHovDivId] = useState(null);
   const [wp, setWp] = useState(null);
   const [novoContato, setNovoContato] = useState({ tipo: "ligacao", resultado: "sem_resposta", obs: "" });
 
@@ -3504,7 +3639,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               // Buscar registros do Supabase antes de imprimir
               let regs = [];
               try { const r = await dbGet("registros_contato", `devedor_id=eq.${sel.id}&order=data.desc`); regs = Array.isArray(r) ? r : []; } catch { }
-              imprimirFicha({ ...sel, _registros: regs }, credores, fmt, fmtDate);
+              const pgtosSelPdf = pgtosPorDevedor.get(String(sel.id)) || [];
+              imprimirFicha({ ...sel, _registros: regs }, credores, pgtosSelPdf, fmt, fmtDate);
             }} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>🖨️ Imprimir PDF</button>
             <button onClick={() => excluirDevedor(sel)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
           </div>
@@ -3671,7 +3807,15 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                 const bordaColor = ehSoCustas ? "#fed7aa" : "#e2e8f0";
                 const bgColor = ehSoCustas ? "#fffbf7" : "#fff";
                 return (
-                  <div key={div.id} style={{ border: `1.5px solid ${editDivId === div.id ? "#6366f1" : bordaColor}`, borderRadius: 14, padding: 14, marginBottom: 12, background: bgColor }}>
+                  <div key={div.id}
+                    onClick={() => !ehSoCustas && editDivId !== div.id && abrirEdicaoDivida(div)}
+                    onMouseEnter={() => !ehSoCustas && editDivId !== div.id && setHovDivId(div.id)}
+                    onMouseLeave={() => setHovDivId(null)}
+                    style={{ position: "relative", border: `1.5px solid ${editDivId === div.id ? "#6366f1" : hovDivId === div.id ? "#a5b4fc" : bordaColor}`, borderRadius: 14, padding: 14, marginBottom: 12, background: hovDivId === div.id && !ehSoCustas ? "#f8f7ff" : bgColor, cursor: !ehSoCustas && editDivId !== div.id ? "pointer" : "default", transition: "box-shadow .15s, background .15s, border-color .15s", boxShadow: hovDivId === div.id && !ehSoCustas ? "0 2px 12px rgba(79,70,229,.10)" : "none" }}>
+                    {/* Ícone hover */}
+                    {hovDivId === div.id && !ehSoCustas && editDivId !== div.id && (
+                      <div style={{ position: "absolute", top: 10, right: 10, background: "#eff6ff", borderRadius: 6, padding: "2px 7px", fontSize: 11, color: "#1d4ed8", pointerEvents: "none", fontWeight: 700 }}>✏️ editar</div>
+                    )}
                     {/* ── Cabeçalho do card ── */}
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: editDivId === div.id ? 12 : 8 }}>
                       <div style={{ flex: 1 }}>
@@ -3707,12 +3851,12 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                       {/* Botões Editar / Excluir */}
                       {!ehSoCustas && editDivId !== div.id && (
                         <div style={{ display: "flex", gap: 5, marginLeft: 8, flexShrink: 0 }}>
-                          <button onClick={() => abrirEdicaoDivida(div)} style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️ Editar</button>
-                          <button onClick={() => excluirDivida(div.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
+                          <button onClick={(e) => { e.stopPropagation(); abrirEdicaoDivida(div); }} style={{ background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 7, padding: "4px 9px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>✏️ Editar</button>
+                          <button onClick={(e) => { e.stopPropagation(); excluirDivida(div.id); }} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
                         </div>
                       )}
                       {ehSoCustas && (
-                        <button onClick={() => excluirDivida(div.id)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px', marginLeft: 8 }}>Excluir</button>
+                        <button onClick={(e) => { e.stopPropagation(); excluirDivida(div.id); }} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px', marginLeft: 8 }}>Excluir</button>
                       )}
                     </div>
 
@@ -4067,6 +4211,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               const saldo = calcularSaldoDevedorAtualizado(d, pgtosDev, hoje);
               const totalPago = pgtosDev.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
               const temParcial = pgtosDev.length > 0;
+              const temArt523 = (d.dividas || []).some(div => div.art523_opcao && div.art523_opcao !== "nao_aplicar");
               return (
                 <tr key={d.id} style={{ borderTop: "1px solid #f8fafc", cursor: "pointer" }} onClick={() => abrirModal("ficha", d)}
                   onMouseEnter={e => e.currentTarget.style.background = "#fafafe"}
@@ -4085,6 +4230,11 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                       {temParcial && (
                         <span style={{ background: "#dcfce7", color: "#16a34a", borderRadius: 99, padding: "1px 6px", fontSize: 9, fontWeight: 700, marginLeft: 4 }}>
                           Parcial
+                        </span>
+                      )}
+                      {temArt523 && (
+                        <span title="Art. 523 §1º CPC aplicado" style={{ background: "#fee2e2", color: "#991b1b", borderRadius: 99, padding: "1px 5px", fontSize: 9, fontWeight: 700, marginLeft: 2 }}>
+                          Art.523
                         </span>
                       )}
                     </p>
@@ -4112,6 +4262,11 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                       <button onClick={() => abrirModal("ficha", d)}
                         style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 13px", cursor: "pointer", fontSize: 12, fontWeight: 700, boxShadow: "0 2px 8px rgba(79,70,229,.28)" }}>
                         {I.eye} <span>Ver</span>
+                      </button>
+                      <button onClick={() => imprimirFicha(d, credores, pgtosPorDevedor.get(String(d.id)) || [], fmt, fmtDate)}
+                        title="Imprimir PDF completo"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#f8fafc", color: "#64748b", border: "1px solid #e2e8f0", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                        🖨️
                       </button>
                     </div>
                   </td>
