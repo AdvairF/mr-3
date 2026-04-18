@@ -164,5 +164,27 @@
       "saldo_menor_que_sem_pagamentos": true,
       "planilha_saldo_igual_saldo_devedor": true
     }
+  },
+  {
+    "id": "tjgo-009",
+    "descricao": "Art.523 em dívida quitada: deve afetar saldo total do devedor (não per-dívida)",
+    "nota": "Regressão: antes do fix Art.523 em div1 (totalmente paga) retornava 0 contribuição",
+    "entrada": {
+      "valor_original": 1000.00,
+      "data_vencimento": "2020-01-01",
+      "data_calculo": "2026-04-18",
+      "indexador": "inpc",
+      "juros_tipo": "fixo_1",
+      "multa_pct": 2,
+      "honorarios_pct": 20,
+      "art523_opcao": "multa_honorarios",
+      "pagamentos_parciais": [
+        { "data": "2021-06-01", "valor": 5000 }
+      ]
+    },
+    "esperado": {
+      "total_pago": 5000,
+      "saldo_menor_que_sem_pagamentos": true
+    }
   }
 ]

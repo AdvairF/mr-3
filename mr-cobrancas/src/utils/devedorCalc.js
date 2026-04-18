@@ -143,11 +143,19 @@ export function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
     }
 
     const saldoDiv = Math.max(0, saldo);
-    const art523Div = calcularArt523(saldoDiv, div.art523_opcao || "nao_aplicar");
-    saldoTotal += saldoDiv + art523Div.total_art523;
+    saldoTotal += saldoDiv;
   }
 
-  return saldoTotal;
+  // Art.523 applies to total devedor saldo (not per-dívida residual), so it
+  // works even when individual dívidas are fully absorbed by iterative payments.
+  const art523OpcaoTotal = dividasCalc.reduce((best, d) => {
+    const o = d.art523_opcao || "nao_aplicar";
+    if (best === "multa_honorarios" || o === "multa_honorarios") return "multa_honorarios";
+    if (best === "apenas_multa" || o === "apenas_multa") return "apenas_multa";
+    return "nao_aplicar";
+  }, "nao_aplicar");
+  const art523Total = calcularArt523(saldoTotal, art523OpcaoTotal);
+  return saldoTotal + art523Total.total_art523;
 }
 
 /**
@@ -588,8 +596,18 @@ export function calcularPlanilhaCompleta(devedor, pagamentos, hoje) {
   const totalAtualizado_sem_hon = PV + totalCorr + totalJuros + totalMulta;
   const totalHonorarios = totalAtualizado_sem_hon * (honorariosPct / 100);
   const totalPago = pgtos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  // saldo_devedor_final uses the iterative per-section sum (same motor as calcularSaldoDevedorAtualizado)
-  const saldoFinal = Math.max(0, secoes.reduce((s, sec) => s + sec.saldoDiv, 0));
+  // saldo_devedor_final: remove per-section Art.523, apply to total (mirrors calcularSaldoDevedorAtualizado)
+  const saldoBase = Math.max(0, secoes.reduce((s, sec) => s + sec.saldoDiv - sec.art523Multa - sec.art523Honorarios, 0));
+  const art523OpcaoTotal = dividasCalc.reduce((best, d) => {
+    const o = d.art523_opcao || 'nao_aplicar';
+    if (best === 'multa_honorarios' || o === 'multa_honorarios') return 'multa_honorarios';
+    if (best === 'apenas_multa' || o === 'apenas_multa') return 'apenas_multa';
+    return 'nao_aplicar';
+  }, 'nao_aplicar');
+  const art523FinalTotal = calcularArt523(saldoBase, art523OpcaoTotal);
+  totalArt523Multa = art523FinalTotal.multa;
+  totalArt523Honorarios = art523FinalTotal.honorarios_sucumbenciais;
+  const saldoFinal = Math.max(0, saldoBase + art523FinalTotal.total_art523);
   // total_atualizado is derived backwards for display in the resumo box
   const totalAtualizado = saldoFinal + totalPago;
 
