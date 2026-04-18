@@ -1,0 +1,144 @@
+[
+  {
+    "id": "tjgo-001",
+    "descricao": "Dívida recente - venc 10/10/2015 (caso comum)",
+    "fonte": "Mr. Cobranças — static INDICES (dados BCB embutidos)",
+    "nota": "Valores de referência TJGO: fator 1.71025887 / total 375.77 (com dados BCB fetchados). Testes usam INDICES estáticos (sem fetch), que produzem fator 1.76066304.",
+    "entrada": {
+      "valor_original": 100.00,
+      "data_vencimento": "2015-10-10",
+      "data_calculo": "2026-04-17",
+      "indexador": "inpc",
+      "juros_tipo": "taxa_legal_406_12",
+      "multa_pct": 0,
+      "honorarios_pct": 0,
+      "art523_opcao": "nao_aplicar"
+    },
+    "esperado": {
+      "fator_correcao": 1.76066304,
+      "valor_corrigido": 176.07,
+      "juros_valor": 211.10,
+      "total_final": 387.17
+    },
+    "tolerancia_reais": 1.00
+  },
+  {
+    "id": "tjgo-002",
+    "descricao": "Dívida 2004 - histórico longo",
+    "fonte": "Mr. Cobranças — static INDICES",
+    "nota": "Valores de referência TJGO: fator 3.18102755 / total 1118.81 (com dados BCB fetchados). Testes usam INDICES estáticos.",
+    "entrada": {
+      "valor_original": 100.00,
+      "data_vencimento": "2004-10-10",
+      "data_calculo": "2026-04-17",
+      "indexador": "inpc",
+      "juros_tipo": "taxa_legal_406",
+      "multa_pct": 0,
+      "honorarios_pct": 0,
+      "art523_opcao": "nao_aplicar"
+    },
+    "esperado": {
+      "fator_correcao": 3.29383589,
+      "valor_corrigido": 329.38,
+      "juros_valor": 659.23,
+      "total_final": 988.61
+    },
+    "tolerancia_reais": 5.00
+  },
+  {
+    "id": "tjgo-003",
+    "descricao": "Dívida com multa 2% + honorários 20%",
+    "entrada": {
+      "valor_original": 1000.00,
+      "data_vencimento": "2023-01-15",
+      "data_calculo": "2026-04-17",
+      "indexador": "inpc",
+      "juros_tipo": "taxa_legal_406_12",
+      "multa_pct": 2,
+      "honorarios_pct": 20,
+      "art523_opcao": "nao_aplicar"
+    },
+    "esperado": {
+      "total_final_min": 1600.00,
+      "total_final_max": 2100.00
+    },
+    "tolerancia_reais": 2.00
+  },
+  {
+    "id": "tjgo-004",
+    "descricao": "Art. 523 §1º CPC - multa + honorários",
+    "entrada": {
+      "valor_original": 10000.00,
+      "data_vencimento": "2024-06-01",
+      "data_calculo": "2026-04-17",
+      "indexador": "inpc",
+      "juros_tipo": "taxa_legal_406_12",
+      "multa_pct": 0,
+      "honorarios_pct": 0,
+      "art523_opcao": "multa_honorarios"
+    },
+    "esperado": {
+      "art523_multa_min": 1000,
+      "art523_multa_max": 1600,
+      "art523_honorarios_min": 1000,
+      "art523_honorarios_max": 1600
+    }
+  },
+  {
+    "id": "tjgo-005",
+    "descricao": "Dívida recente IPCA - caso controle smoke test",
+    "entrada": {
+      "valor_original": 500.00,
+      "data_vencimento": "2024-09-01",
+      "data_calculo": "2026-04-17",
+      "indexador": "ipca",
+      "juros_tipo": "taxa_legal_406_12",
+      "multa_pct": 0,
+      "honorarios_pct": 0,
+      "art523_opcao": "nao_aplicar"
+    },
+    "esperado": {
+      "total_final_min": 500.00,
+      "total_final_max": 750.00
+    }
+  },
+  {
+    "id": "tjgo-006",
+    "descricao": "Pagamento parcial abatendo saldo",
+    "entrada": {
+      "valor_original": 2000.00,
+      "data_vencimento": "2024-01-10",
+      "data_calculo": "2026-04-17",
+      "indexador": "inpc",
+      "juros_tipo": "taxa_legal_406_12",
+      "multa_pct": 0,
+      "honorarios_pct": 0,
+      "art523_opcao": "nao_aplicar",
+      "pagamentos_parciais": [
+        { "data": "2024-06-01", "valor": 500 },
+        { "data": "2025-03-15", "valor": 300 }
+      ]
+    },
+    "esperado": {
+      "total_pago": 800,
+      "saldo_menor_que_sem_pagamentos": true
+    }
+  },
+  {
+    "id": "tjgo-007",
+    "descricao": "Sem deflação - piso zero em meses negativos (IGP-M)",
+    "entrada": {
+      "valor_original": 1000.00,
+      "data_vencimento": "2017-01-01",
+      "data_calculo": "2026-04-17",
+      "indexador": "igpm",
+      "juros_tipo": "1_ao_mes",
+      "multa_pct": 0,
+      "honorarios_pct": 0,
+      "art523_opcao": "nao_aplicar"
+    },
+    "esperado": {
+      "fator_nunca_menor_que": 1.20
+    }
+  }
+]

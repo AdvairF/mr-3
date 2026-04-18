@@ -10,4 +10,9 @@ export default defineConfig({
   build: {
     outDir: 'build',
   },
+  test: {
+    environment: 'node',
+    globals: true,
+    pool: 'threads',
+  },
 });
