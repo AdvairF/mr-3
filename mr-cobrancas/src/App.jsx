@@ -29,6 +29,7 @@ import {
   calcularArt523,
 } from "./utils/correcao.js";
 import Art523Option from "./components/Art523Option.jsx";
+import DevedoresDaDivida from "./components/DevedoresDaDivida.jsx";
 import {
   buscarIndicesBCB,
   salvarCacheIndices,
@@ -560,13 +561,41 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
     return m;
   }, [allPagamentos]);
 
-  const totalCarteira = useMemo(
-    () => devedores.reduce((s, d) =>
-      s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje),
-      0
-    ),
-    [devedores, pgtosPorDevedorCarteira, hoje]
-  );
+  // divida_id -> devedor_id do principal (para anti-dupla-contagem)
+  const [principaisDividaIds, setPrincipaisDividaIds] = useState(null);
+  useEffect(() => {
+    async function carregarPrincipais() {
+      try {
+        const { sb } = await import("./config/supabase.js");
+        const rows = await sb("devedores_dividas?papel=eq.PRINCIPAL&select=devedor_id,divida_id");
+        if (Array.isArray(rows)) {
+          setPrincipaisDividaIds(new Map(rows.map(r => [String(r.divida_id), String(r.devedor_id)])));
+        }
+      } catch { setPrincipaisDividaIds(new Map()); }
+    }
+    carregarPrincipais();
+  }, []);
+
+  const totalCarteira = useMemo(() => {
+    if (principaisDividaIds === null) {
+      return devedores.reduce((s, d) =>
+        s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje),
+        0
+      );
+    }
+    return devedores.reduce((s, d) => {
+      const divs = Array.isArray(d.dividas) ? d.dividas : (typeof d.dividas === "string" ? JSON.parse(d.dividas || "[]") : []);
+      const contabilizar = divs.filter(div => {
+        const principalId = principaisDividaIds.get(String(div.id));
+        if (!principalId) return true;
+        return String(principalId) === String(d.id);
+      });
+      if (contabilizar.length === divs.length) {
+        return s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje);
+      }
+      return s + calcularSaldoDevedorAtualizado({ ...d, dividas: contabilizar }, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje);
+    }, 0);
+  }, [devedores, pgtosPorDevedorCarteira, hoje, principaisDividaIds]);
 
   const totalRecuperadoGlobal = useMemo(() =>
     allPagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0),
@@ -2888,6 +2917,17 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   const { confirm, ConfirmModal } = useConfirm();
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
+  const [principaisIds, setPrincipaisIds] = useState(new Set());
+  useEffect(() => {
+    async function carregarPrincipais() {
+      try {
+        const { sb } = await import("./config/supabase.js");
+        const rows = await sb("devedores_dividas?papel=eq.PRINCIPAL&select=devedor_id");
+        if (Array.isArray(rows)) setPrincipaisIds(new Set(rows.map(r => String(r.devedor_id))));
+      } catch { /* non-critical */ }
+    }
+    carregarPrincipais();
+  }, []);
 
   const pgtosPorDevedor = useMemo(() => {
     const m = new Map();
@@ -3211,6 +3251,12 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed); setNd(DIVIDA_VAZIA);
       toast.success("Dívida adicionada com sucesso!");
+      try {
+        const { seedPrincipal } = await import("./services/devedoresDividas.js");
+        await seedPrincipal(sel.id, divida.id);
+      } catch (seedErr) {
+        console.warn("seedPrincipal failed (non-critical):", seedErr);
+      }
     } catch (e) {
       toast.error("Não foi possível salvar a dívida no Supabase:" + e.message);
       return;
@@ -3802,6 +3848,11 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                             </table>
                           </div>
                         )}
+                        <DevedoresDaDivida
+                          dividaId={String(div.id)}
+                          devedores={devedores}
+                          devedorAtualId={sel.id}
+                        />
                       </>
                     )}
                   </div>
@@ -4077,7 +4128,12 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   onMouseEnter={e => e.currentTarget.style.background = "#fafafe"}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
                   <td style={{ padding: "12px 16px" }}>
-                    <p style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>{d.nome}</p>
+                    <p style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>
+                      {d.nome}
+                      {principaisIds.has(String(d.id)) && (
+                        <span title="Devedor principal em ao menos uma dívida" style={{ marginLeft: 5, fontSize: 12 }}>👑</span>
+                      )}
+                    </p>
                     <p style={{ fontSize: 10, color: "#94a3b8" }}>{d.tipo === "PF" ? "PF" : "PJ"} · {d.cidade || "—"}</p>
                   </td>
                   <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: 12, color: "#475569" }}>{d.cpf_cnpj || "—"}</td>
