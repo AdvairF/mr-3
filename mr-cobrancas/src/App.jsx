@@ -30,6 +30,7 @@ import {
 } from "./utils/correcao.js";
 import Art523Option from "./components/Art523Option.jsx";
 import DevedoresDaDivida from "./components/DevedoresDaDivida.jsx";
+import ProcessosJudiciais from "./components/ProcessosJudiciais.jsx";
 import {
   buscarIndicesBCB,
   salvarCacheIndices,
@@ -2918,6 +2919,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [principaisIds, setPrincipaisIds] = useState(new Set());
+  const [devedoresComProcesso, setDevedoresComProcesso] = useState(new Set());
   useEffect(() => {
     async function carregarPrincipais() {
       try {
@@ -2926,7 +2928,15 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         if (Array.isArray(rows)) setPrincipaisIds(new Set(rows.map(r => String(r.devedor_id))));
       } catch { /* non-critical */ }
     }
+    async function carregarComProcesso() {
+      try {
+        const { sb } = await import("./config/supabase.js");
+        const rows = await sb("processos_devedores?select=devedor_id");
+        if (Array.isArray(rows)) setDevedoresComProcesso(new Set(rows.map(r => String(r.devedor_id))));
+      } catch { /* non-critical */ }
+    }
     carregarPrincipais();
+    carregarComProcesso();
   }, []);
 
   const pgtosPorDevedor = useMemo(() => {
@@ -4132,6 +4142,9 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                       {d.nome}
                       {principaisIds.has(String(d.id)) && (
                         <span title="Devedor principal em ao menos uma dívida" style={{ marginLeft: 5, fontSize: 12 }}>👑</span>
+                      )}
+                      {devedoresComProcesso.has(String(d.id)) && (
+                        <span title="Possui processo judicial" style={{ marginLeft: 4, fontSize: 13 }}>⚖️</span>
                       )}
                     </p>
                     <p style={{ fontSize: 10, color: "#94a3b8" }}>{d.tipo === "PF" ? "PF" : "PJ"} · {d.cidade || "—"}</p>
@@ -8479,6 +8492,7 @@ export default function App() {
     { id: "lembretes", label: "Lembretes", icon: I.bell, color: "#ef4444", bg: "rgba(239,68,68,.18)" },
     { id: "regua", label: "Régua", icon: I.regua2, color: "#0891b2", bg: "rgba(8,145,178,.18)" },
     { id: "fila", label: "Fila de Cobrança", icon: I.fila, color: "#f97316", bg: "rgba(249,115,22,.18)" },
+    { id: "processos", label: "Processos", icon: I.proc, color: "#4f46e5", bg: "rgba(79,70,229,.18)" },
     { id: "peticao", label: "Petições", icon: I.peticao, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
     ...(isAdmin ? [
       { id: "usuarios", label: "Usuários", icon: I.users2, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
@@ -8496,6 +8510,13 @@ export default function App() {
       case "lembretes": return <Lembretes devedores={devedores} credores={credores} user={user} />;
       case "regua": return <Regua devedores={devedores} credores={credores} user={user} />;
       case "fila": return <FilaDevedor user={user} devedores={devedores} credores={credores} />;
+      case "processos": return <ProcessosJudiciais
+        devedores={devedores}
+        credores={credores}
+        pagamentos={allPagamentos}
+        hoje={hoje_app}
+        onVerDevedor={(id) => { setTab("devedores"); setTimeout(() => { window.dispatchEvent(new CustomEvent("mr_abrir_devedor", { detail: id })); }, 100); }}
+      />;
       case "peticao": return <GerarPeticao devedores={devedores} credores={credores} />;
       case "usuarios": return isAdmin ? <GestaoUsuarios user={user} /> : null;
       case "auditoria": return isAdmin ? <AuditoriaLog user={user} /> : null;
