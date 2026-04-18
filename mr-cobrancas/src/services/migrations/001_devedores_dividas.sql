@@ -64,7 +64,8 @@ FROM
   devedores d,
   LATERAL jsonb_array_elements(
     CASE
-      WHEN jsonb_typeof(d.dividas::jsonb) = 'array' THEN d.dividas::jsonb
+      WHEN jsonb_typeof(d.dividas) = 'string' THEN (d.dividas #>> '{}')::jsonb
+      WHEN jsonb_typeof(d.dividas) = 'array' THEN d.dividas
       ELSE '[]'::jsonb
     END
   ) AS div_row
