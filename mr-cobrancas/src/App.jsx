@@ -30,6 +30,8 @@ import {
 } from "./utils/correcao.js";
 import Art523Option from "./components/Art523Option.jsx";
 import DevedoresDaDivida from "./components/DevedoresDaDivida.jsx";
+import PessoasVinculadas from "./components/PessoasVinculadas.jsx";
+import { listarTodosIds as listarVinculadosIds, listar as listarVincPdf } from "./services/devedoresVinculados.js";
 import ProcessosJudiciais from "./components/ProcessosJudiciais.jsx";
 import {
   buscarIndicesBCB,
@@ -2372,6 +2374,35 @@ async function imprimirFicha(sel, credores, pagamentos, fmt, fmtDate) {
     });
   }
 
+  // ── 8. PESSOAS VINCULADAS ────────────────────────────────────────
+  const vinculados = sel._vinculados || [];
+  if (vinculados.length > 0) {
+    y = checkPage(y, 20);
+    y = cabecalhoSecao("8. PESSOAS VINCULADAS", y);
+    const tipoLabels = {
+      SOCIO: "Sócio", REPRESENTANTE_LEGAL: "Representante Legal", CONJUGE: "Cônjuge",
+      COOBRIGADO: "Coobrigado", AVALISTA: "Avalista", FIADOR: "Fiador",
+      RESPONSAVEL_SOLIDARIO: "Responsável Solidário", OUTRO: "Outro",
+    };
+    vinculados.forEach((v, vi) => {
+      y = checkPage(y, 14);
+      if (vi % 2 === 0) { doc.setFillColor(250, 250, 252); doc.rect(ML, y - 2, MR - ML, 12, "F"); }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...escuro);
+      doc.text(`${v.nome || "—"}`, ML + 2, y + 1.5);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
+      doc.text(`${tipoLabels[v.tipo_vinculo] || v.tipo_vinculo || "—"}  ·  ${v.cpf_cnpj || "—"}`, MR - 2, y + 1.5, { align: "right" });
+      y += 6;
+      if (v.observacao) {
+        const lObs = doc.splitTextToSize(v.observacao, MR - ML - 4);
+        doc.text(lObs, ML + 4, y);
+        y += lObs.length * 4 + 2;
+      } else {
+        y += 4;
+      }
+    });
+    y = hrLine(y);
+  }
+
   // ── RODAPÉ EM TODAS AS PÁGINAS ───────────────────────────────
   const totalPages = doc.internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
@@ -2920,6 +2951,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   const [filtroStatus, setFiltroStatus] = useState("");
   const [principaisIds, setPrincipaisIds] = useState(new Set());
   const [devedoresComProcesso, setDevedoresComProcesso] = useState(new Set());
+  const [vinculadosSet, setVinculadosSet] = useState(new Set());
   useEffect(() => {
     async function carregarPrincipais() {
       try {
@@ -2937,6 +2969,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     }
     carregarPrincipais();
     carregarComProcesso();
+    listarVinculadosIds().then(ids => setVinculadosSet(ids)).catch(() => {});
   }, []);
 
   const pgtosPorDevedor = useMemo(() => {
@@ -3533,8 +3566,10 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               // Buscar registros do Supabase antes de imprimir
               let regs = [];
               try { const r = await dbGet("registros_contato", `devedor_id=eq.${sel.id}&order=data.desc`); regs = Array.isArray(r) ? r : []; } catch { }
+              let vincs = [];
+              try { const vr = await listarVincPdf(sel.id); vincs = Array.isArray(vr) ? vr.map(v => ({ ...v.vinculado, tipo_vinculo: v.tipo_vinculo, observacao: v.observacao })) : []; } catch {}
               const pgtosSelPdf = pgtosPorDevedor.get(String(sel.id)) || [];
-              imprimirFicha({ ...sel, _registros: regs }, credores, pgtosSelPdf, fmt, fmtDate);
+              imprimirFicha({ ...sel, _registros: regs, _vinculados: vincs }, credores, pgtosSelPdf, fmt, fmtDate);
             }} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>🖨️ Imprimir PDF</button>
             <button onClick={() => excluirDevedor(sel)} style={{ color: '#DC2626', background: 'transparent', border: '1px solid #DC2626', borderRadius: '6px', padding: '4px 12px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Excluir</button>
           </div>
@@ -3544,7 +3579,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         <div style={{ position: "relative", marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #f1f5f9", overflowX: "auto", scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent", WebkitOverflowScrolling: "touch" }}>
             <style>{`.tab-scroll::-webkit-scrollbar{height:3px}.tab-scroll::-webkit-scrollbar-track{background:transparent}.tab-scroll::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:99px}`}</style>
-            {[["dados", "📋 Dados"], ["contatos", "📞 Contatos"], ["dividas", "💳 Dívidas"], ["pagamentos", "💰 Pagamentos"], ["acordos", "🤝 Acordos"], ["processos", "⚖️ Processos"], ["relatorio", "📊 Relatório"]].map(([id, label]) => (
+            {[["dados", "📋 Dados"], ["vinculados", "👥 Vinculados"], ["contatos", "📞 Contatos"], ["dividas", "💳 Dívidas"], ["pagamentos", "💰 Pagamentos"], ["acordos", "🤝 Acordos"], ["processos", "⚖️ Processos"], ["relatorio", "📊 Relatório"]].map(([id, label]) => (
               <button key={id} onClick={() => setAbaFicha(id)}
                 style={{ padding: "10px 18px", border: "none", background: abaFicha === id ? "#fafafe" : "none", cursor: "pointer", fontFamily: "Plus Jakarta Sans", fontWeight: 700, fontSize: 12, color: abaFicha === id ? "#4f46e5" : "#94a3b8", borderBottom: `2px solid ${abaFicha === id ? "#4f46e5" : "transparent"}`, marginBottom: -2, whiteSpace: "nowrap", flexShrink: 0, transition: "all .15s" }}>
                 {label}
@@ -3660,6 +3695,20 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                 <Btn onClick={() => setEditando(false)} outline color="#64748b">Cancelar</Btn>
               </div>
             </div>
+          )}
+
+          {/* ABA VINCULADOS */}
+          {abaFicha === "vinculados" && (
+            <PessoasVinculadas
+              devedor={sel}
+              devedores={devedores}
+              pagamentos={pgtosPorDevedor.get(String(sel.id)) || []}
+              hoje={hoje}
+              onNavigate={(id) => {
+                const dev = devedores.find(x => String(x.id) === String(id));
+                if (dev) { setSel(dev); setAbaFicha("dados"); }
+              }}
+            />
           )}
 
           {/* ABA CONTATOS */}
@@ -4145,6 +4194,9 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                       )}
                       {devedoresComProcesso.has(String(d.id)) && (
                         <span title="Possui processo judicial" style={{ marginLeft: 4, fontSize: 13 }}>⚖️</span>
+                      )}
+                      {vinculadosSet.has(String(d.id)) && (
+                        <span title="Possui pessoas vinculadas" style={{ marginLeft: 4, fontSize: 12 }}>👥</span>
                       )}
                     </p>
                     <p style={{ fontSize: 10, color: "#94a3b8" }}>{d.tipo === "PF" ? "PF" : "PJ"} · {d.cidade || "—"}</p>

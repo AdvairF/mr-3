@@ -873,6 +873,63 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
         );
       })()}
 
+      {/* ── Pessoas Vinculadas (collapsible) ── */}
+      {(() => {
+        const [showVinc, setShowVinc] = React.useState(false);
+        const [vincs, setVincs] = React.useState(null); // null = not loaded yet
+        return (
+          <div style={{ background: "#fff", borderRadius: 16, padding: "14px 20px", border: "1px solid #e8f0f7", marginBottom: 16 }}>
+            <button
+              onClick={() => {
+                if (!showVinc && vincs === null) {
+                  import("../services/devedoresVinculados.js").then(({ listar, listarInverso }) => {
+                    Promise.all([listar(devedor.id), listarInverso(devedor.id)]).then(([dir, inv]) => {
+                      setVincs({ dir: Array.isArray(dir) ? dir : [], inv: Array.isArray(inv) ? inv : [] });
+                    }).catch(() => setVincs({ dir: [], inv: [] }));
+                  });
+                }
+                setShowVinc(v => !v);
+              }}
+              style={{ background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#0f172a", display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: 0 }}
+            >
+              👥 Pessoas Vinculadas {vincs && (vincs.dir.length + vincs.inv.length) > 0 && (
+                <span style={{ background: "#ede9fe", color: "#4f46e5", borderRadius: 99, padding: "1px 7px", fontSize: 11 }}>
+                  {vincs.dir.length + vincs.inv.length}
+                </span>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "#94a3b8" }}>{showVinc ? "▲" : "▼"}</span>
+            </button>
+            {showVinc && (
+              <div style={{ marginTop: 12 }}>
+                {vincs === null ? (
+                  <p style={{ color: "#94a3b8", fontSize: 12 }}>Carregando...</p>
+                ) : vincs.dir.length === 0 && vincs.inv.length === 0 ? (
+                  <p style={{ color: "#94a3b8", fontSize: 12 }}>Nenhuma pessoa vinculada.</p>
+                ) : (
+                  <>
+                    {vincs.inv.map(r => (
+                      <div key={r.id} style={{ background: "#fef9c3", borderRadius: 8, padding: "6px 10px", marginBottom: 6, fontSize: 12 }}>
+                        <span style={{ color: "#92400e", fontWeight: 700 }}>Vinculado a: </span>
+                        <span style={{ color: "#0f172a", fontWeight: 600 }}>{r.principal?.nome || "—"}</span>
+                        <span style={{ color: "#64748b" }}> ({r.tipo_vinculo})</span>
+                      </div>
+                    ))}
+                    {vincs.dir.map(r => (
+                      <div key={r.id} style={{ border: "1px solid #e8edf2", borderRadius: 8, padding: "6px 10px", marginBottom: 6, fontSize: 12, background: "#fafafe" }}>
+                        <span style={{ fontWeight: 600, color: "#0f172a" }}>{r.vinculado?.nome || "—"}</span>
+                        <span style={{ marginLeft: 8, background: "#ede9fe", color: "#4f46e5", borderRadius: 99, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>{r.tipo_vinculo}</span>
+                        {r.vinculado?.cpf_cnpj && <span style={{ color: "#94a3b8", marginLeft: 8 }}>{r.vinculado.cpf_cnpj}</span>}
+                        {r.observacao && <p style={{ color: "#64748b", fontSize: 11, fontStyle: "italic", marginTop: 3, marginBottom: 0 }}>{r.observacao}</p>}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       <div style={{ marginBottom: 16 }}>
         {/* Histórico de eventos */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e8f0f7", maxHeight: 260, overflowY: "auto" }}>
