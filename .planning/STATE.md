@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-ull: motor unificado calcularPlanilhaCompleta, Art.523 na planilha verde, remoção FUNDAMENTAÇÃO LEGAL, 8/8 testes
+Last activity: 2026-04-18 - Completed quick task 260418-hr7: processos judiciais módulo completo + verificar DevedoresDaDivida + badge ⚖️ + deploy ✓
 
 ## Status
 
@@ -46,3 +46,6 @@ Last activity: 2026-04-17 - Completed quick task 260417-ull: motor unificado cal
 | 260417-u7v | Art.523 badge painel reativo, PDF unificado (resumo financeiro executivo + pagamentos parciais + fundamentação legal + Art.523 por dívida + botão PDF no painel), cards dívida clicáveis com hover e ✏️ | 2026-04-17 | d469110 | Complete | — |
 | 260417-ttn | Art.523 reload forçado após save (dbGet Supabase + null normalização), badge Art.523 no card de dívida (so_multa/multa_honorarios), edição inline pagamentos parciais (editPgtoId state + dbUpdate) | 2026-04-17 | acd89e2 | Needs Review | [260417-ttn-ajustes-modulo-devedor-art523-dividas-pa](./quick/260417-ttn-ajustes-modulo-devedor-art523-dividas-pa/) |
 | 260417-ull | Motor unificado calcularPlanilhaCompleta em devedorCalc.js (iterativo + Art.523): planilha verde = ficha roxa; Art.523 no resumo executivo planilha; remoção FUNDAMENTAÇÃO LEGAL; tjgo-008; deploy ✓ | 2026-04-17 | 5fa3a08 | Complete | [260417-ull-unificar-planilhas-padrao-pagamentos-parci](./quick/260417-ull-unificar-planilhas-padrao-pagamentos-parci/) |
+| 260418-ft9 | Fix Art.523 painel: valor não mudava ao aplicar/remover (dívida quitada by iterative pgtos → saldo 0 → Art.523×0=0); Art.523 agora no total devedor pós-loop; tjgo-009; 9/9 testes; deploy ✓ | 2026-04-18 | 42bab66 | Complete | — |
+| 260418-gxm | Múltiplos devedores por dívida: tabela devedores_dividas + service + hook + DevedoresDaDivida.jsx + badge 👑 + totalCarteira anti-dupla-contagem; SQL migration idempotente; 9/9 testes; deploy ✓ | 2026-04-18 | 5d9e262 | Complete | [260418-gxm-multiplos-devedores-por-divida-com-principal](./quick/260418-gxm-multiplos-devedores-por-divida-com-principal/) |
+| 260418-hr7 | Processos judiciais módulo completo + verificar DevedoresDaDivida | 2026-04-18 | b8ab6c2 | Complete | [260418-hr7-ativar-opcao-a-agrupamento-processo](./quick/260418-hr7-ativar-opcao-a-agrupamento-processo/) |
