@@ -2461,6 +2461,8 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
   const [carregando, setCarregando] = useState(false);
   const [form, setForm] = useState({ data_pagamento: "", valor: "", observacao: "" });
   const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [editPgtoId, setEditPgtoId] = useState(null);
+  const [editPgtoForm, setEditPgtoForm] = useState({ data_pagamento: "", valor: "", observacao: "" });
 
   async function carregar() {
     setCarregando(true);
@@ -2499,6 +2501,26 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
       await carregar();
     } catch (e) {
       toast.error("Erro ao salvar: " + e.message);
+    }
+  }
+
+  async function salvarEdicaoPagamento(id) {
+    const valorNum = parseFloat(editPgtoForm.valor);
+    if (!editPgtoForm.data_pagamento || isNaN(valorNum) || valorNum <= 0) {
+      toast("Data e valor são obrigatórios e valor deve ser > 0.", { icon: "⚠️" });
+      return;
+    }
+    try {
+      await dbUpdate("pagamentos_parciais", id, {
+        data_pagamento: editPgtoForm.data_pagamento,
+        valor: valorNum,
+        observacao: editPgtoForm.observacao || null,
+      });
+      toast.success("Pagamento atualizado.");
+      setEditPgtoId(null);
+      await carregar();
+    } catch (e) {
+      toast.error("Erro ao atualizar: " + (e?.message || e));
     }
   }
 
@@ -3028,20 +3050,58 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
             </thead>
             <tbody>
               {pagamentos.map(p => (
-                <tr key={p.id} style={{ borderBottom: "1px solid #dcfce7" }}>
-                  <td style={{ padding: "5px 8px", color: "#374151" }}>{fmtDate(p.data_pagamento)}</td>
-                  <td style={{ padding: "5px 8px", color: "#16a34a", fontWeight: 700 }}>{fmt(parseFloat(p.valor))}</td>
-                  <td style={{ padding: "5px 8px", color: "#64748b" }}>{p.observacao || "—"}</td>
-                  <td style={{ padding: "5px 8px" }}>
-                    <button
-                      aria-label="Excluir pagamento"
-                      onClick={() => excluirPagamento(p.id)}
-                      style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
+                editPgtoId === p.id ? (
+                  <tr key={p.id} style={{ borderBottom: "1px solid #dcfce7", background: "#f0fdf4" }}>
+                    <td style={{ padding: "4px 8px" }}>
+                      <input type="date" value={editPgtoForm.data_pagamento}
+                        onChange={e => setEditPgtoForm(f => ({ ...f, data_pagamento: e.target.value }))}
+                        style={{ padding: "4px 6px", border: "1.5px solid #bbf7d0", borderRadius: 6, fontSize: 11 }} />
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      <input type="number" value={editPgtoForm.valor} min="0" step="0.01"
+                        onChange={e => setEditPgtoForm(f => ({ ...f, valor: e.target.value }))}
+                        style={{ padding: "4px 6px", border: "1.5px solid #bbf7d0", borderRadius: 6, fontSize: 11, width: 90 }} />
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      <input type="text" value={editPgtoForm.observacao}
+                        onChange={e => setEditPgtoForm(f => ({ ...f, observacao: e.target.value }))}
+                        placeholder="Observação"
+                        style={{ padding: "4px 6px", border: "1.5px solid #bbf7d0", borderRadius: 6, fontSize: 11, width: "100%" }} />
+                    </td>
+                    <td style={{ padding: "4px 8px", display: "flex", gap: 4 }}>
+                      <button onClick={() => salvarEdicaoPagamento(p.id)}
+                        style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}>✅</button>
+                      <button onClick={() => setEditPgtoId(null)}
+                        style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}>❌</button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={p.id}
+                    onClick={() => {
+                      setEditPgtoId(p.id);
+                      setEditPgtoForm({
+                        data_pagamento: p.data_pagamento || "",
+                        valor: String(p.valor ?? ""),
+                        observacao: p.observacao || "",
+                      });
+                    }}
+                    style={{ borderBottom: "1px solid #dcfce7", cursor: "pointer" }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "#dcfce7"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = ""; }}>
+                    <td style={{ padding: "5px 8px", color: "#374151" }}>{fmtDate(p.data_pagamento)}</td>
+                    <td style={{ padding: "5px 8px", color: "#16a34a", fontWeight: 700 }}>{fmt(parseFloat(p.valor))}</td>
+                    <td style={{ padding: "5px 8px", color: "#64748b" }}>{p.observacao || "—"}</td>
+                    <td style={{ padding: "5px 8px" }}>
+                      <button
+                        aria-label="Excluir pagamento"
+                        onClick={e => { e.stopPropagation(); excluirPagamento(p.id); }}
+                        style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                )
               ))}
             </tbody>
           </table>
@@ -3535,6 +3595,23 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
     }
+    // Reload forçado para garantir dividas JSONB íntegro (fix Art.523 não altera valor no painel)
+    try {
+      const fresh = await dbGet("devedores", `id=eq.${sel.id}`);
+      const freshDev = Array.isArray(fresh) ? fresh[0] : fresh;
+      if (freshDev) {
+        const dividasRaw = typeof freshDev.dividas === "string"
+          ? JSON.parse(freshDev.dividas || "[]")
+          : (freshDev.dividas || []);
+        // Normalizar art523_opcao null → "nao_aplicar" (sem migração de dados)
+        const dividasNorm = dividasRaw.map(d => ({ ...d, art523_opcao: d.art523_opcao || "nao_aplicar" }));
+        const parsedFresh = montarDevAtualizado(freshDev, dividasNorm);
+        setDevedores(prev => prev.map(d => d.id === sel.id ? parsedFresh : d));
+        setSel(parsedFresh);
+      }
+    } catch (reloadErr) {
+      console.warn("Reload pós-save falhou (state local mantido):", reloadErr);
+    }
     setEditDivId(null);
     setNdEdit(DIVIDA_VAZIA);
   }
@@ -3845,6 +3922,28 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                               }
                             </p>
                             {div.indexador && <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>Índice: {IDX_LABELS[div.indexador] || div.indexador?.toUpperCase()} · Juros: {JUROS_LABEL[div.juros_tipo] || `${div.juros_am || 0}% a.m.`} · Multa: {div.multa_pct}% · Honorários: {div.honorarios_pct}%</p>}
+                            {div.art523_opcao && div.art523_opcao !== "nao_aplicar" && (
+                              <p style={{ marginTop: 3 }}>
+                                <span
+                                  title={
+                                    div.art523_opcao === "multa_honorarios"
+                                      ? "Art. 523 §1º CPC — Multa 10% + Honorários 10% de sucumbência"
+                                      : "Art. 523 §1º CPC — Multa 10% (sem honorários)"
+                                  }
+                                  style={{
+                                    display: "inline-block",
+                                    background: "#fee2e2",
+                                    color: "#991b1b",
+                                    borderRadius: 99,
+                                    padding: "1px 7px",
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {div.art523_opcao === "multa_honorarios" ? "Art.523 Multa+Hon." : "Art.523 Multa"}
+                                </span>
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
