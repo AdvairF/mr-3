@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-r4s: Art. 523 §1º CPC — multa 10% + honorários 10% em Calculadora, Dívida, FilaDevedor, GerarPeticao
+Last activity: 2026-04-17 - Completed quick task 260417-ttn: Art.523 reload forçado após save, badge Art.523 nas dívidas, edição inline pagamentos parciais
 
 ## Status
 
@@ -41,3 +41,7 @@ Last activity: 2026-04-17 - Completed quick task 260417-r4s: Art. 523 §1º CPC 
 | 260417-ph4 | Histórico BCB desde 1995: INPC 192 meses (1995-2010) + IGP-M 300 meses (1995-2019) + bcbApi 31 anos — fator 2004 alinhado TJGO | 2026-04-17 | dfcf2a5 | Complete | — |
 | 260417-qi5 | Fix cache bust v2 + botão Atualizar usa 31 anos (era hardcoded 10) — invalida cache v1 do browser, divergência 2,29→3,29 resolvida | 2026-04-17 | 500337c | Complete | — |
 | 260417-r4s | Art. 523 §1º CPC: componente reutilizável, calcularArt523(), Calculadora + Dívida edit + FilaDevedor + GerarPeticao, template cumprimento sentença | 2026-04-17 | 5e5fa25 | Complete | — |
+| 260417-s5t | Fix Art. 523 dupla contagem: devedorCalc aplica art523_opcao por dívida (JSONB); FilaDevedor remove recomputo, usa det.art523 read-only | 2026-04-17 | 85cca69 | Complete | — |
+| 260417-t6u | Suite regressiva Vitest: 7 casos TJGO (INPC/IPCA/IGP-M, Art.406, Art.523, pagamentos, piso-zero), prebuild gate, GitHub Actions CI | 2026-04-17 | 1eeb899 | Complete | — |
+| 260417-u7v | Art.523 badge painel reativo, PDF unificado (resumo financeiro executivo + pagamentos parciais + fundamentação legal + Art.523 por dívida + botão PDF no painel), cards dívida clicáveis com hover e ✏️ | 2026-04-17 | d469110 | Complete | — |
+| 260417-ttn | Art.523 reload forçado após save (dbGet Supabase + null normalização), badge Art.523 no card de dívida (so_multa/multa_honorarios), edição inline pagamentos parciais (editPgtoId state + dbUpdate) | 2026-04-17 | acd89e2 | Needs Review | [260417-ttn-ajustes-modulo-devedor-art523-dividas-pa](./quick/260417-ttn-ajustes-modulo-devedor-art523-dividas-pa/) |
