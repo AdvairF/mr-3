@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-17 - Completed quick task 260417-ttn: Art.523 reload forçado após save, badge Art.523 nas dívidas, edição inline pagamentos parciais
+Last activity: 2026-04-17 - Completed quick task 260417-ull: motor unificado calcularPlanilhaCompleta, Art.523 na planilha verde, remoção FUNDAMENTAÇÃO LEGAL, 8/8 testes
 
 ## Status
 
@@ -45,3 +45,4 @@ Last activity: 2026-04-17 - Completed quick task 260417-ttn: Art.523 reload for�
 | 260417-t6u | Suite regressiva Vitest: 7 casos TJGO (INPC/IPCA/IGP-M, Art.406, Art.523, pagamentos, piso-zero), prebuild gate, GitHub Actions CI | 2026-04-17 | 1eeb899 | Complete | — |
 | 260417-u7v | Art.523 badge painel reativo, PDF unificado (resumo financeiro executivo + pagamentos parciais + fundamentação legal + Art.523 por dívida + botão PDF no painel), cards dívida clicáveis com hover e ✏️ | 2026-04-17 | d469110 | Complete | — |
 | 260417-ttn | Art.523 reload forçado após save (dbGet Supabase + null normalização), badge Art.523 no card de dívida (so_multa/multa_honorarios), edição inline pagamentos parciais (editPgtoId state + dbUpdate) | 2026-04-17 | acd89e2 | Needs Review | [260417-ttn-ajustes-modulo-devedor-art523-dividas-pa](./quick/260417-ttn-ajustes-modulo-devedor-art523-dividas-pa/) |
+| 260417-ull | Motor unificado calcularPlanilhaCompleta em devedorCalc.js (iterativo + Art.523): planilha verde = ficha roxa; Art.523 no resumo executivo planilha; remoção FUNDAMENTAÇÃO LEGAL; tjgo-008; deploy ✓ | 2026-04-17 | 5fa3a08 | Complete | [260417-ull-unificar-planilhas-padrao-pagamentos-parci](./quick/260417-ull-unificar-planilhas-padrao-pagamentos-parci/) |
