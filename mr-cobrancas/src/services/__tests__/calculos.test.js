@@ -18,7 +18,7 @@ import {
   calcularJurosAcumulados,
   calcularArt523,
 } from "../../utils/correcao.js";
-import { calcularSaldoDevedorAtualizado } from "../../utils/devedorCalc.js";
+import { calcularSaldoDevedorAtualizado, calcularPlanilhaCompleta } from "../../utils/devedorCalc.js";
 import casos from "./casos-tjgo.json";
 
 // ─── Helper: calcula caso completo a partir da entrada ───────────────────────
@@ -183,6 +183,16 @@ describe("Suite Regressão TJGO — Cálculos Oficiais", () => {
           pagamentos_parciais: [],
         });
         expect(resultado.saldo_com_pagamentos).toBeLessThan(semPagamentos.total_final);
+      }
+
+      // Motor unificado: calcularPlanilhaCompleta deve coincidir com calcularSaldoDevedorAtualizado
+      if (esperado.planilha_saldo_igual_saldo_devedor) {
+        const { data_vencimento, valor_original, indexador, juros_tipo, multa_pct = 0, honorarios_pct = 0, art523_opcao = "nao_aplicar", pagamentos_parciais = [] } = caso.entrada;
+        const devedor = { dividas: [{ valor_total: valor_original, indexador, juros_tipo, juros_am: 0, multa_pct, honorarios_pct, art523_opcao, data_inicio_atualizacao: data_vencimento }] };
+        const pagamentos = pagamentos_parciais.map(p => ({ data_pagamento: p.data, valor: p.valor }));
+        const saldoRef = calcularSaldoDevedorAtualizado(devedor, pagamentos, caso.entrada.data_calculo);
+        const planilha = calcularPlanilhaCompleta(devedor, pagamentos, caso.entrada.data_calculo);
+        expect(Math.abs(planilha.resumo.saldo_devedor_final - saldoRef)).toBeLessThanOrEqual(0.02);
       }
     });
   });

@@ -140,5 +140,29 @@
     "esperado": {
       "fator_nunca_menor_que": 1.20
     }
+  },
+  {
+    "id": "tjgo-008",
+    "descricao": "Pagamentos parciais + Art.523 — saldo unificado deve coincidir entre planilha e painel",
+    "nota": "Verifica que calcularPlanilhaCompleta.resumo.saldo_devedor_final == calcularSaldoDevedorAtualizado (motor unificado)",
+    "entrada": {
+      "valor_original": 3000.00,
+      "data_vencimento": "2023-06-01",
+      "data_calculo": "2026-04-17",
+      "indexador": "inpc",
+      "juros_tipo": "1_ao_mes",
+      "multa_pct": 2,
+      "honorarios_pct": 20,
+      "art523_opcao": "multa_honorarios",
+      "pagamentos_parciais": [
+        { "data": "2024-03-01", "valor": 1000 },
+        { "data": "2025-01-10", "valor": 500 }
+      ]
+    },
+    "esperado": {
+      "total_pago": 1500,
+      "saldo_menor_que_sem_pagamentos": true,
+      "planilha_saldo_igual_saldo_devedor": true
+    }
   }
 ]

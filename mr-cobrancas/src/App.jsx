@@ -54,7 +54,7 @@ import GerarPeticao from "./components/GerarPeticao.jsx";
 import FilaDevedor from "./components/FilaDevedor.jsx";
 
 // Cálculo de saldo devedor (compartilhado com FilaDevedor)
-import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos } from "./utils/devedorCalc.js";
+import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos, calcularPlanilhaCompleta } from "./utils/devedorCalc.js";
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -2342,32 +2342,6 @@ async function imprimirFicha(sel, credores, pagamentos, fmt, fmtDate) {
     });
   }
 
-  // ── FUNDAMENTAÇÃO LEGAL ─────────────────────────────────────
-  {
-    y = checkPage(y, 40);
-    y = cabecalhoSecao("FUNDAMENTAÇÃO LEGAL", y);
-    const hasTaxaLegal = (sel.dividas || []).some(d => d.juros_tipo === "taxa_legal_406" || d.juros_tipo === "taxa_legal_406_12");
-    const hasArt523 = (sel.dividas || []).some(d => d.art523_opcao && d.art523_opcao !== "nao_aplicar");
-    const hasInpc = (sel.dividas || []).some(d => d.indexador === "inpc" || d.indexador === "inpc_ipca");
-    const fundamentos = [
-      { titulo: "Correção Monetária", texto: "Aplicada nos termos do indexador contratado ou determinado judicialmente, com base nos índices oficiais publicados pelo IBGE (INPC/IPCA) ou FGV (IGP-M), conforme dados do SGS/BCB." },
-      ...(hasInpc ? [{ titulo: "Lei 14.905/2024 e STJ Tema 1368", texto: "A partir de 30/08/2024, a correção monetária pelos índices INPC/IPCA segue o regime estabelecido pela Lei 14.905/2024, conforme orientação do STJ no Tema de Recursos Repetitivos 1368." }] : []),
-      ...(hasTaxaLegal ? [{ titulo: "Juros — CC Art. 406 e Selic", texto: "Juros de mora calculados pela Taxa Legal do Art. 406 do Código Civil. Até 04/2012: 1% a.m. (regime STJ). A partir de 05/2012: taxa Selic mensal (STJ Tema 1368). Taxa acumulada com base nos dados mensais do SGS/BCB (série 432)." }] : []),
-      ...(hasArt523 ? [{ titulo: "CPC Art. 523 §1º — Multa e Honorários no Cumprimento de Sentença", texto: "Não impugnado o cumprimento de sentença no prazo de 15 dias (Art. 523 CPC), incide multa de 10% e honorários advocatícios de 10% sobre o valor atualizado da condenação, nos termos do §1º do Art. 523 do CPC/2015." }] : []),
-      { titulo: "Fonte dos Índices", texto: "Todos os índices utilizados são obtidos do Sistema Gerenciador de Séries Temporais do Banco Central do Brasil (BCB/SGS), garantindo fidedignidade e rastreabilidade dos dados." },
-    ];
-    fundamentos.forEach(f => {
-      y = checkPage(y, 16);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...escuro);
-      doc.text(`• ${f.titulo}:`, ML + 2, y); y += 5;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...cinza);
-      const linhas = doc.splitTextToSize(f.texto, MR - ML - 8);
-      linhas.forEach(l => { y = checkPage(y, 5); doc.text(l, ML + 6, y); y += 4.5; });
-      y += 3;
-    });
-    y = hrLine(y);
-  }
-
   // ── RODAPÉ EM TODAS AS PÁGINAS ───────────────────────────────
   const totalPages = doc.internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
@@ -2565,244 +2539,29 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
     }
 
     try {
-      // 2. Identify reference divida (first non-nominal, non-_so_custas)
       const dividas = Array.isArray(devedor.dividas) ? devedor.dividas : [];
-
-      // 3. dividasCalc, distribuição sequencial de pagamentos
       const dividasCalc = dividas.filter(d => !d._nominal && !d._so_custas);
       if (dividasCalc.length === 0) {
         toast.error("Devedor não possui dívidas cadastradas para cálculo.");
         return;
       }
 
-      const pgtos = [...pagamentos].sort((a, b) => a.data_pagamento.localeCompare(b.data_pagamento));
-
-      // Acumuladores globais para o resumo executivo
-      let totalCorr = 0;
-      let totalJuros = 0;
-      let totalMulta = 0;
-
-      // Distribuição sequencial com tracking por referência (.remaining mutado in place)
-      // Cada objeto recebe um campo .remaining inicializado com o valor original.
-      // O abatimento decrementa .remaining diretamente — sem rastreio por índice posicional.
-      const pgtoRestantes = pgtos.map(p => ({ ...p, remaining: parseFloat(p.valor) || 0 }));
-
-      // rows por dívida (para seções múltiplas) e rows global (para dívida única)
-      const secoes = []; // [{ div, rows, saldoDiv }]
-
-      for (let di = 0; di < dividasCalc.length; di++) {
-        const div = dividasCalc[di];
-        const pvDiv = parseFloat(div.valor_total) || 0;
-        const indexadorDiv = div.indexador || "nenhum";
-        const jurosTipoDiv = div.juros_tipo || "sem_juros";
-        const jurosAMDiv = parseFloat(div.juros_am) || 0;
-        const multaPctDiv = parseFloat(div.multa_pct) || 0;
-        const honorariosPctDiv = parseFloat(div.honorarios_pct) || 0;
-        const dataInicioDiv = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
-
-        const rowsDiv = [];
-        let saldo = pvDiv;
-        let periodoInicio = dataInicioDiv;
-        let primeiroperiodo = true;
-
-        // Opening row por dívida
-        rowsDiv.push({
-          data: fmtDate(dataInicioDiv),
-          desc: dividasCalc.length > 1
-            ? `Saldo inicial — ${div.descricao || "Dívida " + (di + 1)}`
-            : "Saldo inicial / abertura",
-          debito: pvDiv,
-          credito: 0,
-          saldo: pvDiv,
-          isOpening: true,
-        });
-
-        // Coletar referências aos objetos de pagamento com remaining > 0 (sequencial)
-        // Ao iterar pgtoRestantes por referência, qualquer decremento em .remaining persiste
-        // para as dívidas seguintes — sem risco de desalinhamento por índice.
-        const pgtosDiv = pgtoRestantes.filter(p => p.remaining > 0);
-
-        // Loop iterativo de períodos
-        for (const pgto of pgtosDiv) {
-          if (saldo <= 0) break; // dívida já zerada
-          const periodoFim = pgto.data_pagamento;
-
-          if (periodoFim <= periodoInicio) {
-            const abate = Math.min(pgto.remaining, saldo);
-            rowsDiv.push({
-              data: fmtDate(pgto.data_pagamento),
-              desc: pgto.observacao || "Pagamento parcial",
-              debito: 0,
-              credito: abate,
-              saldo: saldo - abate,
-            });
-            saldo -= abate;
-            pgto.remaining -= abate; // mutação in place — reflete na próxima dívida
-            continue;
-          }
-
-          // Correção monetária
-          const fator = calcularFatorCorrecao(indexadorDiv, periodoInicio, periodoFim);
-          const corrAbs = saldo * (fator - 1);
-          const pcSaldo = saldo + corrAbs;
-
-          // Juros
-          const { juros } = calcularJurosAcumulados({
-            principal: pcSaldo,
-            dataInicio: periodoInicio,
-            dataFim: periodoFim,
-            jurosTipo: jurosTipoDiv,
-            jurosAM: jurosAMDiv,
-            regime: "simples",
-          });
-
-          // Multa (só no 1º período desta dívida, se > 0)
-          const multaVal = primeiroperiodo ? pcSaldo * (multaPctDiv / 100) : 0;
-
-          // Honorários por dívida (calculados sobre pcSaldo + juros + multa neste período)
-          // Emitidos apenas no 1º período para não duplicar; base = total acumulado até aqui
-          const honorariosRowVal = primeiroperiodo ? (pcSaldo + juros + multaVal) * (honorariosPctDiv / 100) : 0;
-
-          // Acumuladores globais
-          totalCorr += corrAbs;
-          totalJuros += juros;
-          if (primeiroperiodo) totalMulta += multaVal;
-
-          // Datas formatadas para labels
-          const dInicio = fmtDate(periodoInicio);
-          const dFim = fmtDate(periodoFim);
-          const diasPeriodo = Math.round((new Date(periodoFim) - new Date(periodoInicio)) / 86400000);
-          const mesesPeriodo = Math.floor(diasPeriodo / 30);
-          const periodoLabel = mesesPeriodo >= 1 ? `${mesesPeriodo} meses` : `${diasPeriodo} dias`;
-
-          // Linha de Multa (só 1º período, se > 0)
-          if (multaVal > 0) {
-            rowsDiv.push({
-              data: dFim,
-              desc: `Multa (${multaPctDiv}%) — 1ª ocorrência = ${fmt(multaVal)}`,
-              debito: multaVal,
-              credito: 0,
-              saldo: saldo + multaVal,
-              isMulta: true,
-            });
-          }
-
-          // Linha de Honorários (só 1º período, se > 0.005)
-          if (honorariosRowVal > 0.005) {
-            rowsDiv.push({
-              data: dFim,
-              desc: `Honorários (${honorariosPctDiv}%) = ${fmt(honorariosRowVal)}`,
-              debito: honorariosRowVal,
-              credito: 0,
-              saldo: saldo + multaVal + honorariosRowVal,
-              isHonorarios: true,
-            });
-          }
-
-          // Linha de Correção monetária (se > 0)
-          if (corrAbs > 0.005) {
-            rowsDiv.push({
-              data: dFim,
-              desc: `Correção monetária (${indexadorDiv.toUpperCase()}) — ${dInicio} a ${dFim} = ${fmt(corrAbs)}`,
-              debito: corrAbs,
-              credito: 0,
-              saldo: saldo + corrAbs,
-              isCorr: true,
-            });
-          }
-
-          // Linha de Juros (se > 0)
-          if (juros > 0.005) {
-            rowsDiv.push({
-              data: dFim,
-              desc: `Juros ${jurosAMDiv}% a.m. — ${dInicio} a ${dFim} (${periodoLabel}) = ${fmt(juros)}`,
-              debito: juros,
-              credito: 0,
-              saldo: pcSaldo + juros,
-              isJuros: true,
-            });
-          }
-
-          const debitoTotal = pcSaldo + juros + multaVal + honorariosRowVal;
-
-          // Linha de pagamento
-          const abate = Math.min(pgto.remaining, debitoTotal);
-          const saldoAposPgto = debitoTotal - abate;
-          rowsDiv.push({
-            data: dFim,
-            desc: pgto.observacao || "Pagamento parcial",
-            debito: 0,
-            credito: abate,
-            saldo: saldoAposPgto,
-          });
-
-          pgto.remaining -= abate; // mutação in place — persiste para próxima dívida
-
-          saldo = saldoAposPgto;
-          periodoInicio = periodoFim;
-          primeiroperiodo = false;
-        }
-
-        // Período final: último evento → hoje
-        if (periodoInicio < hoje) {
-          const fatorFinal = calcularFatorCorrecao(indexadorDiv, periodoInicio, hoje);
-          const corrFinal = saldo * (fatorFinal - 1);
-          const pcFinal = saldo + corrFinal;
-          const { juros: jurosFinal } = calcularJurosAcumulados({
-            principal: pcFinal,
-            dataInicio: periodoInicio,
-            dataFim: hoje,
-            jurosTipo: jurosTipoDiv,
-            jurosAM: jurosAMDiv,
-            regime: "simples",
-          });
-
-          totalCorr += corrFinal;
-          totalJuros += jurosFinal;
-
-          const dInicio = fmtDate(periodoInicio);
-          const dFim = fmtDate(hoje);
-          const diasFinal = Math.round((new Date(hoje) - new Date(periodoInicio)) / 86400000);
-          const mesesFinal = Math.floor(diasFinal / 30);
-          const periodoFinalLabel = mesesFinal >= 1 ? `${mesesFinal} meses` : `${diasFinal} dias`;
-
-          if (corrFinal > 0.005) {
-            rowsDiv.push({
-              data: dFim,
-              desc: `Correção monetária (${indexadorDiv.toUpperCase()}) — ${dInicio} a ${dFim} = ${fmt(corrFinal)}`,
-              debito: corrFinal, credito: 0, saldo: saldo + corrFinal, isCorr: true,
-            });
-          }
-          if (jurosFinal > 0.005) {
-            rowsDiv.push({
-              data: dFim,
-              desc: `Juros ${jurosAMDiv}% a.m. — ${dInicio} a ${dFim} (${periodoFinalLabel}) = ${fmt(jurosFinal)}`,
-              debito: jurosFinal, credito: 0, saldo: pcFinal + jurosFinal, isJuros: true,
-            });
-          }
-
-          saldo = pcFinal + jurosFinal;
-        }
-
-        secoes.push({ div, rows: rowsDiv, saldoDiv: saldo });
-      }
-
-      // PV global (soma de todas as dívidas)
-      const PV = dividasCalc.reduce((s, d) => s + (parseFloat(d.valor_total) || 0), 0);
-      const divRef = dividasCalc[0]; // para parâmetros do footer
-      const indexador = divRef.indexador || "nenhum";
-      const jurosAM = parseFloat(divRef.juros_am) || 0;
-      const multaPct = parseFloat(divRef.multa_pct) || 0;
-
-      // Totais finais
-      const totalAtualizado_sem_hon = PV + totalCorr + totalJuros + totalMulta;
-      // Honorários: sobre total atualizado (sem os próprios honorários), baseado na 1ª dívida
-      const honorariosPct = parseFloat(dividasCalc[0].honorarios_pct) || 0;
-      const totalHonorarios = totalAtualizado_sem_hon * (honorariosPct / 100);
-      const totalAtualizado = totalAtualizado_sem_hon + totalHonorarios;
-      const totalPago = pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-      const saldoFinal = totalAtualizado - totalPago;
-      // saldo para footer e final row
+      // Motor unificado: amortização iterativa + Art.523 por dívida
+      const planilha = calcularPlanilhaCompleta(devedor, pagamentos, hoje);
+      const { resumo, secoes, _meta } = planilha;
+      const {
+        valor_original: PV,
+        multa: totalMulta,
+        honorarios: totalHonorarios,
+        correcao: totalCorr,
+        juros: totalJuros,
+        art523_multa: totalArt523Multa,
+        art523_honorarios: totalArt523Honorarios,
+        total_atualizado: totalAtualizado,
+        total_pago: totalPago,
+        saldo_devedor_final: saldoFinal,
+      } = resumo;
+      const { indexador, jurosAM, multaPct, honorariosPct } = _meta;
       const saldo = saldoFinal;
 
       // 5. Build PDF — landscape A4
@@ -2847,6 +2606,8 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
         ...(totalHonorarios > 0.005 ? [{ label: `(+) Honorários (${honorariosPct}%)`, valor: totalHonorarios, prefix: "+" }] : []),
         ...(totalCorr > 0.005 ? [{ label: "(+) Correção Monetária", valor: totalCorr, prefix: "+" }] : []),
         ...(totalJuros > 0.005 ? [{ label: `(+) Juros (${jurosAM}% a.m.)`, valor: totalJuros, prefix: "+" }] : []),
+        ...(totalArt523Multa > 0.005 ? [{ label: "(+) Art. 523 §1º Multa (10%)", valor: totalArt523Multa, prefix: "+" }] : []),
+        ...(totalArt523Honorarios > 0.005 ? [{ label: "(+) Art. 523 §1º Honor. (10%)", valor: totalArt523Honorarios, prefix: "+" }] : []),
         { label: "(=) Total Atualizado", valor: totalAtualizado, prefix: "=", separator: true },
         { label: "(-) Total Pago", valor: totalPago, prefix: "-" },
         { label: "(=) SALDO DEVEDOR FINAL", valor: saldoFinal, prefix: "=", isFinal: true },
@@ -2900,7 +2661,7 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
           if (ri % 2 === 0) { doc.setFillColor(240, 253, 244); doc.rect(14, y - 3.5, W2, 5.5, "F"); }
           let x = 14;
           const vals = [
-            row.data,
+            fmtDate(row.data),
             row.desc,
             row.debito > 0 ? fmt(row.debito) : "—",
             row.credito > 0 ? fmt(row.credito) : "—",

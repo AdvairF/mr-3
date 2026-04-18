@@ -349,3 +349,264 @@ export function calcularResumoFinanceiro(devedor, pagamentos, hoje) {
 
   return { saldo, valorOriginal, totalPago, encargos, diasEmAtraso };
 }
+
+/**
+ * Motor de cálculo unificado para planilhas PDF.
+ * Realiza amortização iterativa período-a-período com abatimento sequencial de
+ * pagamentos parciais, aplica Art. 523 por dívida ao final.
+ *
+ * @param {object} devedor
+ * @param {Array}  pagamentos
+ * @param {string} hoje "YYYY-MM-DD"
+ * @returns {{
+ *   resumo: { valor_original, multa, honorarios, correcao, juros,
+ *             art523_multa, art523_honorarios, total_atualizado,
+ *             total_pago, saldo_devedor_final },
+ *   secoes: Array<{ div, rows: Array<{ data, desc, debito, credito, saldo }>,
+ *                   saldoDiv, art523Multa, art523Honorarios }>
+ * }}
+ */
+export function calcularPlanilhaCompleta(devedor, pagamentos, hoje) {
+  const dividasCalc = parseDividas(devedor?.dividas).filter(d => !d._nominal && !d._so_custas);
+
+  const pgtos = [...(pagamentos || [])].sort((a, b) =>
+    (a.data_pagamento || '').localeCompare(b.data_pagamento || '')
+  );
+  const pgtoRestantes = pgtos.map(p => ({ ...p, remaining: parseFloat(p.valor) || 0 }));
+
+  let totalCorr = 0;
+  let totalJuros = 0;
+  let totalMulta = 0;
+  let totalArt523Multa = 0;
+  let totalArt523Honorarios = 0;
+
+  const secoes = [];
+
+  for (let di = 0; di < dividasCalc.length; di++) {
+    const div = dividasCalc[di];
+    const pvDiv = parseFloat(div.valor_total) || 0;
+    const indexadorDiv = div.indexador || 'nenhum';
+    const jurosTipoDiv = div.juros_tipo || 'sem_juros';
+    const jurosAMDiv = parseFloat(div.juros_am) || 0;
+    const multaPctDiv = parseFloat(div.multa_pct) || 0;
+    const honorariosPctDiv = parseFloat(div.honorarios_pct) || 0;
+    const dataInicioDiv = div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
+
+    const rowsDiv = [];
+    let saldo = pvDiv;
+    let periodoInicio = dataInicioDiv;
+    let primeiroperiodo = true;
+
+    rowsDiv.push({
+      data: dataInicioDiv,
+      desc: dividasCalc.length > 1
+        ? `Saldo inicial — ${div.descricao || 'Dívida ' + (di + 1)}`
+        : 'Saldo inicial / abertura',
+      debito: pvDiv,
+      credito: 0,
+      saldo: pvDiv,
+      isOpening: true,
+    });
+
+    const pgtosDiv = pgtoRestantes.filter(p => p.remaining > 0);
+
+    for (const pgto of pgtosDiv) {
+      if (saldo <= 0) break;
+      const periodoFim = pgto.data_pagamento;
+
+      if (!periodoFim || periodoFim <= periodoInicio) {
+        const abate = Math.min(pgto.remaining, saldo);
+        rowsDiv.push({
+          data: pgto.data_pagamento,
+          desc: pgto.observacao || 'Pagamento parcial',
+          debito: 0,
+          credito: abate,
+          saldo: saldo - abate,
+        });
+        saldo -= abate;
+        pgto.remaining -= abate;
+        continue;
+      }
+
+      const fator = calcularFatorCorrecao(indexadorDiv, periodoInicio, periodoFim);
+      const corrAbs = saldo * (fator - 1);
+      const pcSaldo = saldo + corrAbs;
+
+      const { juros } = calcularJurosAcumulados({
+        principal: pcSaldo,
+        dataInicio: periodoInicio,
+        dataFim: periodoFim,
+        jurosTipo: jurosTipoDiv,
+        jurosAM: jurosAMDiv,
+        regime: 'simples',
+      });
+
+      const multaVal = primeiroperiodo ? pcSaldo * (multaPctDiv / 100) : 0;
+      const honorariosRowVal = primeiroperiodo
+        ? (pcSaldo + juros + multaVal) * (honorariosPctDiv / 100)
+        : 0;
+
+      totalCorr += corrAbs;
+      totalJuros += juros;
+      if (primeiroperiodo) totalMulta += multaVal;
+
+      if (multaVal > 0) {
+        rowsDiv.push({
+          data: periodoFim,
+          desc: `Multa (${multaPctDiv}%)`,
+          debito: multaVal,
+          credito: 0,
+          saldo: saldo + multaVal,
+          isMulta: true,
+        });
+      }
+      if (honorariosRowVal > 0.005) {
+        rowsDiv.push({
+          data: periodoFim,
+          desc: `Honorários (${honorariosPctDiv}%)`,
+          debito: honorariosRowVal,
+          credito: 0,
+          saldo: saldo + multaVal + honorariosRowVal,
+          isHonorarios: true,
+        });
+      }
+      if (corrAbs > 0.005) {
+        rowsDiv.push({
+          data: periodoFim,
+          desc: `Correção monetária (${indexadorDiv.toUpperCase()})`,
+          debito: corrAbs,
+          credito: 0,
+          saldo: saldo + corrAbs,
+          isCorr: true,
+        });
+      }
+      if (juros > 0.005) {
+        rowsDiv.push({
+          data: periodoFim,
+          desc: `Juros ${jurosAMDiv}% a.m.`,
+          debito: juros,
+          credito: 0,
+          saldo: pcSaldo + juros,
+          isJuros: true,
+        });
+      }
+
+      const debitoTotal = pcSaldo + juros + multaVal + honorariosRowVal;
+      const abate = Math.min(pgto.remaining, debitoTotal);
+      const saldoAposPgto = debitoTotal - abate;
+      rowsDiv.push({
+        data: periodoFim,
+        desc: pgto.observacao || 'Pagamento parcial',
+        debito: 0,
+        credito: abate,
+        saldo: saldoAposPgto,
+      });
+
+      pgto.remaining -= abate;
+      saldo = saldoAposPgto;
+      periodoInicio = periodoFim;
+      primeiroperiodo = false;
+    }
+
+    if (periodoInicio && periodoInicio < hoje) {
+      const fatorFinal = calcularFatorCorrecao(indexadorDiv, periodoInicio, hoje);
+      const corrFinal = saldo * (fatorFinal - 1);
+      const pcFinal = saldo + corrFinal;
+      const { juros: jurosFinal } = calcularJurosAcumulados({
+        principal: pcFinal,
+        dataInicio: periodoInicio,
+        dataFim: hoje,
+        jurosTipo: jurosTipoDiv,
+        jurosAM: jurosAMDiv,
+        regime: 'simples',
+      });
+
+      totalCorr += corrFinal;
+      totalJuros += jurosFinal;
+
+      if (corrFinal > 0.005) {
+        rowsDiv.push({
+          data: hoje,
+          desc: `Correção monetária (${indexadorDiv.toUpperCase()})`,
+          debito: corrFinal,
+          credito: 0,
+          saldo: saldo + corrFinal,
+          isCorr: true,
+        });
+      }
+      if (jurosFinal > 0.005) {
+        rowsDiv.push({
+          data: hoje,
+          desc: `Juros ${jurosAMDiv}% a.m.`,
+          debito: jurosFinal,
+          credito: 0,
+          saldo: pcFinal + jurosFinal,
+          isJuros: true,
+        });
+      }
+
+      saldo = pcFinal + jurosFinal;
+    }
+
+    const art523Div = calcularArt523(saldo, div.art523_opcao || 'nao_aplicar');
+    if (art523Div.multa > 0.005) {
+      rowsDiv.push({
+        data: hoje,
+        desc: 'Art. 523 §1º CPC — Multa 10%',
+        debito: art523Div.multa,
+        credito: 0,
+        saldo: saldo + art523Div.multa,
+        isArt523: true,
+      });
+    }
+    if (art523Div.honorarios_sucumbenciais > 0.005) {
+      rowsDiv.push({
+        data: hoje,
+        desc: 'Art. 523 §1º CPC — Honor. 10%',
+        debito: art523Div.honorarios_sucumbenciais,
+        credito: 0,
+        saldo: saldo + art523Div.multa + art523Div.honorarios_sucumbenciais,
+        isArt523: true,
+      });
+    }
+
+    totalArt523Multa += art523Div.multa;
+    totalArt523Honorarios += art523Div.honorarios_sucumbenciais;
+
+    const saldoDivFinal = saldo + art523Div.total_art523;
+    secoes.push({
+      div,
+      rows: rowsDiv,
+      saldoDiv: saldoDivFinal,
+      art523Multa: art523Div.multa,
+      art523Honorarios: art523Div.honorarios_sucumbenciais,
+    });
+  }
+
+  const PV = dividasCalc.reduce((s, d) => s + (parseFloat(d.valor_total) || 0), 0);
+  const honorariosPct = parseFloat((dividasCalc[0] || {}).honorarios_pct) || 0;
+  const totalAtualizado_sem_hon = PV + totalCorr + totalJuros + totalMulta;
+  const totalHonorarios = totalAtualizado_sem_hon * (honorariosPct / 100);
+  const totalPago = pgtos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+  // saldo_devedor_final uses the iterative per-section sum (same motor as calcularSaldoDevedorAtualizado)
+  const saldoFinal = Math.max(0, secoes.reduce((s, sec) => s + sec.saldoDiv, 0));
+  // total_atualizado is derived backwards for display in the resumo box
+  const totalAtualizado = saldoFinal + totalPago;
+
+  return {
+    resumo: {
+      valor_original: PV,
+      multa: totalMulta,
+      honorarios: totalHonorarios,
+      correcao: totalCorr,
+      juros: totalJuros,
+      art523_multa: totalArt523Multa,
+      art523_honorarios: totalArt523Honorarios,
+      total_atualizado: totalAtualizado,
+      total_pago: totalPago,
+      saldo_devedor_final: saldoFinal,
+    },
+    secoes,
+    _meta: { honorariosPct, multaPct: parseFloat((dividasCalc[0] || {}).multa_pct) || 0, indexador: (dividasCalc[0] || {}).indexador || 'nenhum', jurosAM: parseFloat((dividasCalc[0] || {}).juros_am) || 0 },
+  };
+}
