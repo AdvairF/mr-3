@@ -3086,7 +3086,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
         nome: form.nome, cpf_cnpj: form.cpf_cnpj, tipo: form.tipo, email: form.email || null,
         telefone: form.telefone || null, cidade: form.cidade || "Goiânia",
         credor_id: form.credor_id ? parseInt(form.credor_id) : null,
-        valor_original: valorNominal, status: form.status || "novo", dividas: JSON.stringify([]),
+        valor_original: valorNominal, status: form.status || "novo",
         rg: form.rg || null, profissao: form.profissao || null, socio_nome: form.socio_nome || null,
         socio_cpf: form.socio_cpf || null, telefone2: form.telefone2 || null, cep: form.cep || null,
         logradouro: form.logradouro || null, numero: form.numero || null, complemento: form.complemento || null,
@@ -3124,79 +3124,6 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       }
     } catch (e) {
       toast.error("Não foi possível salvar o devedor no Supabase:" + e.message);
-    }
-    setLoading(false);
-    return;
-    // Tentativas em ordem — remove colunas inexistentes progressivamente
-    const tentativas = [
-      // #1 — completo
-      {
-        nome: form.nome, cpf_cnpj: form.cpf_cnpj, tipo: form.tipo, email: form.email || null,
-        telefone: form.telefone || null, cidade: form.cidade || "Goiânia",
-        credor_id: form.credor_id ? parseInt(form.credor_id) : null,
-        valor_original: valorNominal, status: form.status || "novo", dividas: JSON.stringify([]),
-        rg: form.rg || null, profissao: form.profissao || null, socio_nome: form.socio_nome || null,
-        socio_cpf: form.socio_cpf || null, telefone2: form.telefone2 || null, cep: form.cep || null,
-        logradouro: form.logradouro || null, numero: form.numero || null, complemento: form.complemento || null,
-        bairro: form.bairro || null, uf: form.uf || "GO", descricao_divida: form.descricao_divida || null,
-        observacoes: form.observacoes || null, numero_processo: form.numero_processo || null,
-        contatos: JSON.stringify([]), acordos: JSON.stringify([])
-      },
-      // #2 — sem colunas extras de endereço/sócio mas COM valor_original
-      {
-        nome: form.nome, cpf_cnpj: form.cpf_cnpj, tipo: form.tipo, email: form.email || null,
-        telefone: form.telefone || null, cidade: form.cidade || "Goiânia",
-        credor_id: form.credor_id ? parseInt(form.credor_id) : null,
-        valor_original: valorNominal, status: form.status || "novo", dividas: JSON.stringify([])
-      },
-      // #3 — sem valor_original mas embute valor no JSON de dividas para persistir
-      {
-        nome: form.nome, cpf_cnpj: form.cpf_cnpj, tipo: form.tipo, email: form.email || null,
-        telefone: form.telefone || null, status: form.status || "novo",
-        dividas: JSON.stringify(valorNominal > 0 ? [{ id: "init", descricao: "Valor nominal", valor_total: valorNominal, parcelas: [], _nominal: true }] : [])
-      },
-      // #4 — mínimo absoluto com valor embutido
-      {
-        nome: form.nome, tipo: form.tipo || "PJ",
-        dividas: JSON.stringify(valorNominal > 0 ? [{ id: "init", descricao: "Valor nominal", valor_total: valorNominal, parcelas: [], _nominal: true }] : [])
-      },
-    ];
-    let novo = null, nivelUsado = 0;
-    for (let i = 0; i < tentativas.length; i++) {
-      const res = await dbInsert("devedores", tentativas[i]);
-      const r = Array.isArray(res) ? res[0] : res;
-      if (r?.id) { novo = r; nivelUsado = i; break; }
-    }
-    if (novo?.id) {
-      // SEMPRE preservar valor_nominal do formulário — nunca usar o que veio do banco
-      const local = {
-        ...novo,                        // dados do banco
-        dividas: [], contatos: [], acordos: [],
-        // sobrescrever com dados do formulário (que podem não ter ido ao banco)
-        valor_original: valorNominal,   // <- FIXO: sempre do formulário
-        valor_nominal: valorNominal,   // <- FIXO: sempre do formulário
-        rg: form.rg, profissao: form.profissao,
-        socio_nome: form.socio_nome, socio_cpf: form.socio_cpf,
-        telefone2: form.telefone2, cep: form.cep,
-        logradouro: form.logradouro, numero: form.numero,
-        complemento: form.complemento, bairro: form.bairro, uf: form.uf,
-        cidade: form.cidade || "Goiânia",
-        credor_id: form.credor_id ? parseInt(form.credor_id) : null,
-        descricao_divida: form.descricao_divida,
-        observacoes: form.observacoes,
-        numero_processo: form.numero_processo || null,
-        status: form.status || "novo",
-      };
-      setDevedores(p => [...p, local]);
-      fecharModal();
-      setForm({ ...FORM_DEV_VAZIO, responsavel: user?.nome || "" });
-      if (nivelUsado >= 2) {
-        toast.success(`Devedor "${novo.nome}" cadastrado! Alguns campos extras aguardam migração SQL.`, { duration: 4000 });
-      } else {
-        toast.success(`Devedor "${novo.nome}" cadastrado com sucesso!`);
-      }
-    } else {
-      toast.error("Erro ao salvar. Verifique a conexão com o Supabase.");
     }
     setLoading(false);
   }
@@ -3273,41 +3200,61 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     if (!nd.data_origem) { toast("Informe a Data de Vencimento.", { icon: "⚠️" }); return; }
     // parcelas são OPCIONAIS — dívida pode não ser parcelada
     const dataVenc = nd.parcelas.length > 0 ? (nd.data_primeira_parcela || nd.data_origem) : nd.data_origem;
-    const divida = {
-      id: Date.now(), descricao: nd.descricao || "Dívida", valor_total: total,
-      data_origem: nd.data_origem, data_vencimento: dataVenc,
-      parcelas: nd.parcelas,  // pode ser [] se não for parcelada
-      criada_em: new Date().toISOString().slice(0, 10),
-      indexador: nd.indexador, multa_pct: parseFloat(nd.multa_pct) || 2,
-      juros_tipo: nd.juros_tipo || "fixo_1", juros_am: parseFloat(nd.juros_am) || 1, honorarios_pct: parseFloat(nd.honorarios_pct) || 20,
-      data_inicio_atualizacao: nd.data_inicio_atualizacao || dataVenc,
-      despesas: parseFloat(nd.despesas) || 0, observacoes: nd.observacoes || "",
-      custas: nd.custas || [],
+    // Build payload for dividas table (NOT JSONB stringify)
+    const payload = {
+      devedor_id: sel.id,
+      credor_id: sel.credor_id || null,
+      observacoes: nd.descricao || "Dívida",
+      valor_total: total,
+      data_vencimento: dataVenc || null,
+      data_origem: nd.data_origem || null,
+      data_inicio_atualizacao: nd.data_inicio_atualizacao || dataVenc || null,
+      indice_correcao: nd.indexador || "igpm",
+      juros_tipo: nd.juros_tipo || "fixo_1",
+      juros_am_percentual: parseFloat(nd.juros_am) || 0,
+      multa_percentual: parseFloat(nd.multa_pct) || 0,
+      honorarios_percentual: parseFloat(nd.honorarios_pct) || 0,
+      despesas: parseFloat(nd.despesas) || 0,
       art523_opcao: nd.art523_opcao || "nao_aplicar",
+      parcelas: JSON.stringify(nd.parcelas || []),
+      custas: JSON.stringify(nd.custas || []),
     };
-    const dividas = [...(sel.dividas || []), divida];
-    const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
     try {
-      const res = await dbUpdate("devedores", sel.id, { dividas: JSON.stringify(dividas), valor_original });
-      const atu = Array.isArray(res) ? res[0] : res;
-      const parsed = montarDevAtualizado(atu, dividas);
+      const res = await dbInsert("dividas", payload);
+      const novaDiv = Array.isArray(res) ? res[0] : res;
+      if (!novaDiv?.id) throw new Error("Supabase did not return new divida row");
+      // Recalculate valor_original on devedor
+      const oldDivs = sel.dividas || [];
+      const novaValorOriginal = oldDivs.reduce((s, d) => s + (d.valor_total || 0), 0) + total;
+      await dbUpdate("devedores", sel.id, { valor_original: novaValorOriginal });
+      // Build local divida object with JSONB-compatible field names for devedorCalc.js
+      const localDiv = {
+        ...payload,
+        id: novaDiv.id,
+        // Map table column names back to JSONB field names for compatibility
+        descricao: nd.descricao || "Dívida",
+        indexador: payload.indice_correcao,
+        juros_am: payload.juros_am_percentual,
+        multa_pct: payload.multa_percentual,
+        honorarios_pct: payload.honorarios_percentual,
+        parcelas: nd.parcelas || [],
+        custas: nd.custas || [],
+      };
+      const newDividas = [...oldDivs, localDiv];
+      const parsed = montarDevAtualizado(null, newDividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
-      setSel(parsed); setNd(DIVIDA_VAZIA);
+      setSel(parsed);
+      setNd(DIVIDA_VAZIA);
       toast.success("Dívida adicionada com sucesso!");
+      // seedPrincipal with UUID from DB (NOT Date.now())
       try {
         const { seedPrincipal } = await import("./services/devedoresDividas.js");
-        await seedPrincipal(sel.id, divida.id);
+        await seedPrincipal(sel.id, novaDiv.id);
       } catch (seedErr) {
         console.warn("seedPrincipal failed (non-critical):", seedErr);
       }
     } catch (e) {
       toast.error("Não foi possível salvar a dívida no Supabase:" + e.message);
-      return;
-      // Salvar localmente mesmo sem banco
-      const parsed = montarDevAtualizado(null, dividas);
-      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
-      setSel(parsed); setNd(DIVIDA_VAZIA);
-      toast("Dívida salva localmente. Erro de sincronização: " + e.message, { icon: "⚠️" });
     }
   }
 
@@ -3318,33 +3265,45 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     if (!validas.length) { toast("Preencha descrição, valor e data de todas as custas.", { icon: "⚠️" }); return; }
     // Cria uma "dívida" especial só de custas (sem valor principal, só custas)
     const totalCustas = validas.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
-    const dividaCustas = {
-      id: Date.now(),
-      descricao: "Custas Judiciais",
-      valor_total: totalCustas,   // soma de todas as custas
-      data_origem: validas[0].data,
-      data_vencimento: validas[0].data,
-      parcelas: [], criada_em: new Date().toISOString().slice(0, 10),
-      indexador: "igpm", juros_tipo: "sem_juros", multa_pct: 0, juros_am: 0, honorarios_pct: 0,
-      data_inicio_atualizacao: validas[0].data,
-      despesas: 0, observacoes: "Lançamento avulso de custas judiciais",
-      custas: validas, _so_custas: true,
+    const payload = {
+      devedor_id: sel.id,
+      credor_id: sel.credor_id || null,
+      observacoes: "Custas Judiciais",
+      valor_total: totalCustas,
+      data_vencimento: validas[0].data || null,
+      data_origem: validas[0].data || null,
+      data_inicio_atualizacao: validas[0].data || null,
+      indice_correcao: "igpm",
+      juros_tipo: "sem_juros",
+      juros_am_percentual: 0,
+      multa_percentual: 0,
+      honorarios_percentual: 0,
+      despesas: 0,
+      art523_opcao: "nao_aplicar",
+      _so_custas: true,
+      custas: JSON.stringify(validas),
+      parcelas: JSON.stringify([]),
     };
-    const dividas = [...(sel.dividas || []), dividaCustas];
     try {
-      const res = await dbUpdate("devedores", sel.id, { dividas: JSON.stringify(dividas), valor_original: dividas.reduce((s, d) => s + (d.valor_total || 0), 0) });
-      const atu = Array.isArray(res) ? res[0] : res;
-      const parsed = montarDevAtualizado(atu, dividas);
+      const res = await dbInsert("dividas", payload);
+      const novaDiv = Array.isArray(res) ? res[0] : res;
+      if (!novaDiv?.id) throw new Error("Supabase did not return custas row");
+      const oldDivs = sel.dividas || [];
+      const novaValorOriginal = oldDivs.reduce((s, d) => s + (d.valor_total || 0), 0) + totalCustas;
+      await dbUpdate("devedores", sel.id, { valor_original: novaValorOriginal });
+      const localDiv = {
+        ...payload, id: novaDiv.id,
+        descricao: "Custas Judiciais",
+        indexador: "igpm", juros_am: 0, multa_pct: 0, honorarios_pct: 0,
+        parcelas: [], custas: validas,
+      };
+      const newDividas = [...oldDivs, localDiv];
+      const parsed = montarDevAtualizado(null, newDividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
       toast.success("Custas lançadas com sucesso!");
     } catch (e) {
       toast.error("Não foi possível salvar as custas no Supabase:" + e.message);
-      return;
-      const parsed = montarDevAtualizado(null, dividas);
-      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
-      setSel(parsed);
-      toast("Custas salvas localmente.", { icon: "⚠️" });
     }
   }
 
