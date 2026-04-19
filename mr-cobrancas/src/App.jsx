@@ -8512,7 +8512,7 @@ export default function App() {
   const isAdmin = user?.role === "admin";
   const NAV = [
     { id: "dashboard", label: "Dashboard", icon: I.dash, color: "#6366f1", bg: "rgba(99,102,241,.18)" },
-    { id: "devedores", label: "Devedores", icon: I.dev, color: "#ec4899", bg: "rgba(236,72,153,.18)" },
+    { id: "devedores", label: "Pessoas", icon: I.dev, color: "#ec4899", bg: "rgba(236,72,153,.18)" },
     { id: "credores", label: "Credores", icon: I.cred, color: "#14b8a6", bg: "rgba(20,184,166,.18)" },
     { id: "calculadora", label: "Calculadora", icon: I.calc, color: "#f59e0b", bg: "rgba(245,158,11,.18)" },
     { id: "relatorios", label: "Relatórios", icon: I.rel, color: "#10b981", bg: "rgba(16,185,129,.18)" },
@@ -8759,7 +8759,7 @@ export default function App() {
         <div className="mr-page" style={{ flex: 1, padding: "14px 8px 0", overflowY: "auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12, marginBottom: 14 }} className="mr-grid-4">
             {[
-              { label: "Devedores", value: devedores.length, tone: "#eaf9ef", ink: "#166534" },
+              { label: "Pessoas", value: devedores.length, tone: "#eaf9ef", ink: "#166534" },
               { label: "Processos", value: processos.length, tone: "#ecf5ff", ink: "#1d4ed8" },
               { label: "Pendencias", value: pendenciasHoje, tone: "#fff1f2", ink: "#be123c" },
               { label: "Carteira", value: fmt(totalCarteira), tone: "#fdfbe9", ink: "#8a6b00" },
