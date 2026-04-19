@@ -1,11 +1,12 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-18 - Completed quick task 260418-hr7: processos judiciais módulo completo + verificar DevedoresDaDivida + badge ⚖️ + deploy ✓
+Last activity: 2026-04-18 - Phase 1 Plan 01 executado: 002_dividas_tabela.sql criado; aguardando execução manual no Supabase (checkpoint:human-action)
 
 ## Status
 
-**Active Phase:** None (quick tasks only)
-**Blockers/Concerns:** None
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 1/6 plans complete, paused at checkpoint)
+**Current Plan:** 01-01 — COMPLETE (Task 1 done; Task 2 awaiting human action: run SQL in Supabase)
+**Blockers/Concerns:** Blocking checkpoint — developer must run 002_dividas_tabela.sql in Supabase SQL Editor before plans 02-06 can proceed
 
 ### Quick Tasks Completed
 
@@ -49,3 +50,28 @@ Last activity: 2026-04-18 - Completed quick task 260418-hr7: processos judiciais
 | 260418-ft9 | Fix Art.523 painel: valor não mudava ao aplicar/remover (dívida quitada by iterative pgtos → saldo 0 → Art.523×0=0); Art.523 agora no total devedor pós-loop; tjgo-009; 9/9 testes; deploy ✓ | 2026-04-18 | 42bab66 | Complete | — |
 | 260418-gxm | Múltiplos devedores por dívida: tabela devedores_dividas + service + hook + DevedoresDaDivida.jsx + badge 👑 + totalCarteira anti-dupla-contagem; SQL migration idempotente; 9/9 testes; deploy ✓ | 2026-04-18 | 5d9e262 | Complete | [260418-gxm-multiplos-devedores-por-divida-com-principal](./quick/260418-gxm-multiplos-devedores-por-divida-com-principal/) |
 | 260418-hr7 | Processos judiciais módulo completo + verificar DevedoresDaDivida | 2026-04-18 | b8ab6c2 | Complete | [260418-hr7-ativar-opcao-a-agrupamento-processo](./quick/260418-hr7-ativar-opcao-a-agrupamento-processo/) |
+| 260418-ilc | Pessoas vinculadas ao devedor: tabela devedores_vinculados + PessoasVinculadas.jsx + aba + badge + PDF | 2026-04-18 | 72a3f34 | Complete | [260418-ilc-pessoas-vinculadas-devedor](./quick/260418-ilc-pessoas-vinculadas-devedor/) |
+
+### Phase 1 Progress
+
+| Plan | Name | Status | Commit |
+|------|------|--------|--------|
+| 01-01 | Create 002_dividas_tabela.sql migration | CHECKPOINT — awaiting Supabase SQL execution | 458e414 |
+| 01-02 | App.jsx carregarTudo() + write surfaces | Not started | — |
+| 01-03 | dividas.js service layer | Not started | — |
+| 01-04 | NAV label Devedores → Pessoas | Not started | — |
+| 01-05 | Build + deploy | Not started | — |
+| 01-06 | Cleanup migration DROP COLUMN | Not started | — |
+
+## Key Decisions (Phase 1)
+
+- `valor_total` column name (not `valor_original`) — matches devedorCalc.js field at line 75
+- `art523_opcao TEXT` with 3-value CHECK constraint (not BOOLEAN) — code uses nao_aplicar/so_multa/multa_honorarios
+- `json_id_legado TEXT` bridges Date.now() IDs from JSONB to UUID rows for migration
+- devedores_dividas seeded from dividas.devedor_id directly (table was just recreated)
+
+## Resume Instructions
+
+After developer runs SQL in Supabase and signals "migration done":
+- Resume from Plan 01-02 (App.jsx carregarTudo() + write surfaces)
+- Verify: `SELECT count(*) FROM dividas` returns >= 4 before proceeding
