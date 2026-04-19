@@ -1,11 +1,11 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-18 - Phase 1 Plan 03 executado: carregarTudo() refatorado com load paralelo de dividas + dividasMap + camada de compatibilidade
+Last activity: 2026-04-18 - Phase 1 Plan 04 executado: 7 write surfaces refatoradas — dbInsert/dbUpdate/dbDelete("dividas"), seedPrincipal com UUID real, reload pós-save do dividas table
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 3/6 plans complete)
-**Current Plan:** 01-04 — NAV label Devedores → Pessoas
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 4/6 plans complete)
+**Current Plan:** 01-05 — Rename NAV label Devedores → Pessoas
 **Blockers/Concerns:** None
 
 ### Quick Tasks Completed
@@ -59,7 +59,7 @@ Last activity: 2026-04-18 - Phase 1 Plan 03 executado: carregarTudo() refatorado
 | 01-01 | Create 002_dividas_tabela.sql migration | CHECKPOINT — awaiting Supabase SQL execution | 458e414 |
 | 01-02 | dividas.js service layer | COMPLETE | 9224e95 |
 | 01-03 | Refactor carregarTudo() parallel load + dividasMap | COMPLETE | d087052 |
-| 01-04 | NAV label Devedores → Pessoas | Not started | — |
+| 01-04 | Refactor 7 write surfaces | COMPLETE | b346752, 217134b |
 | 01-05 | Build + deploy | Not started | — |
 | 01-06 | Cleanup migration DROP COLUMN | Not started | — |
 
@@ -83,6 +83,15 @@ Last activity: 2026-04-18 - Phase 1 Plan 03 executado: carregarTudo() refatorado
 - valorCalc reduce keeps div.valor_total (JSONB name) — returns 0 for new table rows (valor_original); valorFinal falls back to d.valor_original. Transitional state resolved in Plan 05.
 - parse() function kept — still needed for d.contatos, d.acordos, d.parcelas
 
+## Key Decisions (Plan 01-04)
+
+- localDiv objects carry both table column names AND JSONB-compat aliases (descricao/indexador/juros_am/multa_pct/honorarios_pct) so devedorCalc.js works without modification
+- seedPrincipal now receives novaDiv.id (UUID string from Supabase response), not Date.now() number
+- Dead-code tentativas block removed from salvarDevedor (was after unconditional return; — unreachable)
+- excluirDivida: hard delete from dividas table + update devedores.valor_original aggregate
+- toggleParcela: updates only dividas.parcelas JSONB column, not full devedores.dividas stringify
+- salvarEdicaoDivida reload: dbGet("dividas", devedor_id=eq.X) with alias mapping replaces old JSONB re-parse
+
 ## Resume Instructions
 
-Plan 01-03 complete. Next: Plan 01-04 — NAV label Devedores → Pessoas.
+Plan 01-04 complete. Next: Plan 01-05 — Rename NAV label "Devedores" → "Pessoas".

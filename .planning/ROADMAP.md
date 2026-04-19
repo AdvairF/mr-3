@@ -16,7 +16,7 @@ Plans:
 - [x] 01-01-PLAN.md — Migration SQL: CREATE TABLE dividas + seed JSONB + DROP/CREATE devedores_dividas UUID FK (CHECKPOINT: awaiting Supabase SQL execution)
 - [x] 01-02-PLAN.md — Service layer: dividas.js CRUD operations (COMPLETE: 9224e95)
 - [x] 01-03-PLAN.md — Refactor carregarTudo() parallel load + dividasMap + compatibility layer (COMPLETE: d087052)
-- [ ] 01-04-PLAN.md — Refactor 7 write surfaces (adicionarDivida, custas, editar, excluir, toggle, reload, criar devedor)
+- [x] 01-04-PLAN.md — Refactor 7 write surfaces (adicionarDivida, custas, editar, excluir, toggle, reload, criar devedor) (COMPLETE: b346752, 217134b)
 - [ ] 01-05-PLAN.md — Rename NAV label "Devedores" → "Pessoas"
 - [ ] 01-06-PLAN.md — Build, test:regressao, deploy, production verification
 
