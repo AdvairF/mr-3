@@ -14,7 +14,7 @@ Separar o módulo Devedores em entidades Pessoas e Dívidas com relacionamento N
 
 Plans:
 - [x] 01-01-PLAN.md — Migration SQL: CREATE TABLE dividas + seed JSONB + DROP/CREATE devedores_dividas UUID FK (CHECKPOINT: awaiting Supabase SQL execution)
-- [ ] 01-02-PLAN.md — Service layer: dividas.js CRUD operations
+- [x] 01-02-PLAN.md — Service layer: dividas.js CRUD operations (COMPLETE: 9224e95)
 - [ ] 01-03-PLAN.md — Refactor carregarTudo() parallel load + dividasMap + compatibility layer
 - [ ] 01-04-PLAN.md — Refactor 7 write surfaces (adicionarDivida, custas, editar, excluir, toggle, reload, criar devedor)
 - [ ] 01-05-PLAN.md — Rename NAV label "Devedores" → "Pessoas"

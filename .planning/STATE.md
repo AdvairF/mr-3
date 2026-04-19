@@ -1,12 +1,12 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-18 - Phase 1 Plan 01 executado: 002_dividas_tabela.sql criado; aguardando execução manual no Supabase (checkpoint:human-action)
+Last activity: 2026-04-19 - Phase 1 Plan 02 executado: dividas.js service layer criado com 5 exports CRUD
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 1/6 plans complete, paused at checkpoint)
-**Current Plan:** 01-01 — COMPLETE (Task 1 done; Task 2 awaiting human action: run SQL in Supabase)
-**Blockers/Concerns:** Blocking checkpoint — developer must run 002_dividas_tabela.sql in Supabase SQL Editor before plans 02-06 can proceed
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 2/6 plans complete)
+**Current Plan:** 01-03 — Refactor carregarTudo() parallel load + dividasMap + compatibility layer
+**Blockers/Concerns:** None (SQL migration assumed done per developer signal)
 
 ### Quick Tasks Completed
 
@@ -57,8 +57,8 @@ Last activity: 2026-04-18 - Phase 1 Plan 01 executado: 002_dividas_tabela.sql cr
 | Plan | Name | Status | Commit |
 |------|------|--------|--------|
 | 01-01 | Create 002_dividas_tabela.sql migration | CHECKPOINT — awaiting Supabase SQL execution | 458e414 |
-| 01-02 | App.jsx carregarTudo() + write surfaces | Not started | — |
-| 01-03 | dividas.js service layer | Not started | — |
+| 01-02 | dividas.js service layer | COMPLETE | 9224e95 |
+| 01-03 | Refactor carregarTudo() parallel load + dividasMap | Not started | — |
 | 01-04 | NAV label Devedores → Pessoas | Not started | — |
 | 01-05 | Build + deploy | Not started | — |
 | 01-06 | Cleanup migration DROP COLUMN | Not started | — |
@@ -70,8 +70,12 @@ Last activity: 2026-04-18 - Phase 1 Plan 01 executado: 002_dividas_tabela.sql cr
 - `json_id_legado TEXT` bridges Date.now() IDs from JSONB to UUID rows for migration
 - devedores_dividas seeded from dividas.devedor_id directly (table was just recreated)
 
+## Key Decisions (Plan 01-02)
+
+- encodeURIComponent on UUID in buscarDivida — mitigates URL injection (threat T-01-02-02)
+- updated_at stamped on both criarDivida and atualizarDivida for consistent audit trail
+- Direct sb() calls (not dbGet/dbInsert aliases) — consistent with devedoresDividas.js pattern
+
 ## Resume Instructions
 
-After developer runs SQL in Supabase and signals "migration done":
-- Resume from Plan 01-02 (App.jsx carregarTudo() + write surfaces)
-- Verify: `SELECT count(*) FROM dividas` returns >= 4 before proceeding
+Plan 01-02 complete. Next: Plan 01-03 — Refactor carregarTudo() parallel load + dividasMap + compatibility layer.
