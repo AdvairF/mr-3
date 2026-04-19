@@ -1,12 +1,12 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-19 - Phase 1 Plan 02 executado: dividas.js service layer criado com 5 exports CRUD
+Last activity: 2026-04-18 - Phase 1 Plan 03 executado: carregarTudo() refatorado com load paralelo de dividas + dividasMap + camada de compatibilidade
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 2/6 plans complete)
-**Current Plan:** 01-03 — Refactor carregarTudo() parallel load + dividasMap + compatibility layer
-**Blockers/Concerns:** None (SQL migration assumed done per developer signal)
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 3/6 plans complete)
+**Current Plan:** 01-04 — NAV label Devedores → Pessoas
+**Blockers/Concerns:** None
 
 ### Quick Tasks Completed
 
@@ -58,7 +58,7 @@ Last activity: 2026-04-19 - Phase 1 Plan 02 executado: dividas.js service layer 
 |------|------|--------|--------|
 | 01-01 | Create 002_dividas_tabela.sql migration | CHECKPOINT — awaiting Supabase SQL execution | 458e414 |
 | 01-02 | dividas.js service layer | COMPLETE | 9224e95 |
-| 01-03 | Refactor carregarTudo() parallel load + dividasMap | Not started | — |
+| 01-03 | Refactor carregarTudo() parallel load + dividasMap | COMPLETE | d087052 |
 | 01-04 | NAV label Devedores → Pessoas | Not started | — |
 | 01-05 | Build + deploy | Not started | — |
 | 01-06 | Cleanup migration DROP COLUMN | Not started | — |
@@ -76,6 +76,13 @@ Last activity: 2026-04-19 - Phase 1 Plan 02 executado: dividas.js service layer 
 - updated_at stamped on both criarDivida and atualizarDivida for consistent audit trail
 - Direct sb() calls (not dbGet/dbInsert aliases) — consistent with devedoresDividas.js pattern
 
+## Key Decisions (Plan 01-03)
+
+- allDividas stored as flat [] (not Map) — flexibility for future consumer components
+- dividasMap built inline in carregarTudo() (not useMemo) — fresh on each load, no stale closure risk
+- valorCalc reduce keeps div.valor_total (JSONB name) — returns 0 for new table rows (valor_original); valorFinal falls back to d.valor_original. Transitional state resolved in Plan 05.
+- parse() function kept — still needed for d.contatos, d.acordos, d.parcelas
+
 ## Resume Instructions
 
-Plan 01-02 complete. Next: Plan 01-03 — Refactor carregarTudo() parallel load + dividasMap + compatibility layer.
+Plan 01-03 complete. Next: Plan 01-04 — NAV label Devedores → Pessoas.
