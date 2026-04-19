@@ -1,11 +1,11 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-18 - Phase 1 Plan 04 executado: 7 write surfaces refatoradas — dbInsert/dbUpdate/dbDelete("dividas"), seedPrincipal com UUID real, reload pós-save do dividas table
+Last activity: 2026-04-18 - Phase 1 Plan 05 executado: UI label rename — NAV sidebar e Dashboard KPI card mostram "Pessoas" (label only, id/tabela/variáveis internas inalterados)
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 4/6 plans complete)
-**Current Plan:** 01-05 — Rename NAV label Devedores → Pessoas
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 5/6 plans complete)
+**Current Plan:** 01-06 — Build, test:regressao, deploy, production verification
 **Blockers/Concerns:** None
 
 ### Quick Tasks Completed
@@ -60,8 +60,8 @@ Last activity: 2026-04-18 - Phase 1 Plan 04 executado: 7 write surfaces refatora
 | 01-02 | dividas.js service layer | COMPLETE | 9224e95 |
 | 01-03 | Refactor carregarTudo() parallel load + dividasMap | COMPLETE | d087052 |
 | 01-04 | Refactor 7 write surfaces | COMPLETE | b346752, 217134b |
-| 01-05 | Build + deploy | Not started | — |
-| 01-06 | Cleanup migration DROP COLUMN | Not started | — |
+| 01-05 | Rename NAV label Devedores → Pessoas | COMPLETE | 80f8ad8 (submodule), 08a7d55 (parent) |
+| 01-06 | Build, test:regressao, deploy, production verification | Not started | — |
 
 ## Key Decisions (Phase 1)
 
@@ -94,4 +94,4 @@ Last activity: 2026-04-18 - Phase 1 Plan 04 executado: 7 write surfaces refatora
 
 ## Resume Instructions
 
-Plan 01-04 complete. Next: Plan 01-05 — Rename NAV label "Devedores" → "Pessoas".
+Plan 01-05 complete. Next: Plan 01-06 — Build, test:regressao, deploy, production verification.
