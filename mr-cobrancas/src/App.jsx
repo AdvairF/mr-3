@@ -3313,12 +3313,14 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     const todasPagas = dividas.every(div => div.parcelas.every(p => p.status === "pago"));
     const algumaPaga = dividas.some(div => div.parcelas.some(p => p.status === "pago"));
     const nSt = todasPagas ? "pago_integral" : algumaPaga ? "pago_parcial" : sel.status;
+    const targetDiv = dividas.find(d => d.id === dividaId);
     try {
-      const res = await dbUpdate("devedores", sel.id, { dividas: JSON.stringify(dividas), status: nSt });
-      const atu = Array.isArray(res) ? res[0] : res;
-      const parsed = montarDevAtualizado(atu, dividas, { status: nSt });
+      await dbUpdate("dividas", dividaId, { parcelas: JSON.stringify(targetDiv.parcelas) });
+      if (nSt !== sel.status) await dbUpdate("devedores", sel.id, { status: nSt });
+      const parsed = montarDevAtualizado(null, dividas, { status: nSt });
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed);
     } catch (e) {
+      console.warn("toggleParcela failed:", e);
       const parsed = montarDevAtualizado(null, dividas, { status: nSt });
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed);
     }
@@ -3326,16 +3328,16 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
 
   async function excluirDivida(dId) {
     if (!sel || !await confirm("Excluir esta dívida?")) return;
-    const dividas = (sel.dividas || []).filter(d => d.id !== dId);
-    const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
     try {
-      const res = await dbUpdate("devedores", sel.id, { dividas: JSON.stringify(dividas), valor_original });
-      const atu = Array.isArray(res) ? res[0] : res;
-      const parsed = montarDevAtualizado(atu, dividas);
-      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed);
-    } catch (e) {
+      await dbDelete("dividas", dId);
+      const dividas = (sel.dividas || []).filter(d => d.id !== dId);
+      const novaValorOriginal = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
+      await dbUpdate("devedores", sel.id, { valor_original: novaValorOriginal });
       const parsed = montarDevAtualizado(null, dividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed);
+      toast.success("Dívida excluída com sucesso!");
+    } catch (e) {
+      toast.error("Erro ao excluir dívida: " + e.message);
     }
   }
 
@@ -3367,56 +3369,60 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     if (!total) { toast("Informe o valor da dívida.", { icon: "⚠️" }); return; }
     const dataRef = ndEdit.data_origem || ndEdit.data_vencimento;
     if (!dataRef) { toast("Informe a data de vencimento.", { icon: "⚠️" }); return; }
-    const dividas = (sel.dividas || []).map(d => {
-      if (String(d.id) !== String(editDivId)) return d;
-      return {
-        ...d,
-        descricao: ndEdit.descricao || "Dívida",
-        valor_total: total,
-        data_origem: dataRef,
-        data_vencimento: ndEdit.data_vencimento || dataRef,
-        data_inicio_atualizacao: ndEdit.data_inicio_atualizacao || dataRef,
-        indexador: ndEdit.indexador,
-        juros_tipo: ndEdit.juros_tipo,
-        juros_am: parseFloat(ndEdit.juros_am || "0"),
-        multa_pct: parseFloat(ndEdit.multa_pct || "0"),
-        honorarios_pct: parseFloat(ndEdit.honorarios_pct || "0"),
-        despesas: parseFloat(ndEdit.despesas || "0"),
-        observacoes: ndEdit.observacoes || "",
-        art523_opcao: ndEdit.art523_opcao || "nao_aplicar",
+    // Map edited fields to dividas table column names
+    const campos = {
+      observacoes: ndEdit.descricao || "Dívida",
+      valor_total: total,
+      data_vencimento: ndEdit.data_vencimento || dataRef,
+      data_origem: dataRef,
+      data_inicio_atualizacao: ndEdit.data_inicio_atualizacao || dataRef,
+      indice_correcao: ndEdit.indexador,
+      juros_tipo: ndEdit.juros_tipo,
+      juros_am_percentual: parseFloat(ndEdit.juros_am || "0"),
+      multa_percentual: parseFloat(ndEdit.multa_pct || "0"),
+      honorarios_percentual: parseFloat(ndEdit.honorarios_pct || "0"),
+      despesas: parseFloat(ndEdit.despesas || "0"),
+      art523_opcao: ndEdit.art523_opcao || "nao_aplicar",
+    };
+    try {
+      await dbUpdate("dividas", editDivId, campos);
+      // Update local dividas array with both table columns and JSONB-compat field names
+      const localUpdate = {
+        ...campos,
+        descricao: campos.observacoes,
+        indexador: campos.indice_correcao,
+        juros_am: campos.juros_am_percentual,
+        multa_pct: campos.multa_percentual,
+        honorarios_pct: campos.honorarios_percentual,
       };
-    });
-    const valor_original = dividas.reduce((s, d) => s + (d.valor_total || 0), 0);
-    try {
-      const res = await dbUpdate("devedores", sel.id, { dividas: JSON.stringify(dividas), valor_original });
-      const atu = Array.isArray(res) ? res[0] : res;
-      const parsed = montarDevAtualizado(atu, dividas);
+      const newDividas = (sel.dividas || []).map(d =>
+        String(d.id) === String(editDivId) ? { ...d, ...localUpdate } : d
+      );
+      const novaValorOriginal = newDividas.reduce((s, d) => s + (d.valor_total || 0), 0);
+      await dbUpdate("devedores", sel.id, { valor_original: novaValorOriginal });
+      const parsed = montarDevAtualizado(null, newDividas);
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
       setSel(parsed);
-      if (!atu) {
-        toast("Dívida salva localmente, mas não foi possível confirmar a sincronização com o banco.", { icon: "⚠️", duration: 5000 });
-      } else {
-        toast.success("Dívida atualizada com sucesso!");
-      }
+      toast.success("Dívida atualizada com sucesso!");
     } catch (e) {
-      toast.error("Erro ao salvar no Supabase: " + e.message + " As alterações foram salvas localmente.");
-      const parsed = montarDevAtualizado(null, dividas);
-      setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d));
-      setSel(parsed);
+      toast.error("Erro ao salvar no Supabase: " + e.message);
     }
-    // Reload forçado para garantir dividas JSONB íntegro (fix Art.523 não altera valor no painel)
+    // Reload from dividas table (replaces old JSONB re-parse)
     try {
-      const fresh = await dbGet("devedores", `id=eq.${sel.id}`);
-      const freshDev = Array.isArray(fresh) ? fresh[0] : fresh;
-      if (freshDev) {
-        const dividasRaw = typeof freshDev.dividas === "string"
-          ? JSON.parse(freshDev.dividas || "[]")
-          : (freshDev.dividas || []);
-        // Normalizar art523_opcao null → "nao_aplicar" (sem migração de dados)
-        const dividasNorm = dividasRaw.map(d => ({ ...d, art523_opcao: d.art523_opcao || "nao_aplicar" }));
-        const parsedFresh = montarDevAtualizado(freshDev, dividasNorm);
-        setDevedores(prev => prev.map(d => d.id === sel.id ? parsedFresh : d));
-        setSel(parsedFresh);
+      const freshDivs = await dbGet("dividas", `devedor_id=eq.${sel.id}`);
+      if (Array.isArray(freshDivs) && freshDivs.length > 0) {
+        // Add JSONB-compat field aliases for devedorCalc.js
+        const compat = freshDivs.map(d => ({
+          ...d,
+          descricao: d.observacoes,
+          indexador: d.indice_correcao,
+          juros_am: d.juros_am_percentual,
+          multa_pct: d.multa_percentual,
+          honorarios_pct: d.honorarios_percentual,
+        }));
+        const reloaded = montarDevAtualizado(null, compat);
+        setDevedores(prev => prev.map(d => d.id === sel.id ? reloaded : d));
+        setSel(reloaded);
       }
     } catch (reloadErr) {
       console.warn("Reload pós-save falhou (state local mantido):", reloadErr);
