@@ -1,12 +1,12 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-18 - Phase 1 Plan 05 executado: UI label rename — NAV sidebar e Dashboard KPI card mostram "Pessoas" (label only, id/tabela/variáveis internas inalterados)
+Last activity: 2026-04-19 - Phase 1 Plan 06 Task 1 executado: npm run build green (9/9 calculos tests + Vite 106 modules) — aguardando verificação produção em mrcobrancas.com.br (Task 2 checkpoint)
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 5/6 plans complete)
-**Current Plan:** 01-06 — Build, test:regressao, deploy, production verification
-**Blockers/Concerns:** None
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 6/6 plans automated tasks complete, awaiting production checkpoint)
+**Current Plan:** 01-06 — CHECKPOINT: human-verify production at mrcobrancas.com.br
+**Blockers/Concerns:** Awaiting developer to push 13 commits to GitHub and verify production
 
 ### Quick Tasks Completed
 
@@ -61,7 +61,7 @@ Last activity: 2026-04-18 - Phase 1 Plan 05 executado: UI label rename — NAV s
 | 01-03 | Refactor carregarTudo() parallel load + dividasMap | COMPLETE | d087052 |
 | 01-04 | Refactor 7 write surfaces | COMPLETE | b346752, 217134b |
 | 01-05 | Rename NAV label Devedores → Pessoas | COMPLETE | 80f8ad8 (submodule), 08a7d55 (parent) |
-| 01-06 | Build, test:regressao, deploy, production verification | Not started | — |
+| 01-06 | Build, test:regressao, deploy, production verification | CHECKPOINT — awaiting production verification at mrcobrancas.com.br | aec3ad4 |
 
 ## Key Decisions (Phase 1)
 
