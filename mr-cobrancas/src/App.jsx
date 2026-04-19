@@ -8446,11 +8446,12 @@ export default function App() {
   const [regua, setRegua] = useState([]);
   const [lembretesList, setLembretesList] = useState([]);
   const [allPagamentos, setAllPagamentos] = useState([]);
+  const [allDividas, setAllDividas] = useState([]);
 
   const carregarTudo = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg, lems, pgtos] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems, pgtos, divs] = await Promise.all([
         dbGet("devedores"),
         dbGet("credores"),
         dbGet("processos"),
@@ -8458,12 +8459,21 @@ export default function App() {
         dbGet("regua_cobranca", "order=criado_em.asc"),
         dbGet("lembretes", "order=data_prometida.asc"),
         dbGet("pagamentos_parciais"),
+        dbGet("dividas"),
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
+      setAllDividas(Array.isArray(divs) ? divs : []);
+      // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
+      const dividasMap = new Map();
+      (divs || []).forEach(div => {
+        const k = String(div.devedor_id);
+        if (!dividasMap.has(k)) dividasMap.set(k, []);
+        dividasMap.get(k).push(div);
+      });
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
       setDevedores((devs || []).map(d => {
-        const dividas = parse(d.dividas);
+        const dividas = dividasMap.get(String(d.id)) || [];
         const contatos = parse(d.contatos);
         const acordos = parse(d.acordos).map(ac => ({ ...ac, parcelas: verificarAtrasados(ac.parcelas || []) }));
         const valorCalc = dividas.reduce((s, div) => s + (div.valor_total || 0), 0);
