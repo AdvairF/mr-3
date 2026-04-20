@@ -4,7 +4,7 @@ import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
 import DevedoresDaDivida from "./DevedoresDaDivida.jsx";
 import Art523Option from "./Art523Option.jsx";
-import { calcularSaldosPorDivida } from "../utils/devedorCalc.js";
+import { calcularSaldosPorDivida, calcularTotalPagoPorDivida } from "../utils/devedorCalc.js";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -74,7 +74,8 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
 
   const saldosMap = devedor ? calcularSaldosPorDivida(devedor, pagamentosDoDevedor, hoje) : null;
   const saldoDivida = saldosMap != null ? (saldosMap[String(divida.id)] ?? null) : null;
-  const totalPago = pagamentosDoDevedor.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+  const pagoPorDividaMap = devedor ? calcularTotalPagoPorDivida(devedor, pagamentosDoDevedor, hoje) : {};
+  const totalPago = pagoPorDividaMap[String(divida.id)] ?? 0;
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 0 32px 0" }}>
