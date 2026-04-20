@@ -8436,7 +8436,16 @@ export default function App() {
       (divs || []).forEach(div => {
         const k = String(div.devedor_id);
         if (!dividasMap.has(k)) dividasMap.set(k, []);
-        dividasMap.get(k).push({ ...div, parcelas: parseJ(div.parcelas), custas: parseJ(div.custas) });
+        dividasMap.get(k).push({
+          ...div,
+          parcelas: parseJ(div.parcelas),
+          custas: parseJ(div.custas),
+          descricao: div.observacoes,
+          indexador: div.indice_correcao,
+          juros_am: div.juros_am_percentual,
+          multa_pct: div.multa_percentual,
+          honorarios_pct: div.honorarios_percentual,
+        });
       });
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
       setDevedores((devs || []).map(d => {
