@@ -669,7 +669,7 @@ These two components were not read in this research session. The planner should 
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **art523_opcao vocabulary mismatch**
    - What we know: Art523Option.jsx uses `'apenas_multa'` (line 12). DB CHECK allows `'so_multa'`. Migration maps DB → component display.
