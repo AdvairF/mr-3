@@ -1,0 +1,3 @@
+[submodule "src/mr-3"]
+	path = src/mr-3
+	url = https://github.com/AdvairF/mr-3.git
