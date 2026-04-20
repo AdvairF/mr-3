@@ -1,10 +1,10 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 - Phase 1 COMPLETE — CR-01 fix deployed (95b3aee), all 7 UAT checks passed in production
+Last activity: 2026-04-20 - Phase 2 COMPLETE — Módulo Dívidas no Sidebar validado em localhost + produção (mrcobrancas.com.br). CR-02 fix: saldo individual por dívida (f2c5524).
 
 ## Status
 
-**Active Phase:** Phase 2 — (next phase)
+**Active Phase:** Phase 3 — (next phase)
 **Current Plan:** —
 **Blockers/Concerns:** —
 

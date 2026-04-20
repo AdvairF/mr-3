@@ -131,6 +131,35 @@ No new security-relevant surface beyond what is documented in the plan's threat 
 - Build output `build/index.html` — EXISTS
 - Commits 40faf32, d39dc0e — VERIFIED in git log
 
-## Pending
+## CR-02 Fix (post-checkpoint)
 
-**Task 3 (checkpoint:human-verify):** Browser verification of all 9 checks is awaiting human approval. See PLAN.md for full verification checklist.
+Bug crítico encontrado durante verificação humana: `TabelaDividas` e `DetalheDivida` exibiam saldo agregado do devedor em vez de saldo individual por dívida.
+
+**Root cause:** `calcularSaldoDevedorAtualizado` retorna `saldoTotal` (soma de todas as dívidas do devedor). Motor já calculava `saldoDiv` por dívida internamente mas não expunha.
+
+**Fix aplicado (commit f2c5524 submodule / ad34a7a parent):**
+- `devedorCalc.js`: nova função `calcularSaldosPorDivida()` — mesmo loop Art. 354 CC, retorna `{ [div.id]: saldo }` por dívida
+- `TabelaDividas.jsx`: substituído por lookup `saldosMap[d.id]`
+- `DetalheDivida.jsx`: Valor Original = `divida.valor_total`, Saldo Atualizado = `saldosMap[divida.id]`
+- `calcularSaldoDevedorAtualizado` intacto — dashboard/Pessoas/FilaDevedor inalterados
+- 9/9 testes regressão + build verde
+
+**Validado em localhost e produção (mrcobrancas.com.br, 2026-04-20):**
+- TRADIO PAGAMENTOS: R$ 1.155,32 + R$ 1.082,89 + R$ 2.821,83 = R$ 5.060,04 ✓
+- advair: R$ 5.678,71 + R$ 1.854,00 + R$ 1.722,03 + R$ 1.975,28 = R$ 11.230,02 ✓
+- Detalhe: Valor Original R$ 1.000, Saldo R$ 1.155,32 individual ✓
+
+## Checkpoint Resolution
+
+**Task 3 (checkpoint:human-verify): APPROVED 2026-04-20**
+
+Todos os 9 checks passaram em localhost e produção após fix CR-02:
+1. ✓ Sidebar "Dívidas" após "Pessoas", badge contagem 9
+2. ✓ Lista com 4 filtros + tabela 8 colunas
+3. ✓ Filtros composição AND, chips ativos
+4. ✓ Saldo Atualizado valores reais individuais por dívida
+5. ✓ Detalhe com back button, header, card financeiro, Pessoas Vinculadas, Editar Dívida
+6. ✓ Editar Dívida navega para Pessoas + abre form do devedor
+7. ✓ Remoção PRINCIPAL mostra Modal.jsx (não window.confirm)
+8. ✓ Back button retorna à lista filtrada
+9. ✓ Aba Dívidas dentro de Pessoa continua funcionando

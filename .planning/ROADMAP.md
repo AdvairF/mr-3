@@ -49,10 +49,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — AtrasoCell.jsx: pure badge component, 5 tiers from data_vencimento (Wave 1)
-- [ ] 02-02-PLAN.md — FiltroDividas.jsx + TabelaDividas.jsx: 4-filter bar + 8-column table with saldo calc (Wave 1)
-- [ ] 02-03-PLAN.md — DetalheDivida.jsx + DevedoresDaDivida.jsx modification: detail screen + D-05 PRINCIPAL warning (Wave 2)
-- [ ] 02-04-PLAN.md — ModuloDividas.jsx + App.jsx integration: wire everything, sidebar badge, build gate + human verify (Wave 3)
+- [x] 02-01-PLAN.md — AtrasoCell.jsx: pure badge component, 5 tiers from data_vencimento (COMPLETE: 3f6079a)
+- [x] 02-02-PLAN.md — FiltroDividas.jsx + TabelaDividas.jsx: 4-filter bar + 8-column table with saldo calc (COMPLETE: 5ab0241)
+- [x] 02-03-PLAN.md — DetalheDivida.jsx + DevedoresDaDivida.jsx modification: detail screen + D-05 PRINCIPAL warning (COMPLETE: 39932d0)
+- [x] 02-04-PLAN.md — ModuloDividas.jsx + App.jsx integration + CR-02 fix (COMPLETE: f2c5524 — validated localhost + produção 2026-04-20)
 
 **Acceptance criteria:**
 - Item "Dívidas" aparece no sidebar com badge de contagem de dívidas em cobrança
