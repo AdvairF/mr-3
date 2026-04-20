@@ -4,7 +4,7 @@ const TABLE = "devedores_dividas";
 
 export async function listarParticipantes(dividaId) {
   return sb(
-    `${TABLE}?divida_id=eq.${encodeURIComponent(dividaId)}&select=*,devedor:devedores(id,nome,cpf_cnpj,telefone,email)&order=created_at.asc`
+    `${TABLE}?divida_id=eq.${encodeURIComponent(dividaId)}&select=*&order=created_at.asc`
   );
 }
 

@@ -4,7 +4,7 @@ import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
 import DividaForm from "./DividaForm.jsx";
 import { criarDivida } from "../services/dividas.js";
-import { adicionarParticipante } from "../services/devedoresDividas.js";
+import { adicionarParticipante, listarParticipantes } from "../services/devedoresDividas.js";
 import { dbInsert } from "../config/supabase.js";
 import { DIVIDA_VAZIA } from "../utils/constants.js";
 
@@ -174,6 +174,12 @@ export default function NovaDivida({ devedores, credores, onCarregarTudo, onVolt
           papel: p.papel,
           responsabilidade: p.responsabilidade,
         });
+      }
+
+      // Confirmar que ao menos 1 Principal foi vinculado
+      const vinculados = await listarParticipantes(String(novaDiv.id));
+      if (!Array.isArray(vinculados) || !vinculados.some(r => r.papel === "PRINCIPAL")) {
+        throw new Error("Vínculo com devedor principal não foi confirmado");
       }
 
       await onCarregarTudo();          // D-09: update badge BEFORE navigating

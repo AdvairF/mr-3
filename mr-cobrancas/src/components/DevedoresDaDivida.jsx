@@ -18,7 +18,11 @@ const RESP_LABELS = {
 };
 
 export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtualId, onRemovePrincipal }) {
-  const { participantes, loading, adicionar, trocarPapel, remover } = useDevedoresDividas(dividaId);
+  const { participantes, loading, error, adicionar, trocarPapel, remover } = useDevedoresDividas(dividaId);
+  const participantesEnriquecidos = participantes.map(p => ({
+    ...p,
+    devedor: (devedores || []).find(d => String(d.id) === String(p.devedor_id)) || null,
+  }));
   const [showModal, setShowModal] = useState(false);
 
   if (!dividaId) return null;
@@ -41,13 +45,19 @@ export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtu
         <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>Carregando...</p>
       )}
 
-      {!loading && participantes.length === 0 && (
+      {!loading && error && (
+        <p style={{ fontSize: 11, color: "#dc2626", fontStyle: "italic", margin: 0 }}>
+          Erro ao carregar participantes: {error}
+        </p>
+      )}
+
+      {!loading && !error && participantesEnriquecidos.length === 0 && (
         <p style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", margin: 0 }}>
           Nenhum participante cadastrado.
         </p>
       )}
 
-      {!loading && participantes.map(p => {
+      {!loading && participantesEnriquecidos.map(p => {
         const meta = PAPEL_META[p.papel] || PAPEL_META.OUTRO;
         const isAtual = String(p.devedor_id) === String(devedorAtualId);
         return (
