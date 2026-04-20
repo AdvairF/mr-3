@@ -53,8 +53,8 @@ Declared values (multiples of 4 only):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Badge padding inline (2px 7px shorthand), icon dot indicators |
-| sm | 8px | Row padding (8px 10px), label margin-bottom, input padding |
+| xs | 4px | Badge padding inline, icon dot indicators |
+| sm | 8px | Row padding (8px 12px), label margin-bottom, input padding |
 | md | 16px | Card internal padding, section gap |
 | lg | 24px | Modal internal padding (28px rounded up to nearest 4 = 28px — see exception) |
 | xl | 32px | Page section breaks |
@@ -63,9 +63,9 @@ Declared values (multiples of 4 only):
 
 Exceptions:
 - Modal padding: 28px (established pattern in AdicionarParticipanteModal — match this value, not 24px)
-- Badge pill padding: `2px 8px` for standard badges; `3px 10px` for larger variant (match Badge.jsx)
-- Nav button padding: `10px 12px` (match existing nav-btn pattern)
-- Touch targets: sidebar nav items are 34×34px icon wells — add "Dívidas" at same 34×34px size
+- Badge pill padding: `4px 8px` for standard badges; `4px 12px` for larger variant
+- Nav button padding: `8px 12px` (match existing nav-btn pattern)
+- Touch targets: sidebar nav items are 32×32px icon wells — add "Dívidas" at same 32×32px size
 
 ---
 
@@ -74,13 +74,15 @@ Exceptions:
 | Role | Size | Weight | Line Height | Font | Source |
 |------|------|--------|-------------|------|--------|
 | Body | 13px | 400 | 1.5 | Plus Jakarta Sans | Btn.jsx, table td, form inputs |
-| Label / Caption | 11px | 700 | 1.4 | Plus Jakarta Sans | All uppercase field labels, badge text |
-| Sub-caption | 10px | 700 | 1.3 | Plus Jakarta Sans | Smaller badges, secondary metadata |
-| Heading | 22px | 800 | 1.2 | Space Grotesk | Module headings (e.g. "Devedores" h2) |
-| Display | 26px | 800 | 1.1 | Space Grotesk | Dashboard KPI headings — not needed in this phase |
-| Modal title | 17px | 800 | 1.2 | Space Grotesk | Established in AdicionarParticipanteModal |
+| Label / Caption | 11px | 700 | 1.4 | Plus Jakarta Sans | All uppercase field labels, badge text, smaller badges, secondary metadata |
+| Modal title | 17px | 700 | 1.2 | Space Grotesk | Established in AdicionarParticipanteModal |
+| Heading | 22px | 700 | 1.2 | Space Grotesk | Module headings (e.g. "Devedores" h2), card financial values, detalhe header |
 
-**Active set for Phase 2:** 10px, 11px, 13px, 17px, 22px — five sizes, justified by direct reuse of existing component patterns.
+**Active set for Phase 2:** 11px, 13px, 17px, 22px — four sizes.
+
+**Font weights:** 400 (regular) and 700 (bold) only. No 800 weight used in this phase.
+
+**Collapsed size note:** Sub-caption content (smaller badges, secondary metadata) uses 11px at weight 700 — same as Label / Caption. No separate 10px size.
 
 ---
 
@@ -131,7 +133,7 @@ Exceptions:
 ```
 
 - Color `#7c3aed` (violet) — distinct from Pessoas (`#ec4899`) and Petições (same violet — use same violet family since Petições already uses it; executor may choose `#6d28d9` if differentiation needed)
-- Badge on nav item: count of dívidas where `status = 'em cobrança'` — displayed as pill `{ fontSize: 10, fontWeight: 800, background: "#ede9fe", color: "#4c1d95", borderRadius: 99, padding: "1px 7px" }` positioned `position: absolute, right: 8, top: "50%", transform: "translateY(-50%)"` inside nav button
+- Badge on nav item: count of dívidas where `status = 'em cobrança'` — displayed as pill `{ fontSize: 11, fontWeight: 700, background: "#ede9fe", color: "#4c1d95", borderRadius: 99, padding: "4px 8px" }` positioned `position: absolute, right: 8, top: "50%", transform: "translateY(-50%)"` inside nav button
 
 ---
 
@@ -163,9 +165,11 @@ Exceptions:
 
 ### Filter Bar (FiltroDividas)
 
+**Focal point:** The filter bar is the primary entry point for ModuloDividas. It sits at the top of the list view and is the first interactive element a user reaches. Table rows are the content body — secondary to the filter controls.
+
 - 4 dropdown filters: Status, Credor, Devedor (text input), Atraso
 - Devedor filter: text input with 300ms debounce, minimum 0 characters (filter on any keystroke after debounce)
-- Active filter chips appear below filter bar: `{ background: "#ede9fe", color: "#4c1d95", borderRadius: 99, padding: "3px 10px", fontSize: 11, fontWeight: 700 }` — match `.mr-top-chip` style
+- Active filter chips appear below filter bar: `{ background: "#ede9fe", color: "#4c1d95", borderRadius: 99, padding: "4px 8px", fontSize: 11, fontWeight: 700 }` — match `.mr-top-chip` style
 - Chip click removes that filter (reset to "Todos" / empty)
 - Filters compose with AND logic (all active filters must match)
 - No URL persistence (state React only — per D-03 LOCKED)
@@ -173,10 +177,11 @@ Exceptions:
 ### Table (TabelaDividas)
 
 - Columns in order: Devedor, Credor, Valor Original, Saldo Atualizado, Vencimento, Status, Atraso, Ações
-- Table header style: `{ padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px", whiteSpace: "nowrap" }` — match `th` constant in FilaDevedor.jsx
-- Table cell style: `{ padding: "9px 10px", color: "#374151", verticalAlign: "middle" }` — match `td` constant in FilaDevedor.jsx
+- Table header style: `{ padding: "8px 12px", textAlign: "left", fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px", whiteSpace: "nowrap" }` — match `th` constant in FilaDevedor.jsx
+- Table cell style: `{ padding: "8px 12px", color: "#374151", verticalAlign: "middle" }` — match `td` constant in FilaDevedor.jsx
 - Row hover: `background: "#f8fafc"` — match existing table hover patterns
 - Row click: opens Detalhe da Dívida (replaces table view in same content area — no router)
+- Ações column: single icon button "Ver Detalhe" (`{ fontSize: 11, fontWeight: 700, color: "#64748b" }`) — clicking it navigates to Detalhe da Dívida, identical to row click. Label: "Ver Detalhe". This is a convenience affordance; row-click is the primary navigation mechanism.
 - Paginação client-side: 20 rows per page (default, per Claude's Discretion)
 - Pagination controls: "← Anterior / Próximo →" text buttons + "Página X de Y" label, style matching existing chip pattern
 - Null credor display: show `"— sem credor"` in italic `{ color: "#94a3b8", fontStyle: "italic" }` (per Claude's Discretion)
@@ -187,15 +192,15 @@ Exceptions:
 - Call `calcularSaldoDevedorAtualizado(devedorObj, pagamentosDoDevedor, hoje)` per motor sequencial
 - Requires joining `allDividas` with `devedores` and `allPagamentos` to build `devedorObj`
 - Display result formatted with `fmtBRL()` (existing helper)
-- Loading state during initial calculation: show `"Calculando..."` in `{ color: "#94a3b8", fontSize: 12 }`
+- Loading state during initial calculation: show `"Calculando..."` in `{ color: "#94a3b8", fontSize: 13 }`
 
 ### Detalhe da Dívida (DetalheDivida)
 
 Layout structure (top to bottom):
 
-1. **Back button**: `"← Dívidas"` — `{ fontSize: 12, fontWeight: 700, color: "#64748b", cursor: "pointer", background: "none", border: "none" }` — returns to table
-2. **Header**: devedor principal nome (22px Space Grotesk 800 `#0f172a`) + credor + status badge inline
-3. **Card financeiro** (glass-card style): 3 values in row — Valor Original / Saldo Atualizado / Total Pago. Value font: 22px Space Grotesk 800 `#0f172a`. Label: 11px 700 uppercase `#64748b`
+1. **Back button**: `"← Dívidas"` — `{ fontSize: 13, fontWeight: 700, color: "#64748b", cursor: "pointer", background: "none", border: "none" }` — returns to table
+2. **Header**: devedor principal nome (22px Space Grotesk 700 `#0f172a`) + credor + status badge inline
+3. **Card financeiro** (glass-card style): 3 values in row — Valor Original / Saldo Atualizado / Total Pago. Value font: 22px Space Grotesk 700 `#0f172a`. Label: 11px 700 uppercase `#64748b`
 4. **Card Art.523**: reutiliza `Art523Option.jsx` read-only (option configured + value impact). Background `#f8fafc`, border `1px solid #e2e8f0`, borderRadius 14
 5. **Seção Pessoas Vinculadas**: título `"Pessoas Vinculadas"` (13px Space Grotesk 700 `#0f172a`) + reutiliza `DevedoresDaDivida.jsx` embedded
 6. **Botão Editar Dívida**: `<Btn>✏️ Editar Dívida</Btn>` — opens existing edit form modal (reuse form from aba Dívidas em Pessoa)
@@ -206,7 +211,7 @@ Layout structure (top to bottom):
 - Display: modal overlay (reuse `Modal.jsx`) — NOT `window.confirm()`
 - Warning style: `{ background: "#fef9c3", borderRadius: 10, padding: "12px 16px", border: "1px solid #fde68a" }`
 - Copy: see Copywriting Contract below
-- Two buttons: "Confirmar remoção" (`<Btn danger>`) and "Cancelar" (`<Btn outline>`)
+- Two buttons: "Confirmar remoção" (`<Btn danger>`) and "Manter dívida" (`<Btn outline>`)
 
 ### Adicionar Pessoa Vinculada (D-06 LOCKED)
 
@@ -225,7 +230,7 @@ Layout structure (top to bottom):
 
 ## Skeleton / Loading State
 
-- Table loading: display 8 skeleton rows — each row `{ background: "#f1f5f9", height: 38, borderRadius: 8, marginBottom: 4 }` with CSS animation `pulse2` (already declared in global styles)
+- Table loading: display 8 skeleton rows — each row `{ background: "#f1f5f9", height: 36, borderRadius: 8, marginBottom: 4 }` with CSS animation `pulse2` (already declared in global styles)
 - Card financeiro loading: 3 skeleton value blocks `{ background: "#f1f5f9", height: 28, width: 80, borderRadius: 8 }`
 - No spinner — use pulse skeleton pattern matching existing `sync-dot` animation family
 
@@ -243,6 +248,7 @@ Layout structure (top to bottom):
 | Filter label — Atraso | "Atraso" | Dropdown: "Qualquer" / "30+ dias" / "60+ dias" / "90+ dias" |
 | Primary CTA (table toolbar) | "+ Nova Dívida" | Navigates user to Pessoas > creates dívida there (consistent with D-04 scope — this phase does not add a create-dívida form; CTA is informational chip only if included) |
 | Primary CTA (detalhe) | "✏️ Editar Dívida" | Opens existing edit form |
+| Ações column button | "Ver Detalhe" | Icon button in Ações column; navigates to DetalheDivida (same as row click) |
 | Empty state heading | "Nenhuma dívida encontrada" | Shown when filter returns 0 results |
 | Empty state body | "Ajuste os filtros acima ou cadastre uma nova dívida na aba Pessoas." | Includes next step |
 | Empty state (no data at all) | "Nenhuma dívida cadastrada ainda. Acesse Pessoas para registrar dívidas." | Zero state before any data |
@@ -254,11 +260,11 @@ Layout structure (top to bottom):
 | Remove PRINCIPAL warning heading | "Remover devedor principal" | Modal title |
 | Remove PRINCIPAL warning body | "Você está removendo o devedor principal. Esta dívida ficará sem responsável principal. Confirmar?" | D-05 LOCKED |
 | Remove PRINCIPAL confirm button | "Confirmar remoção" | Danger button |
-| Remove PRINCIPAL cancel button | "Cancelar" | Outline button |
+| Remove PRINCIPAL cancel button | "Manter dívida" | Outline button — communicates what the action preserves |
 | Remove non-principal confirmation | "Remover {nome} desta dívida?" | `window.confirm()` — matches existing DevedoresDaDivida.jsx pattern |
 | Trocar papel — promote warning | "O devedor principal atual será movido para Coobrigado." | Yellow info box — existing AdicionarParticipanteModal copy |
 | Loading table | "Carregando dívidas..." | 11px muted, shown during skeleton |
-| Calculating saldo | "Calculando..." | 12px `#94a3b8` in Saldo Atualizado cell |
+| Calculating saldo | "Calculando..." | 13px `#94a3b8` in Saldo Atualizado cell |
 | Badge: em cobrança | "Em Cobrança" | Status badge (capitalize first letter of each word) |
 | Badge: quitada | "Quitada" | Status badge |
 | Badge: acordo | "Acordo" | Status badge |
