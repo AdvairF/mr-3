@@ -4,7 +4,7 @@ import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
 import DevedoresDaDivida from "./DevedoresDaDivida.jsx";
 import Art523Option from "./Art523Option.jsx";
-import { calcularDetalheEncargos } from "../utils/devedorCalc.js";
+import { calcularSaldosPorDivida } from "../utils/devedorCalc.js";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -72,9 +72,9 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
   const pagamentosDoDevedor = allPagamentos.filter(p => String(p.devedor_id) === String(divida.devedor_id));
   const credor = credores?.find(c => String(c.id) === String(divida.credor_id));
 
-  const det = devedor
-    ? calcularDetalheEncargos(devedor, pagamentosDoDevedor, hoje)
-    : null;
+  const saldosMap = devedor ? calcularSaldosPorDivida(devedor, pagamentosDoDevedor, hoje) : null;
+  const saldoDivida = saldosMap != null ? (saldosMap[String(divida.id)] ?? null) : null;
+  const totalPago = pagamentosDoDevedor.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 0 32px 0" }}>
@@ -117,9 +117,9 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
         <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>Resumo Financeiro</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {[
-            { label: "Valor Original",   value: det ? fmtBRL(det.valorOriginal)   : "—" },
-            { label: "Saldo Atualizado", value: det ? fmtBRL(det.saldoAtualizado) : "—" },
-            { label: "Total Pago",       value: det ? fmtBRL(det.totalPago)       : "—" },
+            { label: "Valor Original",   value: fmtBRL(divida.valor_total) },
+            { label: "Saldo Atualizado", value: saldoDivida != null ? fmtBRL(saldoDivida) : "—" },
+            { label: "Total Pago",       value: fmtBRL(totalPago) },
           ].map(({ label, value }) => (
             <div key={label} style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>

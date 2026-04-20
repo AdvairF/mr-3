@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AtrasoCell from "./AtrasoCell.jsx";
 import Btn from "./ui/Btn.jsx";
-import { calcularSaldoDevedorAtualizado } from "../utils/devedorCalc.js";
+import { calcularSaldosPorDivida } from "../utils/devedorCalc.js";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -83,7 +83,8 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                 const devedor = devedores.find(dv => String(dv.id) === String(d.devedor_id));
                 const credor = credores?.find(c => String(c.id) === String(d.credor_id));
                 const obj = buildDevedorObjParaSaldo(d, devedores, allPagamentos);
-                const saldo = obj ? calcularSaldoDevedorAtualizado(obj.devedor, obj.pagamentos, hoje) : null;
+                const saldosMap = obj ? calcularSaldosPorDivida(obj.devedor, obj.pagamentos, hoje) : null;
+                const saldo = saldosMap != null ? (saldosMap[String(d.id)] ?? null) : null;
                 return (
                   <tr
                     key={d.id}

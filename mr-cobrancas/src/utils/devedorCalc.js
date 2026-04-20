@@ -159,6 +159,110 @@ export function calcularSaldoDevedorAtualizado(devedor, pagamentos, hoje) {
 }
 
 /**
+ * Mesmo loop Art. 354 CC de calcularSaldoDevedorAtualizado, mas retorna mapa
+ * { [div.id]: saldo } para exibição por dívida individual.
+ * Art.523 aplicado por dívida (usa div.art523_opcao individual).
+ * calcularSaldoDevedorAtualizado permanece intacto — dashboard/Pessoas não mudam.
+ *
+ * @param {object} devedor
+ * @param {Array}  pagamentos
+ * @param {string} hoje "YYYY-MM-DD"
+ * @returns {{ [dividaId: string]: number }}
+ */
+export function calcularSaldosPorDivida(devedor, pagamentos, hoje) {
+  const dividasCalc = parseDividas(devedor?.dividas).filter(
+    (d) => !d._nominal && !d._so_custas
+  );
+  if (!dividasCalc.length) return {};
+
+  const pgtoRestantes = [...(pagamentos || [])]
+    .sort((a, b) =>
+      (a.data_pagamento || "").localeCompare(b.data_pagamento || "")
+    )
+    .map((p) => ({ ...p, remaining: parseFloat(p.valor) || 0 }));
+
+  const result = {};
+
+  for (const div of dividasCalc) {
+    const pv = parseFloat(div.valor_total) || 0;
+    const indexadorDiv = div.indexador || "nenhum";
+    const jurosTipoDiv = div.juros_tipo || "sem_juros";
+    const jurosAMDiv = parseFloat(div.juros_am) || 0;
+    const multaPctDiv = parseFloat(div.multa_pct) || 0;
+    const honorariosPctDiv = parseFloat(div.honorarios_pct) || 0;
+    const dataInicioDiv =
+      div.data_inicio_atualizacao || div.data_vencimento || div.data_origem;
+
+    let saldo = pv;
+    let periodoInicio = dataInicioDiv;
+    let primeiroperiodo = true;
+
+    const pgtosDiv = pgtoRestantes.filter((p) => p.remaining > 0);
+
+    for (const pgto of pgtosDiv) {
+      if (saldo <= 0) break;
+      const periodoFim = pgto.data_pagamento;
+      if (!periodoFim || periodoFim <= periodoInicio) {
+        const abate = Math.min(pgto.remaining, saldo);
+        saldo -= abate;
+        pgto.remaining -= abate;
+        continue;
+      }
+
+      const fator = calcularFatorCorrecao(indexadorDiv, periodoInicio, periodoFim);
+      const corrAbs = saldo * (fator - 1);
+      const pcSaldo = saldo + corrAbs;
+
+      const { juros } = calcularJurosAcumulados({
+        principal: pcSaldo,
+        dataInicio: periodoInicio,
+        dataFim: periodoFim,
+        jurosTipo: jurosTipoDiv,
+        jurosAM: jurosAMDiv,
+        regime: "simples",
+      });
+
+      const multaVal = primeiroperiodo ? pcSaldo * (multaPctDiv / 100) : 0;
+      const honorariosVal = primeiroperiodo
+        ? (pcSaldo + juros + multaVal) * (honorariosPctDiv / 100)
+        : 0;
+
+      const debitoTotal = pcSaldo + juros + multaVal + honorariosVal;
+      const abate = Math.min(pgto.remaining, debitoTotal);
+      saldo = debitoTotal - abate;
+      pgto.remaining -= abate;
+      periodoInicio = periodoFim;
+      primeiroperiodo = false;
+    }
+
+    if (periodoInicio && periodoInicio < hoje) {
+      const fatorFinal = calcularFatorCorrecao(indexadorDiv, periodoInicio, hoje);
+      const corrFinal = saldo * (fatorFinal - 1);
+      const pcFinal = saldo + corrFinal;
+      const { juros: jurosFinal } = calcularJurosAcumulados({
+        principal: pcFinal,
+        dataInicio: periodoInicio,
+        dataFim: hoje,
+        jurosTipo: jurosTipoDiv,
+        jurosAM: jurosAMDiv,
+        regime: "simples",
+      });
+      const multaFinal = primeiroperiodo ? pcFinal * (multaPctDiv / 100) : 0;
+      const honorariosFinal = primeiroperiodo
+        ? (pcFinal + jurosFinal + multaFinal) * (honorariosPctDiv / 100)
+        : 0;
+      saldo = pcFinal + jurosFinal + multaFinal + honorariosFinal;
+    }
+
+    const saldoDiv = Math.max(0, saldo);
+    const art523Div = calcularArt523(saldoDiv, div.art523_opcao || "nao_aplicar");
+    result[String(div.id)] = saldoDiv + art523Div.total_art523;
+  }
+
+  return result;
+}
+
+/**
  * Retorna o breakdown detalhado de encargos por componente (multa, juros, correção,
  * honorários, custas) calculados de forma teórica (sem abatimento de pagamentos),
  * mais o saldo atualizado real (com pagamentos) e detalhe por dívida.
