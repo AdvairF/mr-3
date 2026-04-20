@@ -3216,8 +3216,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       honorarios_percentual: parseFloat(nd.honorarios_pct) || 0,
       despesas: parseFloat(nd.despesas) || 0,
       art523_opcao: nd.art523_opcao || "nao_aplicar",
-      parcelas: JSON.stringify(nd.parcelas || []),
-      custas: JSON.stringify(nd.custas || []),
+      parcelas: nd.parcelas || [],
+      custas: nd.custas || [],
     };
     try {
       const res = await dbInsert("dividas", payload);
@@ -3281,8 +3281,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       despesas: 0,
       art523_opcao: "nao_aplicar",
       _so_custas: true,
-      custas: JSON.stringify(validas),
-      parcelas: JSON.stringify([]),
+      custas: validas,
+      parcelas: [],
     };
     try {
       const res = await dbInsert("dividas", payload);
@@ -3315,7 +3315,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     const nSt = todasPagas ? "pago_integral" : algumaPaga ? "pago_parcial" : sel.status;
     const targetDiv = dividas.find(d => d.id === dividaId);
     try {
-      await dbUpdate("dividas", dividaId, { parcelas: JSON.stringify(targetDiv.parcelas) });
+      await dbUpdate("dividas", dividaId, { parcelas: targetDiv.parcelas });
       if (nSt !== sel.status) await dbUpdate("devedores", sel.id, { status: nSt });
       const parsed = montarDevAtualizado(null, dividas, { status: nSt });
       setDevedores(prev => prev.map(d => d.id === sel.id ? parsed : d)); setSel(parsed);
@@ -3709,9 +3709,10 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               {dividas.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", padding: 24, background: "#f1f5f9", borderRadius: 12 }}>Nenhuma dívida cadastrada.</p>}
               {dividas.map(div => {
                 const ehSoCustas = div._so_custas === true;
-                const custas = div.custas || [];
+                const custas = Array.isArray(div.custas) ? div.custas : [];
                 const totalCustas = custas.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
-                const pct = div.parcelas?.length > 0 ? Math.round(div.parcelas.filter(p => p.status === "pago").length / div.parcelas.length * 100) : 0;
+                const _parcs = Array.isArray(div.parcelas) ? div.parcelas : [];
+                const pct = _parcs.length > 0 ? Math.round(_parcs.filter(p => p.status === "pago").length / _parcs.length * 100) : 0;
                 const bordaColor = ehSoCustas ? "#fed7aa" : "#e2e8f0";
                 const bgColor = ehSoCustas ? "#fffbf7" : "#fff";
                 return (
@@ -3747,8 +3748,8 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                         ) : (
                           <div>
                             <p style={{ fontSize: 11, color: "#64748b" }}>
-                              {div.parcelas?.length > 0
-                                ? <>{div.parcelas.length} parcelas · <b style={{ color: "#4f46e5" }}>{fmt(div.valor_total)}</b> · {pct}% pago</>
+                              {_parcs.length > 0
+                                ? <>{_parcs.length} parcelas · <b style={{ color: "#4f46e5" }}>{fmt(div.valor_total)}</b> · {pct}% pago</>
                                 : <>À vista · <b style={{ color: "#4f46e5" }}>{fmt(div.valor_total)}</b> · Venc: {fmtDate(div.data_vencimento || div.data_origem)}</>
                               }
                             </p>
@@ -3845,16 +3846,16 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                     )}
                     {!ehSoCustas && editDivId !== div.id && (
                       <>
-                        {div.parcelas?.length > 0 && (
+                        {_parcs.length > 0 && (
                           <div style={{ height: 4, background: "#f1f5f9", borderRadius: 99, marginBottom: 10 }}>
                             <div style={{ height: 4, width: `${pct}%`, background: "linear-gradient(90deg,#22c55e,#16a34a)", borderRadius: 99 }} />
                           </div>
                         )}
-                        {div.parcelas?.length > 0 && (
+                        {_parcs.length > 0 && (
                           <div style={{ maxHeight: 160, overflowY: "auto" }}>
                             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                               <thead><tr style={{ background: "#f1f5f9" }}>{["Nº", "Valor", "Vencimento", "Status", ""].map(h => <th key={h} style={{ padding: "5px 8px", textAlign: "left", color: "#94a3b8", fontWeight: 700, fontSize: 10 }}>{h}</th>)}</tr></thead>
-                              <tbody>{(div.parcelas || []).map((p, pi) => {
+                              <tbody>{_parcs.map((p, pi) => {
                                 const atr = p.status === "pendente" && new Date((p.venc || p.vencimento) + "T12:00:00") < new Date();
                                 const sR = atr ? "atrasado" : p.status;
                                 const cS = { pago: "#16a34a", atrasado: "#dc2626", pendente: "#64748b" };
@@ -8430,11 +8431,12 @@ export default function App() {
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
       setAllDividas(Array.isArray(divs) ? divs : []);
       // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
+      const parseJ = v => { if (!v) return []; if (Array.isArray(v)) return v; try { const r = JSON.parse(v); return Array.isArray(r) ? r : []; } catch { return []; } };
       const dividasMap = new Map();
       (divs || []).forEach(div => {
         const k = String(div.devedor_id);
         if (!dividasMap.has(k)) dividasMap.set(k, []);
-        dividasMap.get(k).push(div);
+        dividasMap.get(k).push({ ...div, parcelas: parseJ(div.parcelas), custas: parseJ(div.custas) });
       });
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
       setDevedores((devs || []).map(d => {
