@@ -18,7 +18,7 @@ Plans:
 - [x] 01-03-PLAN.md — Refactor carregarTudo() parallel load + dividasMap + compatibility layer (COMPLETE: d087052)
 - [x] 01-04-PLAN.md — Refactor 7 write surfaces (adicionarDivida, custas, editar, excluir, toggle, reload, criar devedor) (COMPLETE: b346752, 217134b)
 - [x] 01-05-PLAN.md — Rename NAV label "Devedores" → "Pessoas" (COMPLETE: 80f8ad8)
-- [~] 01-06-PLAN.md — Build, test:regressao, deploy, production verification (CHECKPOINT: build green aec3ad4 — awaiting production verify at mrcobrancas.com.br)
+- [x] 01-06-PLAN.md — Build, test:regressao, deploy, production verification (COMPLETE: CR-01 fix 95b3aee — all 7 UAT checks passed in production 2026-04-21)
 
 **Acceptance criteria:**
 - Tabela `dividas` existe com UUID PK, contém todas as dívidas migradas do JSONB

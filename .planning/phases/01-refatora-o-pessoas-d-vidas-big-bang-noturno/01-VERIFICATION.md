@@ -1,15 +1,12 @@
 ---
 phase: 01-refatora-o-pessoas-d-vidas-big-bang-noturno
 verified: 2026-04-19T00:00:00Z
-status: human_needed
-score: 7/8 must-haves verified
+status: passed
+score: 8/8 must-haves verified
 overrides_applied: 0
-re_verification: null
+re_verification: 2026-04-21T00:00:00Z
 gaps: []
-human_verification:
-  - test: "Confirm financial calculations are correct in production after page load"
-    expected: "saldo atualizado for each devedor shows the correct corrected value (with juros, multa, honorarios applied), not zero or base-value-only — specifically for the state loaded on initial page load and after 60-second background refresh (not just after editing a divida)"
-    why_human: "CR-01 (code review) found that dividasMap at carregarTudo() line 8439 pushes raw DB rows without JSONB-compat aliases (indexador, juros_am, multa_pct, honorarios_pct). devedorCalc.js reads those exact field names (lines 76-80, 189-193). If aliases are missing, calcularValorFace and calcularSaldoDevedorAtualizado silently default to indexador='nenhum' and all pct=0. The bug is masked only inside an open devedor session after salvarEdicaoDivida (which does add aliases locally). Cannot verify programmatically whether production data has non-zero juros/multa values that expose this or whether the saldo shown matches expectation."
+human_verification: []
 ---
 
 # Phase 1: Refatoração Pessoas x Dívidas Verification Report

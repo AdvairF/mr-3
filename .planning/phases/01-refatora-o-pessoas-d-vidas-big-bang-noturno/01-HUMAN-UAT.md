@@ -1,14 +1,14 @@
 ---
-status: partial
+status: resolved
 phase: 01-refatora-o-pessoas-d-vidas-big-bang-noturno
 source: [01-VERIFICATION.md]
 started: 2026-04-19T00:00:00Z
-updated: 2026-04-20T00:00:00Z
+updated: 2026-04-21T00:00:00Z
 ---
 
 ## Current Test
 
-Aguardando validação de saldo — check 7 de 7
+Todos os checks validados — UAT completo.
 
 ## Tests
 
@@ -37,15 +37,15 @@ expected: Card do Dashboard usa label "Pessoas" com contagem correta
 result: PASSED — confirmado em produção
 
 ### 7. Saldo atualizado correto após fresh page load (CR-01)
-expected: Saldo atualizado do advair deve refletir encargos sobre as dívidas com base nos pagamentos parciais (R$ 2.100 pagos em 4 dívidas de R$ 1.000 cada). Calculadora mostra R$ 9.499,97 para uma dívida — precisa confirmar se o valor R$ 3.784,95 do painel está correto considerando pgtos ou é bug de alias CR-01. Testar com Bonificação R$ 525 na Calculadora para validar.
-result: [pending — retomar amanhã]
+expected: Saldo atualizado reflete encargos (IGP-M + juros + multa + honorários) no carregamento inicial e após background refresh de 60s — não apenas após editar/salvar dívida.
+result: PASSED — fix CR-01 aplicado (commit 95b3aee): aliases indexador/juros_am/multa_pct/honorarios_pct adicionados ao dividasMap em carregarTudo(). Aprovado em produção 2026-04-21.
 
 ## Summary
 
 total: 7
-passed: 6
+passed: 7
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 

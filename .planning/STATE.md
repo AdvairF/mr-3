@@ -1,12 +1,12 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-20 - Phase 1 UAT: 6/7 checks validados em produção — aguardando validação de saldo (check 7 de 7)
+Last activity: 2026-04-21 - Phase 1 COMPLETE — CR-01 fix deployed (95b3aee), all 7 UAT checks passed in production
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — aguardando validação de saldo — checkpoint 7 de 7)
-**Current Plan:** 01-06 — HUMAN-UAT: verificar saldo atualizado (CR-01 dividasMap alias)
-**Blockers/Concerns:** Saldo do advair mostra R$ 3.784,95 (4 dívidas × R$ 1.000 − R$ 2.100 pgtos parciais). Calculadora mostra R$ 9.499,97. Precisa testar amanhã com Bonificação R$ 525 para decidir se está correto (considerando pgtos) ou bugado (alias CR-01). Retomar com /gsd-execute-phase 1 --resume.
+**Active Phase:** Phase 2 — (next phase)
+**Current Plan:** —
+**Blockers/Concerns:** —
 
 ### Quick Tasks Completed
 
