@@ -46,7 +46,13 @@ Plans:
 
 **Goal:** Criar item "Dívidas" no sidebar com tabela global de dívidas (filtros inline: status/credor/devedor/atraso) e tela Detalhe da Dívida com saldo atualizado e gestão de pessoas vinculadas (papel + responsabilidade). Aba "Dívidas" dentro de Pessoa coexiste — ambas editam via `dividas.js`.
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — AtrasoCell.jsx: pure badge component, 5 tiers from data_vencimento (Wave 1)
+- [ ] 02-02-PLAN.md — FiltroDividas.jsx + TabelaDividas.jsx: 4-filter bar + 8-column table with saldo calc (Wave 1)
+- [ ] 02-03-PLAN.md — DetalheDivida.jsx + DevedoresDaDivida.jsx modification: detail screen + D-05 PRINCIPAL warning (Wave 2)
+- [ ] 02-04-PLAN.md — ModuloDividas.jsx + App.jsx integration: wire everything, sidebar badge, build gate + human verify (Wave 3)
 
 **Acceptance criteria:**
 - Item "Dívidas" aparece no sidebar com badge de contagem de dívidas em cobrança
