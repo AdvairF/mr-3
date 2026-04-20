@@ -38,6 +38,33 @@ Plans:
 
 **References:**
 - `brief-refatoracao-modulo-devedores.md` — spec completo
+- `.planning/phases/02-modulo-dividas-sidebar/02-CONTEXT.md` — decisões da fase
+
+---
+
+### Phase 2: Módulo Dívidas no Sidebar
+
+**Goal:** Criar item "Dívidas" no sidebar com tabela global de dívidas (filtros inline: status/credor/devedor/atraso) e tela Detalhe da Dívida com saldo atualizado e gestão de pessoas vinculadas (papel + responsabilidade). Aba "Dívidas" dentro de Pessoa coexiste — ambas editam via `dividas.js`.
+
+**Plans:** TBD
+
+**Acceptance criteria:**
+- Item "Dívidas" aparece no sidebar com badge de contagem de dívidas em cobrança
+- Tabela lista todas as dívidas com 4 filtros inline (status, credor, devedor, atraso)
+- Tela Detalhe exibe: dados financeiros, saldo atualizado (motor atual), pessoas vinculadas com papel/responsabilidade
+- Adicionar/remover pessoas via dropdown de busca; warning ao remover Principal sem substituto
+- Editar dívida reutiliza form existente
+- Aba Dívidas dentro de Pessoa continua funcionando; saves sincronizam via carregarTudo()
+- `npm run build` (com test:regressao prebuild) passa sem erros
+
+**Constraints:**
+- Motor de cálculo sequencial mantido (Art. 354 CC); sem migration de pagamentos_parciais
+- Aliases compat obrigatórios em qualquer objeto de dívida (CR-01: indexador/juros_am/multa_pct/honorarios_pct)
+- Sem router — persistência de filtros via state React apenas
+- Reutilizar DevedoresDaDivida.jsx, PessoasVinculadas.jsx, Art523Option.jsx
+
+**References:**
+- `.planning/phases/02-modulo-dividas-sidebar/02-CONTEXT.md` — decisões completas
 - `.planning/notes/decisoes-refatoracao-pessoas-dividas.md` — decisões arquiteturais
 - `.planning/todos/pending/refatoracao-big-bang-noturno.md` — sequência detalhada
 - `.planning/codebase/ARCHITECTURE.md` — arquitetura atual
