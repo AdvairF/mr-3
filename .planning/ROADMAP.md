@@ -76,3 +76,40 @@ Plans:
 - `.planning/codebase/ARCHITECTURE.md` — arquitetura atual
 - `src/mr-3/mr-cobrancas/src/services/migrations/001_devedores_dividas.sql` — migration existente
 - `src/mr-3/mr-cobrancas/src/services/devedoresDividas.js` — service existente
+
+---
+
+### Phase 3: Nova Dívida com Co-devedores
+
+**Goal:** Adicionar tela "Nova Dívida" ao Módulo Dívidas (view='nova' em ModuloDividas) com campos financeiros extraídos em DividaForm.jsx reutilizável, seção Pessoas na Dívida (Principal + co-devedores com busca + modal criação rápida), e salvamento atômico (criarDivida + adicionarParticipante × N).
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — DividaForm.jsx extraction + App.jsx refactor + ModuloDividas view routing + "+ Nova Dívida" button
+- [ ] 03-02-PLAN.md — NovaDivida.jsx: DividaForm + Pessoas section + busca dropdown + Criar Pessoa modal + Salvar/Cancelar
+- [ ] 03-03-PLAN.md — End-to-end verification: regression suite + human checkpoint (7 flows)
+
+**Acceptance criteria:**
+- "+ Nova Dívida" button aparece no header do Módulo Dívidas (view='lista')
+- Tela NovaDivida tem layout top-bottom: campos financeiros → Pessoas na Dívida → Salvar/Cancelar
+- DividaForm.jsx é componente controlado puro (sem state interno de campos financeiros)
+- App.jsx aba Dívidas em Pessoa usa DividaForm sem regressão de comportamento
+- Seção Pessoas: busca com mínimo 2 chars, dropdown omite já-vinculados, opção "+ Criar"
+- Modal "Criar Pessoa": Nome* + CPF/CNPJ opcional + Tipo PF/PJ → "Criar e Vincular"
+- Salvar desabilitado sem Principal com devedor_id selecionado
+- Pós-save: toast "Dívida criada com sucesso" + view='lista' + badge atualizado
+- `npm run build` (com test:regressao prebuild) passa sem erros
+
+**Constraints:**
+- Payload de criarDivida usa APENAS nomes de colunas DB (indice_correcao, juros_am_percentual, etc.)
+- Motor aliases (indexador, juros_am, multa_pct, honorarios_pct) adicionados por carregarTudo() — não pelo payload
+- status: "em cobrança" explícito no payload (não depender de DEFAULT do banco)
+- devedor_id em dividas = id do primeiro PRINCIPAL na lista (desnormalizado)
+- Sem router — view state é local ao ModuloDividas
+
+**References:**
+- `.planning/phases/03-nova-divida-com-co-devedores/03-CONTEXT.md` — decisões D-01 a D-10
+- `.planning/phases/03-nova-divida-com-co-devedores/03-RESEARCH.md` — patterns, payloads verificados
+- `.planning/phases/03-nova-divida-com-co-devedores/03-PATTERNS.md` — analog code excerpts
+- `.planning/phases/03-nova-divida-com-co-devedores/03-UI-SPEC.md` — design contract
