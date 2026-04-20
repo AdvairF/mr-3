@@ -5,6 +5,7 @@ status: draft
 shadcn_initialized: false
 preset: none
 created: 2026-04-20
+revised: 2026-04-20
 ---
 
 # Phase 3 — UI Design Contract: Nova Dívida com Co-devedores
@@ -21,7 +22,7 @@ created: 2026-04-20
 | Preset | not applicable |
 | Component library | custom (Btn.jsx, Inp.jsx, Modal.jsx, Art523Option.jsx) |
 | Icon library | Unicode literals (👑 👤 ✕ ←) — no external icon library |
-| Font (heading/display) | 'Space Grotesk', sans-serif (700–800 weight) |
+| Font (heading/display) | 'Space Grotesk', sans-serif (700 weight) |
 | Font (body/labels/inputs) | 'Plus Jakarta Sans', sans-serif (400–700 weight) |
 
 No shadcn / Tailwind CSS class usage — project uses React inline style objects throughout. All
@@ -31,41 +32,41 @@ new components MUST follow this pattern. Do not introduce className-based Tailwi
 
 ## Spacing Scale
 
-Declared values (multiples of 4):
+Declared values (multiples of 4 only):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gap inside Btn, inline chip padding |
-| sm | 8px | Input internal padding (8px 10px), gap between adjacent fields |
-| md | 16px | Default section gap, module header marginBottom |
+| xs | 4px | Icon gap inside Btn, inline chip padding, section label marginBottom before input |
+| sm | 8px | Input internal padding (8px 12px), gap between adjacent fields, person card vertical padding, inter-row gap between person cards, section label marginBottom before section content |
+| md | 16px | Default section gap, module header marginBottom, marginTop for Salvar/Cancelar row |
 | lg | 20px | Card internal padding (20px 24px per Modal.jsx pattern) |
 | xl | 24px | Card internal horizontal padding |
 | 2xl | 32px | Bottom page padding (`padding: "0 0 32px 0"` per DetalheDivida.jsx) |
 | 3xl | 48px | Not used in this phase |
 
-**Exceptions:**
-- Person card row: `padding: "6px 10px"` (6px vertical = 1.5 × xs) — matching DevedoresDaDivida.jsx
-- Section label marginBottom: 4px (xs) before input, 8px (sm) before section content
-- Person cards vertical gap between rows: 6px (matching DevedoresDaDivida.jsx `marginBottom: 6`)
-- Diretrizes do Contrato inner grid gap: 10px (non-standard — matches App.jsx existing form exactly)
+No non-multiple-of-4 values. Previous 6px exceptions replaced by 8px; previous 10px exceptions
+replaced by 8px (input horizontal padding) or 12px (grid gaps, container padding).
 
 ---
 
 ## Typography
 
+Four sizes, two weights. No other combinations permitted.
+
 | Role | Size | Weight | Line Height | Font | Usage |
 |------|------|--------|-------------|------|-------|
 | Display | 22px | 700 | 1.2 | Space Grotesk | Module header "Dívidas", person name in large card (DetalheDivida.jsx pattern) |
-| Heading | 16px | 800 | 1.2 | Space Grotesk | Modal title ("Criar Pessoa") |
-| Section label | 13px | 700 | 1.3 | Space Grotesk | Card section titles ("Pessoas na Dívida", "➕ Nova Dívida") |
-| Body | 13px | 400 | 1.5 | Plus Jakarta Sans | All form inputs, select text, person name in row cards |
-| Label (uppercase) | 11px | 700 | 1.0 | Plus Jakarta Sans | Field labels above inputs (UPPERCASE, color #64748b) |
-| Caption | 11px | 400 | 1.4 | Plus Jakarta Sans | Helper text, index competency note, italic notes |
-| Micro badge | 10px | 700 | 1.0 | Plus Jakarta Sans | PAPEL_META badge labels, section sub-labels, RESP_LABELS |
-| Btn (normal) | 13px | 700 | — | Plus Jakarta Sans | All Btn components |
-| Btn (sm) | 12px | 700 | — | Plus Jakarta Sans | "+ Adicionar co-devedor", "× Criar" inline action buttons |
+| Heading | 16px | 700 | 1.2 | Space Grotesk | Modal title ("Criar Pessoa"), section container titles |
+| Body / Btn | 13px | 400 / 700 | 1.5 / — | Plus Jakarta Sans | All form inputs, select text, person name in row cards (400); all Btn components, section labels, person selected name (700) |
+| Label / Caption | 11px | 400 / 700 | 1.4 / 1.0 | Plus Jakarta Sans | Helper text, italic notes, loading text (400); field labels UPPERCASE, PAPEL_META badge labels, RESP_LABELS, section sub-labels (700) |
 
-Letter-spacing: `-0.1px` on Btn; `-0.4px` on modal title (Space Grotesk). Section sub-labels
+**Consolidation rationale (revision applied 2026-04-20):**
+- 10px (micro badge) → 11px: micro badges and section sub-labels use 11px/700
+- 12px (Btn sm) → 13px: small action buttons ("+ Adicionar co-devedor", "× Criar") use 13px/700
+- 800 weight (modal title) → 700: Space Grotesk 700 reads as strong heading; no 800 weight
+- 600 weight (person selected name) → 700: collapsed to 2-weight system
+
+Letter-spacing: `-0.1px` on all Btn; `-0.4px` on modal title (Space Grotesk). Section sub-labels
 use `letterSpacing: ".05em"` and `textTransform: "uppercase"`.
 
 ---
@@ -120,6 +121,14 @@ use `letterSpacing: ".05em"` and `textTransform: "uppercase"`.
 
 ---
 
+## Visual Hierarchy
+
+**Primary visual anchor:** "Salvar Dívida" button at page bottom — the single green filled Btn in
+the form's action row. All other interactive elements use outline or neutral styles. The eye
+arrives at this button as the terminal action after completing the form.
+
+---
+
 ## Component Specifications
 
 ### NovaDivida.jsx — overall container
@@ -139,7 +148,7 @@ Style: `background: none, border: none, fontSize: 13, fontWeight: 700, color: "#
 
 ### DividaForm.jsx — field layout
 
-Two-column grid `gridTemplateColumns: "1fr 1fr"` with `gap: 10`:
+Two-column grid `gridTemplateColumns: "1fr 1fr"` with `gap: 12`:
 
 ```
 Row 1: [Descrição (span=2)]
@@ -148,9 +157,9 @@ Row 3: [Credor]              [—]
 ```
 
 **Diretrizes do Contrato** block:
-- Container: `background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, marginBottom: 10`
-- Section label: `fontSize: 10, fontWeight: 700, color: "#4f46e5", textTransform: "uppercase", letterSpacing: ".05em"` + text "Diretrizes do Contrato"
-- Inner grid `gridTemplateColumns: "1fr 1fr"`, `gap: 10`:
+- Container: `background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, marginBottom: 12`
+- Section label: `fontSize: 11, fontWeight: 700, color: "#4f46e5", textTransform: "uppercase", letterSpacing: ".05em"` + text "Diretrizes do Contrato"
+- Inner grid `gridTemplateColumns: "1fr 1fr"`, `gap: 12`:
   ```
   [Índice]                [Data Início Atualização]
   [Multa (%)]             [Taxa de Juros]
@@ -162,15 +171,15 @@ Row 3: [Credor]              [—]
 - Index competency note: `fontSize: 11, color: "#64748b"` below Art523Option
 
 **Parcelamento (opcional)** block:
-- Container: `background: "#f1f5f9", borderRadius: 10, padding: 12, marginBottom: 10, border: "1px solid #e2e8f0"`
-- Section label: `fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase"` + text "Parcelamento (opcional)"
+- Container: `background: "#f1f5f9", borderRadius: 10, padding: 12, marginBottom: 12, border: "1px solid #e2e8f0"`
+- Section label: `fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase"` + text "Parcelamento (opcional)"
 - Two fields: `[Data da 1ª Parcela]  [Nº de Parcelas]`
-- Preview chip (conditional): `background: "#ede9fe", borderRadius: 8, padding: "6px 12px", fontSize: 12`
+- Preview chip (conditional): `background: "#ede9fe", borderRadius: 8, padding: "8px 12px", fontSize: 11`
 - "Gerar Parcelas" button: `Btn outline color="#4f46e5"`
 
 **Custas Judiciais (opcional)** block:
 - Container: `background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 10, padding: 12, marginTop: 12`
-- Section label: `fontSize: 10, fontWeight: 700, color: "#c2410c", textTransform: "uppercase"` + text "Custas Judiciais (só correção monetária, sem juros)"
+- Section label: `fontSize: 11, fontWeight: 700, color: "#c2410c", textTransform: "uppercase"` + text "Custas Judiciais (só correção monetária, sem juros)"
 - Each custa row: 4-column grid `"2fr 1fr 1fr auto"` — Descrição | Valor | Data | ✕
 
 ### Seção "Pessoas na Dívida"
@@ -184,7 +193,7 @@ Text: "Pessoas na Dívida"
 **Person row card** (each person in the list):
 
 ```
-display: flex, alignItems: center, gap: 8, marginBottom: 6
+display: flex, alignItems: center, gap: 8, marginBottom: 8
 padding: "8px 12px"
 background: "#f8fafc"   (default for co-devedores)
 background: "#fef3c7"   (Principal row — amber tint, lighter version of PAPEL_META.PRINCIPAL.bg)
@@ -197,10 +206,10 @@ Row structure: `[icon] [busca/nome — flex:1] [select papel] [select responsabi
 
 - Icon: `👑` for PRINCIPAL, `👤` for others — `fontSize: 16`
 - Name / search input (when person not yet selected): full-width search input with `placeholder: "Buscar por nome ou CPF..."`; `minWidth: 180`
-- Name (when person selected): `fontSize: 13, fontWeight: 600, color: "#0f172a"` + CPF in `fontSize: 10, color: "#94a3b8"`
-- Select papel: `width: 130, fontSize: 12` — options ordered: PRINCIPAL, COOBRIGADO, AVALISTA, FIADOR, CÔNJUGE, OUTRO
-- Select responsabilidade: `width: 110, fontSize: 12` — options: SOLIDÁRIA, SUBSIDIÁRIA, DIVISÍVEL
-- Remove ✕ button (co-devedores only): `background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "4px 7px", cursor: "pointer", fontSize: 11`
+- Name (when person selected): `fontSize: 13, fontWeight: 700, color: "#0f172a"` + CPF in `fontSize: 11, color: "#94a3b8"`
+- Select papel: `width: 130, fontSize: 13` — options ordered: PRINCIPAL, COOBRIGADO, AVALISTA, FIADOR, CÔNJUGE, OUTRO
+- Select responsabilidade: `width: 110, fontSize: 13` — options: SOLIDÁRIA, SUBSIDIÁRIA, DIVISÍVEL
+- Remove ✕ button (co-devedores only): `background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "4px 8px", cursor: "pointer", fontSize: 11, aria-label: "Remover co-devedor"`
 - Principal row: no ✕ button
 
 **Search dropdown** (when busca.trim().length >= 2):
@@ -220,7 +229,7 @@ Position: below Pessoas section, `marginTop: 16`, `display: flex, gap: 8, justif
 
 - **Salvar Dívida**: `Btn color="#059669"` — disabled when no Principal with devedor_id. HTML `title="Adicione pelo menos um devedor Principal"` on the button.
   - When `salvando === true`: show "Salvando..." label inside button (same Btn, disabled=true)
-- **Cancelar**: `Btn outline color="#64748b"` — returns to `view='lista'`
+- **Cancelar criação**: `Btn outline color="#64748b"` — returns to `view='lista'`
 
 ### "Criar Pessoa Rápida" modal
 
@@ -238,7 +247,7 @@ Fields (vertical stack, gap: 12):
 - Tipo: select with options PF / PJ, default PF
 - Action buttons: `[Criar e Vincular]  [Cancelar]`
   - "Criar e Vincular": `Btn color="#059669"` — disabled while loading
-  - "Cancelar": `Btn outline color="#64748b"`
+  - "Cancelar": `Btn outline color="#64748b"` — dismisses modal only
 
 ### "+ Nova Dívida" button in ModuloDividas header
 
@@ -292,21 +301,20 @@ Style: `Btn color="#059669"` — text "+ Nova Dívida"
 | Dropdown empty option | `+ Criar "[termo buscado]"` |
 | Modal title — criar pessoa | "Criar Pessoa" |
 | Modal CTA | "Criar e Vincular" |
-| Modal cancel | "Cancelar" |
+| Modal cancel | "Cancelar" (modal dismiss only) |
+| Form-level cancel | "Cancelar criação" (returns to lista view) |
 | Form section — no results note | No explicit empty state for the form itself; form always renders with 1 Principal row |
 | Success toast | "Dívida criada com sucesso" |
 | Error toast (save) | "Erro ao salvar: [e.message]" |
 | Error toast (criar pessoa) | "Erro ao criar pessoa." |
-| Destructive: remove co-devedor | Inline ✕ button with no confirmation — co-devedores are pre-save state only; no Modal warning needed |
+| Destructive: remove co-devedor | Inline ✕ button (`aria-label="Remover co-devedor"`) with no confirmation — co-devedores are pre-save state only; no Modal warning needed |
 | Destructive: remove Principal (post-save) | Inherited from DetalheDivida.jsx / D-05: Modal.jsx warning (not in scope for NovaDivida pre-save flow) |
 | Saving in progress | "Salvando..." (button label replacement) |
-| Section label — financial fields | "➕ Nova Dívida" (when inside App.jsx inline), omit label header inside NovaDivida.jsx (it has its own page context) |
 | Section label — diretrizes | "Diretrizes do Contrato" |
 | Section label — parcelamento | "Parcelamento (opcional)" |
 | Section label — custas | "Custas Judiciais" + sub-label "(só correção monetária, sem juros)" |
 | Section label — pessoas | "Pessoas na Dívida" |
 | Credor field — null display | Credor select renders "(Sem credor)" as first option with value "" |
-| Cancel | "Cancelar" |
 
 ---
 
@@ -337,17 +345,22 @@ present in the codebase. No shadcn, no Radix, no third-party UI library.
 | Success toast copy | CONTEXT.md D-09 | "Dívida criada com sucesso" |
 | Fonts | Btn.jsx, Inp.jsx, Modal.jsx | Plus Jakarta Sans (body), Space Grotesk (heading) |
 | Color palette | ModuloDividas.jsx, DetalheDivida.jsx, DevedoresDaDivida.jsx | #0f172a, #64748b, #e2e8f0, #059669, #4f46e5 |
-| Input style | Inp.jsx | `padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13` |
+| Input style | Inp.jsx | `padding: "8px 12px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13` |
 | Button variants | Btn.jsx | color prop for accent; outline prop for secondary; danger prop for destructive |
 | Modal structure | Modal.jsx | `width=480`, backdrop blur, fadeIn animation, green close button |
 | PAPEL_META + RESP_LABELS | DevedoresDaDivida.jsx lines 5–18 | Exact color values — copy as-is |
-| Field layout grid | App.jsx ~line 3894 | `gridTemplateColumns: "1fr 1fr", gap: 10` |
+| Field layout grid | App.jsx ~line 3893 | `gridTemplateColumns: "1fr 1fr", gap: 12` (was gap:10, revised to multiple-of-4) |
 | Section containers | App.jsx ~line 3899, 3939 | Diretrizes bg #fff border #e2e8f0; Parcelamento bg #f1f5f9 |
 | Custas section | App.jsx ~line 3953 | `background: "#fff7ed", border: "1.5px solid #fed7aa"` |
 | Search debounce/min chars | CONTEXT.md Claude's Discretion | 200ms, 2 chars min |
 | Loading state on save button | CONTEXT.md Claude's Discretion | `salvando` boolean, "Salvando..." label |
 | Error toast treatment | CONTEXT.md Claude's Discretion | Generic `toast.error(e.message)` |
 | Papel select order | CONTEXT.md Claude's Discretion | PRINCIPAL first |
+| Typography collapse | Checker revision 2026-04-20 | 4 sizes (11/13/16/22px), 2 weights (400/700) |
+| Spacing compliance | Checker revision 2026-04-20 | 6px→8px, 10px→8px or 12px throughout |
+| Copywriting differentiation | Checker revision 2026-04-20 | "Cancelar criação" (form) vs "Cancelar" (modal) |
+| Aria label on ✕ | Checker revision 2026-04-20 | `aria-label="Remover co-devedor"` on remove button |
+| Focal point statement | Checker revision 2026-04-20 | "Salvar Dívida" as primary visual anchor |
 
 ---
 
