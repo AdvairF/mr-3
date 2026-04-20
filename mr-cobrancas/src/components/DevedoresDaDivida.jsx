@@ -17,7 +17,7 @@ const RESP_LABELS = {
   DIVISIVEL:   "Divisível",
 };
 
-export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtualId }) {
+export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtualId, onRemovePrincipal }) {
   const { participantes, loading, adicionar, trocarPapel, remover } = useDevedoresDividas(dividaId);
   const [showModal, setShowModal] = useState(false);
 
@@ -79,6 +79,20 @@ export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtu
             {!isAtual && (
               <button
                 onClick={async () => {
+                  const isPrincipal = p.papel === "PRINCIPAL";
+                  const hasOtherPrincipal = participantes.some(x => x.id !== p.id && x.papel === "PRINCIPAL");
+
+                  if (isPrincipal && !hasOtherPrincipal && onRemovePrincipal) {
+                    // Delegate to caller for Modal.jsx warning (D-05 LOCKED — no window.confirm for PRINCIPAL)
+                    // doRemove closure handles the actual remover(p.id) call + success toast
+                    await onRemovePrincipal(p, async () => {
+                      await remover(p.id);
+                      toast.success("Removido.");
+                    });
+                    return;
+                  }
+
+                  // Existing behavior: window.confirm for non-PRINCIPAL or when onRemovePrincipal not provided
                   if (!window.confirm(`Remover ${p.devedor?.nome || "participante"} desta dívida?`)) return;
                   try {
                     await remover(p.id);
