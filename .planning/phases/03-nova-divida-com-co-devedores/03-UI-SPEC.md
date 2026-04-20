@@ -184,7 +184,7 @@ Row 3: [Credor]              [—]
 
 ### Seção "Pessoas na Dívida"
 
-Container: `background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e8f0f7", marginBottom: 16`
+Container: `background: "#fff", borderRadius: 16, padding: "20px 20px", border: "1px solid #e8f0f7", marginBottom: 16`
 (Matching DetalheDivida.jsx "Pessoas Vinculadas" card pattern.)
 
 Section header: `fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12`
