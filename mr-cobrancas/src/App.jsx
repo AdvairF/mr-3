@@ -29,6 +29,7 @@ import {
   calcularArt523,
 } from "./utils/correcao.js";
 import Art523Option from "./components/Art523Option.jsx";
+import DividaForm from "./components/DividaForm.jsx";
 import DevedoresDaDivida from "./components/DevedoresDaDivida.jsx";
 import PessoasVinculadas from "./components/PessoasVinculadas.jsx";
 import { listarTodosIds as listarVinculadosIds, listar as listarVincPdf } from "./services/devedoresVinculados.js";
@@ -3891,114 +3892,15 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
               {/* Formulário nova dívida */}
               <div style={{ background: "#f1f5f9", borderRadius: 14, padding: 16, border: "1.5px dashed #e2e8f0", marginTop: 8 }}>
                 <p style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>➕ Nova Dívida</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                  <Inp label="Descrição" value={nd.descricao} onChange={v => ND("descricao", v)} span={2} />
-                  <Inp label="Valor Total (R$)" value={nd.valor_total} onChange={v => ND("valor_total", v)} type="number" />
-                  <Inp label="Data de Vencimento *" value={nd.data_origem} onChange={v => ND("data_origem", v)} type="date" />
-                </div>
-                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, marginBottom: 10 }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, color: "#4f46e5", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>📋 Diretrizes do Contrato</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <Inp label="Índice" value={nd.indexador} onChange={v => ND("indexador", v)} options={INDICE_OPTIONS} />
-                    <Inp label="Data Início Atualização" value={nd.data_inicio_atualizacao} onChange={v => ND("data_inicio_atualizacao", v)} type="date" />
-                    <Inp label="Multa (%)" value={nd.multa_pct} onChange={v => ND("multa_pct", v)} type="number" />
-                    <Inp label="Taxa de Juros" value={nd.juros_tipo} onChange={v => ND("juros_tipo", v)} options={JUROS_OPTIONS} />
-                    <Inp label="Juros (% a.m.)" value={nd.juros_am} onChange={v => ND("juros_am", v)} type="number" disabled={nd.juros_tipo !== "outros"} />
-                    <Inp label="Honorários (%)" value={nd.honorarios_pct} onChange={v => ND("honorarios_pct", v)} type="number" />
-                    <Inp label="Despesas (R$)" value={nd.despesas} onChange={v => ND("despesas", v)} type="number" />
-                  </div>
-                  <Art523Option value={nd.art523_opcao || "nao_aplicar"} onChange={v => ND("art523_opcao", v)} />
-                  {nd.juros_tipo === "taxa_legal_406" && (
-                    <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
-                      <strong>ℹ️ Regime de aplicação — STJ Tema 1368 + Lei 14.905/2024:</strong><br />
-                      • Até 10/01/2003: 0,5% a.m. (6% a.a.) — Código Civil de 1916<br />
-                      • 11/01/2003 a 29/08/2024: SELIC (STJ Tema 1368)<br />
-                      • A partir de 30/08/2024: Taxa Legal = SELIC − IPCA (nunca negativa) — Lei 14.905/2024<br />
-                      O sistema aplicará automaticamente cada regime conforme o período entre o vencimento e a data de cálculo.
-                    </div>
-                  )}
-                  {nd.juros_tipo === "taxa_legal_406_12" && (
-                    <div style={{ marginTop: 8, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#1e40af", lineHeight: 1.6 }}>
-                      <strong>⚖️ Regime simplificado — Lei 14.905/2024:</strong><br />
-                      • Até jul/2024: 1% a.m. (12% a.a.)<br />
-                      • A partir de ago/2024: Taxa Legal = SELIC − IPCA (mín 0) — Art. 406, §3º<br />
-                      Base: Art. 406 CC com redação dada pela Lei nº 14.905/2024.
-                    </div>
-                  )}
-                  {nd.indexador === "inpc_ipca" && (
-                    <div style={{ marginTop: 8, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#065f46", lineHeight: 1.6 }}>
-                      <strong>📊 Correção com regime temporal — Lei 14.905/2024:</strong><br />
-                      • Até 29/08/2024: INPC acumulado<br />
-                      • A partir de 30/08/2024: IPCA acumulado<br />
-                      O sistema aplicará automaticamente cada índice conforme o período.
-                    </div>
-                  )}
-                  <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>Base oficial carregada no app: IGP-M até {ULTIMA_COMPETENCIA_INDICES.igpm}, IPCA/INPC até {ULTIMA_COMPETENCIA_INDICES.ipca} e Selic até {ULTIMA_COMPETENCIA_INDICES.selic}.</p>
-                </div>
-                {/* Parcelamento — só se quiser parcelar */}
-                <div style={{ background: "#f1f5f9", borderRadius: 10, padding: 12, marginBottom: 10, border: "1px solid #e2e8f0" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em" }}>📅 Parcelamento (opcional)</p>
-                    <span style={{ fontSize: 10, color: "#94a3b8" }}>Deixe em branco se a dívida não for parcelada</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <Inp label="Data da 1ª Parcela" value={nd.data_primeira_parcela} onChange={v => ND("data_primeira_parcela", v)} type="date" />
-                    <Inp label="Nº de Parcelas" value={nd.qtd_parcelas} onChange={v => ND("qtd_parcelas", v)} type="number" />
-                  </div>
-                  {nd.valor_total && parseInt(nd.qtd_parcelas || 0) > 1 && <div style={{ background: "#ede9fe", borderRadius: 8, padding: "6px 12px", marginTop: 8, fontSize: 12 }}><b style={{ color: "#4f46e5" }}>{nd.qtd_parcelas}x de {fmt((parseFloat(nd.valor_total) || 0) / parseInt(nd.qtd_parcelas || 1))}</b></div>}
-                  {nd.data_primeira_parcela && parseInt(nd.qtd_parcelas || 0) >= 1 && <div style={{ marginTop: 8 }}><Btn onClick={confirmarParcelas} outline color="#4f46e5">🔄 Gerar Parcelas</Btn></div>}
-                </div>
-
-                {/* Custas Judiciais — só correção, sem juros */}
-                <div style={{ background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 10, padding: 12, marginTop: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <p style={{ fontSize: 10, fontWeight: 700, color: "#c2410c", textTransform: "uppercase", letterSpacing: ".05em" }}>🏛 Custas Judiciais <span style={{ fontWeight: 400, color: "#9a3412" }}>(só correção monetária, sem juros)</span></p>
-                    <button onClick={() => ND("custas", [...(nd.custas || []), { id: Date.now(), descricao: "", valor: "", data: "" }])}
-                      style={{ background: "#c2410c", color: "#fff", border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Custa</button>
-                  </div>
-                  {(nd.custas || []).map((c, ci) => (
-                    <div key={c.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                      <input placeholder="Descrição (ex: custa judicial - 01/12/2023)" value={c.descricao} onChange={e => ND("custas", (nd.custas || []).map((x, xi) => xi === ci ? { ...x, descricao: e.target.value } : x))}
-                        style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none", fontFamily: "Plus Jakarta Sans" }} />
-                      <input type="number" placeholder="Valor (R$)" value={c.valor} onChange={e => ND("custas", (nd.custas || []).map((x, xi) => xi === ci ? { ...x, valor: e.target.value } : x))}
-                        style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none", fontFamily: "Plus Jakarta Sans" }} />
-                      <input type="date" value={c.data} onChange={e => ND("custas", (nd.custas || []).map((x, xi) => xi === ci ? { ...x, data: e.target.value } : x))}
-                        style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none" }} />
-                      <button onClick={() => ND("custas", (nd.custas || []).filter((_, xi) => xi !== ci))}
-                        style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "4px 7px", cursor: "pointer", fontSize: 11 }}>✕</button>
-                    </div>
-                  ))}
-                  {(nd.custas || []).length === 0 && <p style={{ fontSize: 11, color: "#c2410c", opacity: .6 }}>Nenhuma custa lançada. Clique em "+ Custa" para adicionar.</p>}
-                  {(nd.custas || []).length > 0 && (
-                    <div style={{ borderTop: "1px solid #fed7aa", paddingTop: 6, marginTop: 4, fontSize: 11, color: "#c2410c", fontWeight: 700, textAlign: "right" }}>
-                      Total custas: {fmt((nd.custas || []).reduce((s, c) => s + (parseFloat(c.valor) || 0), 0))}
-                    </div>
-                  )}
-                </div>
-                {/* Tabela de parcelas geradas */}
-                {nd.parcelas.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                        <thead><tr style={{ background: "#f1f5f9" }}>{["Nº", "Valor (R$)", "Vencimento", ""].map(h => <th key={h} style={{ padding: "6px 9px", textAlign: "left", color: "#64748b", fontWeight: 700, fontSize: 10 }}>{h}</th>)}</tr></thead>
-                        <tbody>{nd.parcelas.map((p, i) => (
-                          <tr key={p.id} style={{ borderTop: "1px solid #f8fafc" }}>
-                            <td style={{ padding: "5px 9px", fontWeight: 700 }}>{i + 1}</td>
-                            <td style={{ padding: "5px 9px" }}><input type="number" value={p.valor} onChange={e => editParc(p.id, "valor", e.target.value)} style={{ width: 85, padding: "3px 6px", border: "1.5px solid #e2e8f0", borderRadius: 6, fontSize: 12, fontWeight: 700, color: "#4f46e5", outline: "none" }} /></td>
-                            <td style={{ padding: "5px 9px" }}><input type="date" value={p.venc} onChange={e => editParc(p.id, "venc", e.target.value)} style={{ padding: "3px 6px", border: "1.5px solid #e2e8f0", borderRadius: 6, fontSize: 11, outline: "none" }} /></td>
-                            <td style={{ padding: "5px 9px" }}><button aria-label="Remover parcela" onClick={() => remParc(p.id)} style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "2px 6px", cursor: "pointer", fontSize: 10 }}>✕</button></td>
-                          </tr>
-                        ))}</tbody>
-                      </table>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                      <button onClick={addParc} style={{ background: "#f1f5f9", color: "#475569", border: "1.5px solid #e2e8f0", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Parcela</button>
-                      <span style={{ fontSize: 11, color: "#94a3b8" }}>Total: <b style={{ color: "#4f46e5" }}>{fmt(nd.parcelas.reduce((s, p) => s + p.valor, 0))}</b></span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Botões de ação — sempre visíveis */}
+                <DividaForm
+                  value={nd}
+                  onChange={ND}
+                  credores={credores}
+                  onConfirmarParcelas={confirmarParcelas}
+                  onEditParc={editParc}
+                  onAddParc={addParc}
+                  onRemParc={remParc}
+                />
                 <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
                   <Btn onClick={adicionarDivida} color="#059669">
                     💾 Salvar Dívida{nd.parcelas.length > 0 ? ` (${nd.parcelas.length} parcela${nd.parcelas.length > 1 ? "s" : ""})` : nd.valor_total ? " (à vista)" : ""}
