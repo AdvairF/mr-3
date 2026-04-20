@@ -57,6 +57,9 @@ import GerarPeticao from "./components/GerarPeticao.jsx";
 // Módulo de Fila de Devedor
 import FilaDevedor from "./components/FilaDevedor.jsx";
 
+// Módulo de Dívidas
+import ModuloDividas from "./components/ModuloDividas.jsx";
+
 // Cálculo de saldo devedor (compartilhado com FilaDevedor)
 import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos, calcularPlanilhaCompleta } from "./utils/devedorCalc.js";
 
@@ -122,6 +125,8 @@ const I = {
   peticao: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18" /><path d="M3 6l4 8c0 1.1 0 2-1.5 2S4 14.1 4 13" /><path d="M3 6c0-1.1.9-2 2-2h2" /><path d="M21 6l-4 8c0 1.1 0 2 1.5 2s1.5-1.1 1.5-2" /><path d="M21 6c0-1.1-.9-2-2-2h-2" /><path d="M7 21h10" /></svg>,
   // Fila de Cobrança — lista com bullet points
   fila: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
+  // Dívidas — documento com linhas de valor (diferenciado de I.proc pelo ponto de cifrão)
+  dividas: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="13" x2="8" y2="13"/><line x1="12" y1="17" x2="8" y2="17"/><line x1="16" y1="13" x2="16.01" y2="13"/></svg>,
 };
 // ═══════════════════════════════════════════════════════════════
 // useConfirm HOOK — modal de confirmação customizado
@@ -8524,6 +8529,7 @@ export default function App() {
   const NAV = [
     { id: "dashboard", label: "Dashboard", icon: I.dash, color: "#6366f1", bg: "rgba(99,102,241,.18)" },
     { id: "devedores", label: "Pessoas", icon: I.dev, color: "#ec4899", bg: "rgba(236,72,153,.18)" },
+    { id: "dividas", label: "Dívidas", icon: I.dividas, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
     { id: "credores", label: "Credores", icon: I.cred, color: "#14b8a6", bg: "rgba(20,184,166,.18)" },
     { id: "calculadora", label: "Calculadora", icon: I.calc, color: "#f59e0b", bg: "rgba(245,158,11,.18)" },
     { id: "relatorios", label: "Relatórios", icon: I.rel, color: "#10b981", bg: "rgba(16,185,129,.18)" },
@@ -8556,6 +8562,17 @@ export default function App() {
         onVerDevedor={(id) => { setTab("devedores"); setTimeout(() => { window.dispatchEvent(new CustomEvent("mr_abrir_devedor", { detail: id })); }, 100); }}
       />;
       case "peticao": return <GerarPeticao devedores={devedores} credores={credores} />;
+      case "dividas": return (
+        <ModuloDividas
+          allDividas={allDividas}
+          devedores={devedores}
+          credores={credores}
+          allPagamentos={allPagamentos}
+          hoje={hoje_app}
+          onCarregarTudo={carregarTudo}
+          setTab={setTab}
+        />
+      );
       case "usuarios": return isAdmin ? <GestaoUsuarios user={user} /> : null;
       case "auditoria": return isAdmin ? <AuditoriaLog user={user} /> : null;
       default: return null;
@@ -8709,6 +8726,17 @@ export default function App() {
                 {n.icon}
               </div>
               <span style={{ flex: 1, letterSpacing: "-.1px" }}>{n.label}</span>
+              {n.id === "dividas" && (() => {
+                const count = allDividas.filter(d => d.status === "em cobrança").length;
+                if (!count) return null;
+                return (
+                  <span style={{
+                    position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                    fontSize: 11, fontWeight: 700, background: "#ede9fe", color: "#4c1d95",
+                    borderRadius: 99, padding: "4px 8px", lineHeight: 1,
+                  }}>{count}</span>
+                );
+              })()}
             </button>
           ))}
         </nav>
