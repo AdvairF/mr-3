@@ -1,12 +1,12 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-19 - Phase 1 Plan 06 Task 1 executado: npm run build green (9/9 calculos tests + Vite 106 modules) — aguardando verificação produção em mrcobrancas.com.br (Task 2 checkpoint)
+Last activity: 2026-04-20 - Phase 1 UAT: 6/7 checks validados em produção — aguardando validação de saldo (check 7 de 7)
 
 ## Status
 
-**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — 6/6 plans automated tasks complete, awaiting production checkpoint)
-**Current Plan:** 01-06 — CHECKPOINT: human-verify production at mrcobrancas.com.br
-**Blockers/Concerns:** Awaiting developer to push 13 commits to GitHub and verify production
+**Active Phase:** Phase 1 — Refatoração Pessoas × Dívidas (In Progress — aguardando validação de saldo — checkpoint 7 de 7)
+**Current Plan:** 01-06 — HUMAN-UAT: verificar saldo atualizado (CR-01 dividasMap alias)
+**Blockers/Concerns:** Saldo do advair mostra R$ 3.784,95 (4 dívidas × R$ 1.000 − R$ 2.100 pgtos parciais). Calculadora mostra R$ 9.499,97. Precisa testar amanhã com Bonificação R$ 525 para decidir se está correto (considerando pgtos) ou bugado (alias CR-01). Retomar com /gsd-execute-phase 1 --resume.
 
 ### Quick Tasks Completed
 
