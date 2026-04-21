@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-20 — Roadmap v1.1 criado. Phases 4–5 definidas. Pronto para planning da Phase 4.
+Last activity: 2026-04-21 — Phase 4 Plan 1 complete. Service layer pagamentos.js + atualizarSaldoQuitado em dividas.js.
 
 ## Project Reference
 
@@ -11,15 +11,15 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 4 — Pagamentos por Dívida (not started)
-**Current Plan:** —
-**Blockers/Concerns:** Decisão arquitetural aberta deve ser resolvida antes do planning da Phase 4: reutilizar `pagamentos_parciais` (Posição A) vs nova tabela `pagamentos_divida` com FK para `dividas` (Posição B). Ver SUMMARY.md seção "Open Decision".
+**Active Phase:** Phase 4 — Pagamentos por Dívida (in progress — 1/3 plans complete)
+**Current Plan:** 04-02 (next)
+**Blockers/Concerns:** None
 
 ## Roadmap v1.1
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | Not started |
+| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | In progress (1/3) |
 | 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | Blocked on Phase 4 |
 
 ## Pendências para próximo milestone

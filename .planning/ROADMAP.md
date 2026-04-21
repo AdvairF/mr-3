@@ -40,7 +40,7 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
   7. Badge "Saldo quitado" exibido na TabelaDividas lendo `dividas.saldo_quitado`
 **Plans**: 3 plans
 Plans:
-- [ ] 04-01-PLAN.md — Service layer: pagamentos.js (CRUD + calcularSaldoPorDividaIndividual) + atualizarSaldoQuitado em dividas.js
+- [x] 04-01-PLAN.md — Service layer: pagamentos.js (CRUD + calcularSaldoPorDividaIndividual) + atualizarSaldoQuitado em dividas.js
 - [ ] 04-02-PLAN.md — Componente PagamentosDivida.jsx: histórico, edição inline, exclusão com confirm, formulário de registro
 - [ ] 04-03-PLAN.md — Integração: montar PagamentosDivida em DetalheDivida + badge "Saldo quitado" em DetalheDivida e TabelaDividas
 **UI hint**: yes
@@ -64,5 +64,5 @@ Plans:
 | 1. Refatoração Pessoas × Dívidas | v1.0 | 6/6 | Complete | 2026-04-20 |
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
-| 4. Pagamentos por Dívida | v1.1 | 0/3 | Not started | — |
+| 4. Pagamentos por Dívida | v1.1 | 1/3 | In progress | — |
 | 5. Contratos com Parcelas | v1.1 | 0/? | Not started | — |
