@@ -15,7 +15,9 @@
 - [ ] **PAG-03**: Usuário pode editar um pagamento lançado (com confirmação)
 - [ ] **PAG-04**: Usuário pode excluir um pagamento lançado (com confirmação)
 - [ ] **PAG-05**: Saldo da dívida é recalculado via Art. 354 CC após cada pagamento registrado
-- [ ] **PAG-06**: Dívida exibe badge visual "Saldo quitado" quando saldo calculado ≤ 0
+- [ ] **PAG-06**: Dívida exibe badge visual "Saldo quitado" em DetalheDivida quando saldo calculado ≤ 0
+- [ ] **PAG-07**: `dividas.saldo_quitado` (coluna BOOLEAN no banco) atualizado automaticamente após cada operação de pagamento (criar/editar/excluir): TRUE quando saldo ≤ 0, FALSE quando > 0
+- [ ] **PAG-08**: Badge visual "Saldo quitado" exibido na TabelaDividas (ModuloDividas global) lendo `dividas.saldo_quitado`
 
 ### Contratos com Parcelas (CON)
 
@@ -32,7 +34,6 @@
 - Breakdown de pagamento por componente (juros/multa/principal)
 - Forma de pagamento (PIX/TED/boleto)
 - Comprovante PDF de pagamento
-- Auto-update `dividas.status` para "quitada" quando saldo ≤ 0
 - Auto-update status do contrato quando todas as parcelas quitadas
 - Editar header do contrato após criação
 - Excluir contrato com rollback de parcelas
@@ -59,6 +60,8 @@
 | PAG-04 | Phase 4 | — |
 | PAG-05 | Phase 4 | — |
 | PAG-06 | Phase 4 | — |
+| PAG-07 | Phase 4 | — |
+| PAG-08 | Phase 4 | — |
 | CON-01 | Phase 5 | — |
 | CON-02 | Phase 5 | — |
 | CON-03 | Phase 5 | — |
