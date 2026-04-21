@@ -64,6 +64,7 @@ Plans:
 - [x] 05-03-PLAN.md — ModuloContratos.jsx (4-view state machine) + DetalheContrato.jsx (header + financial summary green + parcelas table com saldo lazy)
 - [x] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
 - [ ] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
+- [ ] 05-06-PLAN.md — CR-06: DiretrizesContrato.jsx (extract) + NovoContrato encargos + gerarPayloadParcelas propagation + DetalheContrato display + Migration 3
 **UI hint**: yes
 
 ## Progress

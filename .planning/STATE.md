@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Pagamentos e Contratos
-current_plan: 05-05
+current_plan: 05-06
 status: in_progress
-last_updated: "2026-04-21T20:10:00Z"
-last_activity: "2026-04-21 — Phase 5 Plan 05 Task 1 complete. App.jsx wired with ModuloContratos: import, I.contratos icon, allContratos state, carregarTudo contratos_dividas fetch, _contrato_tipo enrichment, NAV entry, renderPage case. Committed daa1b7a/86b19fd. Awaiting human-verify checkpoint (Task 2)."
+last_updated: "2026-04-21T21:00:00Z"
+last_activity: "2026-04-21 — CR-06 planejado. 05-06-PLAN.md criado: adicionar encargos (Diretrizes do Contrato) ao NovoContrato + propagar para parcelas via gerarPayloadParcelas. Aguardando Migration 3 no Supabase SQL Editor (Task 1 human-checkpoint) antes de executar Tasks 2-6."
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 11
+  total_plans: 12
   completed_plans: 10
-  percent: 95
+  percent: 83
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 5 Plan 05 Task 1 complete. App.jsx wired with ModuloContratos: import, I.contratos icon, allContratos state, carregarTudo contratos_dividas fetch, _contrato_tipo enrichment, NAV entry, renderPage case. Committed daa1b7a/86b19fd. Awaiting human-verify checkpoint (Task 2).
+Last activity: 2026-04-21 — CR-06 planejado. 05-06-PLAN.md criado: adicionar encargos (Diretrizes do Contrato) ao NovoContrato + propagar para parcelas via gerarPayloadParcelas. Aguardando Migration 3 no Supabase SQL Editor (Task 1 human-checkpoint) antes de executar Tasks 2-6.
 
 ## Project Reference
 
