@@ -55,7 +55,7 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
       .then(async data => {
         const lista = Array.isArray(data) ? data : [];
         setPagamentos(lista);
-        await recalcularESincronizar(lista);
+        await recalcularESincronizar(lista, divida.status);
       })
       .catch(e => {
         toast.error("Erro ao carregar pagamentos: " + e.message);
@@ -65,11 +65,11 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
   }, [divida.id]);
 
   // Helper — recalcular e sincronizar saldo_quitado após mutação
-  async function recalcularESincronizar(listaPagamentos) {
+  async function recalcularESincronizar(listaPagamentos, statusAtual) {
     const novoSaldo = calcularSaldoPorDividaIndividual(divida, listaPagamentos, hoje);
     const quitado = novoSaldo <= 0;
     try {
-      await atualizarSaldoQuitado(divida.id, quitado);
+      await atualizarSaldoQuitado(divida.id, quitado, statusAtual);
     } catch (e) {
       toast.error("Aviso: falha ao sincronizar status quitado — " + e.message);
     }
@@ -98,7 +98,7 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
       const lista = await listarPagamentos(divida.id);
       const listaAtual = Array.isArray(lista) ? lista : [];
       setPagamentos(listaAtual);
-      await recalcularESincronizar(listaAtual);
+      await recalcularESincronizar(listaAtual, divida.status);
       setNovoForm({ data_pagamento: "", valor: "", observacao: "" });
       toast.success("Pagamento registrado");
     } catch (e) {
@@ -133,7 +133,7 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
       const lista = await listarPagamentos(divida.id);
       const listaAtual = Array.isArray(lista) ? lista : [];
       setPagamentos(listaAtual);
-      await recalcularESincronizar(listaAtual);
+      await recalcularESincronizar(listaAtual, divida.status);
       setEditandoId(null);
       toast.success("Pagamento atualizado");
     } catch (e) {
@@ -149,7 +149,7 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
       const lista = await listarPagamentos(divida.id);
       const listaAtual = Array.isArray(lista) ? lista : [];
       setPagamentos(listaAtual);
-      await recalcularESincronizar(listaAtual);
+      await recalcularESincronizar(listaAtual, divida.status);
       toast.success("Pagamento excluído");
     } catch (e) {
       toast.error("Erro ao excluir: " + e.message);

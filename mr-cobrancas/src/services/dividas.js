@@ -59,17 +59,22 @@ export async function excluirDivida(dividaUuid) {
 }
 
 /**
- * Atualiza a coluna saldo_quitado de uma dívida.
- * Chamado após cada operação de pagamento (criar/editar/excluir).
- * TRUE quando saldo ≤ 0, FALSE quando saldo > 0 (per D-03).
+ * Atualiza saldo_quitado e sincroniza dividas.status no mesmo PATCH.
+ * TRUE → status="quitada". FALSE → reverte para "em cobrança" somente se
+ * statusAtual era "quitada"; preserva "acordo" e outros valores manuais.
  *
  * @param {string} dividaUuid — UUID da dívida
  * @param {boolean} quitado — true se saldo ≤ 0, false se saldo > 0
+ * @param {string} statusAtual — divida.status no momento da chamada
  * @returns {Promise<Array>}
  */
-export async function atualizarSaldoQuitado(dividaUuid, quitado) {
+export async function atualizarSaldoQuitado(dividaUuid, quitado, statusAtual) {
+  const novoStatus = quitado
+    ? "quitada"
+    : (statusAtual === "quitada" ? "em cobrança" : (statusAtual || "em cobrança"));
   return sb(`${TABLE}?id=eq.${dividaUuid}`, "PATCH", {
     saldo_quitado: quitado,
+    status: novoStatus,
     updated_at: new Date().toISOString(),
   });
 }
