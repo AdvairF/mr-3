@@ -60,6 +60,15 @@ export function gerarPayloadParcelas(contrato) {
     num_parcelas,
     primeira_parcela_na_data_base,
     referencia,
+    indice_correcao,
+    data_inicio_atualizacao,
+    multa_percentual,
+    juros_tipo,
+    juros_am_percentual,
+    honorarios_percentual,
+    despesas,
+    art523_opcao,
+    custas,
   } = contrato;
 
   const valorBase = Math.floor((valor_total / num_parcelas) * 100) / 100;
@@ -87,17 +96,17 @@ export function gerarPayloadParcelas(contrato) {
       valor_total: valor,
       data_vencimento,
       data_origem: data_inicio,
-      data_inicio_atualizacao: data_vencimento,
+      data_inicio_atualizacao: data_inicio_atualizacao || data_vencimento,
       status: "em cobrança",
-      indice_correcao: "igpm",
-      juros_tipo: "fixo_1",
-      juros_am_percentual: 0,
-      multa_percentual: 0,
-      honorarios_percentual: 0,
-      despesas: 0,
-      art523_opcao: "nao_aplicar",
+      indice_correcao:       indice_correcao      ?? "igpm",
+      juros_tipo:            juros_tipo            ?? "fixo_1",
+      juros_am_percentual:   juros_am_percentual   ?? 0,
+      multa_percentual:      multa_percentual       ?? 0,
+      honorarios_percentual: honorarios_percentual ?? 0,
+      despesas:              despesas              ?? 0,
+      art523_opcao:          art523_opcao          ?? "nao_aplicar",
       parcelas: [],
-      custas: [],
+      custas:                Array.isArray(custas) ? custas : [],
     });
   }
 
