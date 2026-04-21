@@ -20,7 +20,7 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 ### 🚧 v1.1 — Pagamentos e Contratos
 
-- [ ] **Phase 4: Pagamentos por Dívida** — Advogado registra, consulta e remove pagamentos diretamente na tela da dívida, com saldo recalculado via Art. 354 CC
+- [x] **Phase 4: Pagamentos por Dívida** — Advogado registra, consulta e remove pagamentos diretamente na tela da dívida, com saldo recalculado via Art. 354 CC
 - [ ] **Phase 5: Contratos com Parcelas** — Advogado cria contratos (NF/Duplicata, Compra e Venda, Empréstimo) que geram parcelas reais em `dividas`, visualiza lista global e detalhe com saldo por parcela
 
 ## Phase Details
@@ -42,7 +42,7 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 Plans:
 - [x] 04-01-PLAN.md — Service layer: pagamentos.js (CRUD + calcularSaldoPorDividaIndividual) + atualizarSaldoQuitado em dividas.js
 - [x] 04-02-PLAN.md — Componente PagamentosDivida.jsx: histórico, edição inline, exclusão com confirm, formulário de registro
-- [ ] 04-03-PLAN.md — Integração: montar PagamentosDivida em DetalheDivida + badge "Saldo quitado" em DetalheDivida e TabelaDividas
+- [x] 04-03-PLAN.md — Integração: montar PagamentosDivida em DetalheDivida + badge "Saldo quitado" em DetalheDivida e TabelaDividas
 **UI hint**: yes
 
 ### Phase 5: Contratos com Parcelas
@@ -64,5 +64,5 @@ Plans:
 | 1. Refatoração Pessoas × Dívidas | v1.0 | 6/6 | Complete | 2026-04-20 |
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
-| 4. Pagamentos por Dívida | v1.1 | 2/3 | In progress | — |
+| 4. Pagamentos por Dívida | v1.1 | 3/3 | Complete | 2026-04-21 |
 | 5. Contratos com Parcelas | v1.1 | 0/? | Not started | — |

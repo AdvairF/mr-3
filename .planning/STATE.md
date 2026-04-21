@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 4 Plan 2 complete. PagamentosDivida.jsx componente com histórico, edição inline, exclusão confirm e formulário de registro.
+Last activity: 2026-04-21 — Phase 4 Plan 3 complete. DetalheDivida integra PagamentosDivida + badge Saldo quitado; TabelaDividas exibe badge lendo d.saldo_quitado persistido.
 
 ## Project Reference
 
@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 4 — Pagamentos por Dívida (in progress — 2/3 plans complete)
-**Current Plan:** 04-03 (next)
+**Active Phase:** Phase 4 — Pagamentos por Dívida (complete — 3/3 plans complete)
+**Current Plan:** 04-03 (done) — Phase 4 complete
 **Blockers/Concerns:** None
 
 ## Roadmap v1.1
