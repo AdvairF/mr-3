@@ -107,6 +107,10 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange }) {
 
   // PAG-03: Salvar edição inline
   async function handleSalvarEdit(row) {
+    if (!editForm.data_pagamento || !editForm.valor || isNaN(parseFloat(editForm.valor))) {
+      toast.error("Preencha data e valor");
+      return;
+    }
     try {
       await atualizarPagamento(row.id, {
         data_pagamento: editForm.data_pagamento,
