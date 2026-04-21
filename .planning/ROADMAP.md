@@ -60,7 +60,7 @@ Plans:
 **Plans**: 5 plans
 Plans:
 - [x] 05-01-PLAN.md — DB migration (contratos_dividas table + dividas.contrato_id FK) + contratos.js service (criarContratoComParcelas, gerarPayloadParcelas)
-- [ ] 05-02-PLAN.md — NovoContrato.jsx (form com devedor typeahead + parcelas preview) + TabelaContratos.jsx (lista global 6 colunas)
+- [x] 05-02-PLAN.md — NovoContrato.jsx (form com devedor typeahead + parcelas preview) + TabelaContratos.jsx (lista global 6 colunas)
 - [ ] 05-03-PLAN.md — ModuloContratos.jsx (4-view state machine) + DetalheContrato.jsx (header + financial summary green + parcelas table com saldo lazy)
 - [ ] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
 - [ ] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
@@ -74,4 +74,4 @@ Plans:
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
-| 5. Contratos com Parcelas | v1.1 | 1/5 | In progress | — |
+| 5. Contratos com Parcelas | v1.1 | 2/5 | In progress | — |

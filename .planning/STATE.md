@@ -1,6 +1,22 @@
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Pagamentos e Contratos
+current_plan: 05-03
+status: in_progress
+last_updated: "2026-04-21T19:53:00.000Z"
+last_activity: "2026-04-21 — Phase 5 Plan 02 complete. NovoContrato.jsx (8-field form with devedor typeahead, D-04 preview, podesSalvar guard) + TabelaContratos.jsx (6 columns, CONTRATO_BADGE_META, Em Atraso from parcelasPorContrato Map) committed as 8b61a11. All acceptance criteria verified. Próxima: execute plan 05-03."
+progress:
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 11
+  completed_plans: 8
+  percent: 73
+---
+
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 5 Plan 01 complete. contratos_dividas DDL migrations + contratos.js service (6 functions) committed as d7c01fc. All acceptance criteria verified via inline node test. Supabase migrations require manual execution in SQL Editor. Próxima: execute plan 05-02.
+Last activity: 2026-04-21 — Phase 5 Plan 02 complete. NovoContrato.jsx (8-field form with devedor typeahead, D-04 preview, podesSalvar guard) + TabelaContratos.jsx (6 columns, CONTRATO_BADGE_META, Em Atraso from parcelasPorContrato Map) committed as 8b61a11. All acceptance criteria verified. Próxima: execute plan 05-03.
 
 ## Project Reference
 
@@ -12,15 +28,15 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 ## Status
 
 **Active Phase:** Phase 5 — Contratos com Parcelas (in progress)
-**Current Plan:** 05-02
-**Blockers/Concerns:** Supabase migrations (contratos_dividas table + dividas.contrato_id FK) must be run manually before 05-02 can insert data
+**Current Plan:** 05-03
+**Blockers/Concerns:** Supabase migrations (contratos_dividas table + dividas.contrato_id FK) must be run manually before runtime data insertion works
 
 ## Roadmap v1.1
 
 | Phase | Goal | Status |
 |-------|------|--------|
 | 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | **COMPLETE** — 2026-04-21 |
-| 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | Not started |
+| 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | In progress (2/5 plans) |
 
 ## Pendências para próximo milestone
 
