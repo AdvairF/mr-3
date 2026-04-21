@@ -52,12 +52,15 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
   useEffect(() => {
     setLoading(true);
     listarPagamentos(divida.id)
-      .then(data => {
+      .then(async data => {
         const lista = Array.isArray(data) ? data : [];
         setPagamentos(lista);
-        recalcularESincronizar(lista);
+        await recalcularESincronizar(lista);
       })
-      .catch(e => toast.error("Erro ao carregar pagamentos: " + e.message))
+      .catch(e => {
+        toast.error("Erro ao carregar pagamentos: " + e.message);
+        if (onTotalPagoChange) onTotalPagoChange(0);
+      })
       .finally(() => setLoading(false));
   }, [divida.id]);
 
