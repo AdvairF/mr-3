@@ -85,6 +85,7 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                 const obj = buildDevedorObjParaSaldo(d, devedores, allPagamentos);
                 const saldosMap = obj ? calcularSaldosPorDivida(obj.devedor, obj.pagamentos, hoje) : null;
                 const saldo = saldosMap != null ? (saldosMap[String(d.id)] ?? null) : null;
+                const saldoExibido = d.saldo_quitado === true ? 0 : saldo;
                 return (
                   <tr
                     key={d.id}
@@ -102,9 +103,9 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                     </td>
                     <td style={td}>{fmtBRL(d.valor_total)}</td>
                     <td style={td}>
-                      {saldo == null
+                      {saldoExibido == null
                         ? <span style={{ color: "#94a3b8", fontSize: 13 }}>Calculando...</span>
-                        : fmtBRL(saldo)
+                        : fmtBRL(saldoExibido)
                       }
                     </td>
                     <td style={td}>{fmtData(d.data_vencimento)}</td>
