@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Pagamentos e Contratos
-current_plan: 05-03
+current_plan: 05-04
 status: in_progress
-last_updated: "2026-04-21T19:53:00.000Z"
-last_activity: "2026-04-21 — Phase 5 Plan 02 complete. NovoContrato.jsx (8-field form with devedor typeahead, D-04 preview, podesSalvar guard) + TabelaContratos.jsx (6 columns, CONTRATO_BADGE_META, Em Atraso from parcelasPorContrato Map) committed as 8b61a11. All acceptance criteria verified. Próxima: execute plan 05-03."
+last_updated: "2026-04-21T19:53:18Z"
+last_activity: "2026-04-21 — Phase 5 Plan 03 complete. DetalheContrato.jsx (header card, green financial summary f0fdf4, parcelas table with lazy saldo via listarPagamentos + calcularSaldoPorDividaIndividual) + ModuloContratos.jsx (4-view state machine lista/detalhe/novo/parcela-detalhe, parcelasPorContrato useMemo Map, contratosAtivos count badge) committed as 4849ee6. All acceptance criteria verified. Próxima: execute plan 05-04."
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 82
 ---
 
 # Mr. Cobranças — Project State
