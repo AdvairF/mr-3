@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 4 gap closure complete: plan 04-04 executado e verificado (CR-03 fechado — recálculo no mount + Total Pago via pagamentos_divida). Aguardando UAT manual (live Supabase).
+Last activity: 2026-04-21 — Phase 4 gap closure: plan 04-05 criado (CR-04 fix — sincronização de dividas.status com saldo_quitado). Aguardando execução.
 
 ## Project Reference
 
@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 4 — Pagamentos por Dívida (gap closure concluído — UAT manual pendente)
-**Current Plan:** 04-04 (completo)
-**Blockers/Concerns:** UAT manual pendente (live Supabase) — 5 cenários em 04-HUMAN-UAT.md
+**Active Phase:** Phase 4 — Pagamentos por Dívida (gap closure — plan 04-05 pendente)
+**Current Plan:** 04-05 (aguardando execução)
+**Blockers/Concerns:** CR-04: dividas.status não sincronizado com saldo_quitado — filtro Quitada não funciona
 
 ## Roadmap v1.1
 

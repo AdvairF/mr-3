@@ -43,7 +43,8 @@ Plans:
 - [x] 04-01-PLAN.md — Service layer: pagamentos.js (CRUD + calcularSaldoPorDividaIndividual) + atualizarSaldoQuitado em dividas.js
 - [x] 04-02-PLAN.md — Componente PagamentosDivida.jsx: histórico, edição inline, exclusão com confirm, formulário de registro
 - [x] 04-03-PLAN.md — Integração: montar PagamentosDivida em DetalheDivida + badge "Saldo quitado" em DetalheDivida e TabelaDividas
-- [ ] 04-04-PLAN.md — CR-03 gap closure: recalcularESincronizar no mount + Total Pago por pagamentos_divida (PAG-05, PAG-07)
+- [x] 04-04-PLAN.md — CR-03 gap closure: recalcularESincronizar no mount + Total Pago por pagamentos_divida (PAG-05, PAG-07)
+- [ ] 04-05-PLAN.md — CR-04 gap closure: sincronizar dividas.status com saldo_quitado (PAG-09)
 **UI hint**: yes
 
 ### Phase 5: Contratos com Parcelas
