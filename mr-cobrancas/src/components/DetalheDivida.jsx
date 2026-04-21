@@ -5,6 +5,7 @@ import Btn from "./ui/Btn.jsx";
 import DevedoresDaDivida from "./DevedoresDaDivida.jsx";
 import Art523Option from "./Art523Option.jsx";
 import { calcularSaldosPorDivida, calcularTotalPagoPorDivida } from "../utils/devedorCalc.js";
+import PagamentosDivida from "./PagamentosDivida.jsx";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -74,6 +75,11 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
 
   const saldosMap = devedor ? calcularSaldosPorDivida(devedor, pagamentosDoDevedor, hoje) : null;
   const saldoDivida = saldosMap != null ? (saldosMap[String(divida.id)] ?? null) : null;
+  // saldoDividaLocal: sobrescreve saldoDivida quando PagamentosDivida reporta novo saldo via onSaldoChange
+  const [saldoDividaLocal, setSaldoDividaLocal] = useState(null);
+  // Valor efetivo: se PagamentosDivida já propagou um saldo (saldoDividaLocal !== null), usar esse;
+  // senão usar o calculado pelos pagamentos_parciais do devedor (saldoDivida).
+  const saldoAtual = saldoDividaLocal !== null ? saldoDividaLocal : saldoDivida;
   const pagoPorDividaMap = devedor ? calcularTotalPagoPorDivida(devedor, pagamentosDoDevedor, hoje) : {};
   const totalPago = pagoPorDividaMap[String(divida.id)] ?? 0;
 
@@ -117,20 +123,48 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
       <div style={{ background: "linear-gradient(135deg,#fff5f5 0%,#fff 100%)", borderRadius: 16, padding: "18px 20px", border: "1px solid #fecaca", marginBottom: 16 }}>
         <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>Resumo Financeiro</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {[
-            { label: "Valor Original",   value: fmtBRL(divida.valor_total) },
-            { label: "Saldo Atualizado", value: saldoDivida != null ? fmtBRL(saldoDivida) : "—" },
-            { label: "Total Pago",       value: fmtBRL(totalPago) },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>
-                {label}
-              </p>
-              <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>
-                {value}
-              </p>
-            </div>
-          ))}
+          <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>
+              Valor Original
+            </p>
+            <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>
+              {fmtBRL(divida.valor_total)}
+            </p>
+          </div>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>
+              Saldo Atualizado
+            </p>
+            <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>
+              {saldoAtual != null ? fmtBRL(saldoAtual) : "—"}
+            </p>
+            {saldoAtual !== null && saldoAtual <= 0 && (
+              <span
+                role="status"
+                style={{
+                  display: "inline-block",
+                  background: "#dcfce7",
+                  color: "#065f46",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "3px 8px",
+                  borderRadius: 99,
+                  whiteSpace: "nowrap",
+                  marginTop: 4,
+                }}
+              >
+                Saldo quitado
+              </span>
+            )}
+          </div>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>
+              Total Pago
+            </p>
+            <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>
+              {fmtBRL(totalPago)}
+            </p>
+          </div>
         </div>
         <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 8, fontStyle: "italic", marginBottom: 0 }}>
           (amortização sequencial conforme Art. 354 CC)
@@ -162,7 +196,14 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
         />
       </div>
 
-      {/* 6. Editar Dívida button — D-04 LOCKED */}
+      {/* 6. Pagamentos por Dívida — D-04 LOCKED: seção fixa no final */}
+      <PagamentosDivida
+        divida={divida}
+        hoje={hoje}
+        onSaldoChange={(novoSaldo) => setSaldoDividaLocal(novoSaldo)}
+      />
+
+      {/* 7. Editar Dívida button — D-04 LOCKED */}
       <div style={{ marginTop: 8 }}>
         <Btn outline onClick={() => {
           setTab("devedores");
