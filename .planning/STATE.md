@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 4 Plan 1 complete. Service layer pagamentos.js + atualizarSaldoQuitado em dividas.js.
+Last activity: 2026-04-21 — Phase 4 Plan 2 complete. PagamentosDivida.jsx componente com histórico, edição inline, exclusão confirm e formulário de registro.
 
 ## Project Reference
 
@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 4 — Pagamentos por Dívida (in progress — 1/3 plans complete)
-**Current Plan:** 04-02 (next)
+**Active Phase:** Phase 4 — Pagamentos por Dívida (in progress — 2/3 plans complete)
+**Current Plan:** 04-03 (next)
 **Blockers/Concerns:** None
 
 ## Roadmap v1.1
