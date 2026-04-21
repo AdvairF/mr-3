@@ -40,7 +40,7 @@ const td = {
   verticalAlign: "middle",
 };
 
-export default function PagamentosDivida({ divida, hoje, onSaldoChange }) {
+export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalPagoChange }) {
   const [pagamentos, setPagamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editandoId, setEditandoId] = useState(null);
@@ -53,7 +53,9 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange }) {
     setLoading(true);
     listarPagamentos(divida.id)
       .then(data => {
-        setPagamentos(Array.isArray(data) ? data : []);
+        const lista = Array.isArray(data) ? data : [];
+        setPagamentos(lista);
+        recalcularESincronizar(lista);
       })
       .catch(e => toast.error("Erro ao carregar pagamentos: " + e.message))
       .finally(() => setLoading(false));
@@ -69,6 +71,10 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange }) {
       toast.error("Aviso: falha ao sincronizar status quitado — " + e.message);
     }
     if (onSaldoChange) onSaldoChange(novoSaldo);
+    if (onTotalPagoChange) {
+      const total = (listaPagamentos || []).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      onTotalPagoChange(total);
+    }
   }
 
   // PAG-01: Criar pagamento

@@ -78,6 +78,7 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
   const saldoDivida = saldosMap != null ? (saldosMap[String(divida.id)] ?? null) : null;
   // saldoDividaLocal: sobrescreve saldoDivida quando PagamentosDivida reporta novo saldo via onSaldoChange
   const [saldoDividaLocal, setSaldoDividaLocal] = useState(null);
+  const [totalPagoDivida, setTotalPagoDivida] = useState(null);
   // Valor efetivo: se PagamentosDivida já propagou um saldo (saldoDividaLocal !== null), usar esse;
   // senão usar o calculado pelos pagamentos_parciais do devedor (saldoDivida).
   const saldoAtual = saldoDividaLocal !== null ? saldoDividaLocal : saldoDivida;
@@ -163,7 +164,7 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
               Total Pago
             </p>
             <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>
-              {fmtBRL(totalPago)}
+              {totalPagoDivida !== null ? fmtBRL(totalPagoDivida) : "—"}
             </p>
           </div>
         </div>
@@ -202,6 +203,7 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
         divida={divida}
         hoje={hoje}
         onSaldoChange={(novoSaldo) => setSaldoDividaLocal(novoSaldo)}
+        onTotalPagoChange={(total) => setTotalPagoDivida(total)}
       />
 
       {/* 7. Editar Dívida button — D-04 LOCKED */}
