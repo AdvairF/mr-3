@@ -49,7 +49,8 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
 
   async function handleConfirmarRemoverPrincipal() {
     setShowPrincipalWarning(false);
-    const { doRemove, resolve } = pendingActionRef.current || {};
+    if (!pendingActionRef.current) return;
+    const { doRemove, resolve } = pendingActionRef.current;
     pendingActionRef.current = null;
     if (doRemove) {
       try {
