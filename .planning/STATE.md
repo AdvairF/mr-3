@@ -4,19 +4,19 @@ milestone: v1.1
 milestone_name: Pagamentos e Contratos
 current_plan: 05-05
 status: in_progress
-last_updated: "2026-04-21T20:05:00Z"
-last_activity: "2026-04-21 — Phase 5 Plan 04 complete. TabelaDividas.jsx (CONTRATO_BADGE_META + inline badge in Credor cell) + DetalheDivida.jsx (onVerContrato optional prop + '← Ver contrato' link above PagamentosDivida) committed as e7454e3/dc6c5da. All acceptance criteria verified. Próxima: execute plan 05-05."
+last_updated: "2026-04-21T20:10:00Z"
+last_activity: "2026-04-21 — Phase 5 Plan 05 Task 1 complete. App.jsx wired with ModuloContratos: import, I.contratos icon, allContratos state, carregarTudo contratos_dividas fetch, _contrato_tipo enrichment, NAV entry, renderPage case. Committed daa1b7a/86b19fd. Awaiting human-verify checkpoint (Task 2)."
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 11
   completed_plans: 10
-  percent: 91
+  percent: 95
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 5 Plan 02 complete. NovoContrato.jsx (8-field form with devedor typeahead, D-04 preview, podesSalvar guard) + TabelaContratos.jsx (6 columns, CONTRATO_BADGE_META, Em Atraso from parcelasPorContrato Map) committed as 8b61a11. All acceptance criteria verified. Próxima: execute plan 05-03.
+Last activity: 2026-04-21 — Phase 5 Plan 05 Task 1 complete. App.jsx wired with ModuloContratos: import, I.contratos icon, allContratos state, carregarTudo contratos_dividas fetch, _contrato_tipo enrichment, NAV entry, renderPage case. Committed daa1b7a/86b19fd. Awaiting human-verify checkpoint (Task 2).
 
 ## Project Reference
 
