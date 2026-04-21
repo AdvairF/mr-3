@@ -53,14 +53,14 @@
 
 | REQ-ID | Phase | Plan |
 |--------|-------|------|
-| PAG-01 | — | — |
-| PAG-02 | — | — |
-| PAG-03 | — | — |
-| PAG-04 | — | — |
-| PAG-05 | — | — |
-| PAG-06 | — | — |
-| CON-01 | — | — |
-| CON-02 | — | — |
-| CON-03 | — | — |
-| CON-04 | — | — |
-| CON-05 | — | — |
+| PAG-01 | Phase 4 | — |
+| PAG-02 | Phase 4 | — |
+| PAG-03 | Phase 4 | — |
+| PAG-04 | Phase 4 | — |
+| PAG-05 | Phase 4 | — |
+| PAG-06 | Phase 4 | — |
+| CON-01 | Phase 5 | — |
+| CON-02 | Phase 5 | — |
+| CON-03 | Phase 5 | — |
+| CON-04 | Phase 5 | — |
+| CON-05 | Phase 5 | — |

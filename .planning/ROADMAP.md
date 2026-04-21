@@ -3,6 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Refatoração Estrutural** — Phases 1–3 (shipped 2026-04-20)
+- 🚧 **v1.1 Pagamentos e Contratos** — Phases 4–5 (active)
 
 ## Phases
 
@@ -17,9 +18,38 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 </details>
 
-### 🚧 v1.1 (Planejamento)
+### 🚧 v1.1 — Pagamentos e Contratos
 
-_Próximo milestone a ser definido via `/gsd-new-milestone`_
+- [ ] **Phase 4: Pagamentos por Dívida** — Advogado registra, consulta e remove pagamentos diretamente na tela da dívida, com saldo recalculado via Art. 354 CC
+- [ ] **Phase 5: Contratos com Parcelas** — Advogado cria contratos (NF/Duplicata, Compra e Venda, Empréstimo) que geram parcelas reais em `dividas`, visualiza lista global e detalhe com saldo por parcela
+
+## Phase Details
+
+### Phase 4: Pagamentos por Dívida
+**Goal**: Advogado pode fechar o ciclo financeiro de uma dívida individual — registrar pagamentos com data e valor, ver o histórico, corrigir lançamentos errados, e saber quando a dívida está quitada
+**Depends on**: Phase 3 (DetalheDivida existente como ponto de entrada)
+**Requirements**: PAG-01, PAG-02, PAG-03, PAG-04, PAG-05, PAG-06
+**Decision point**: Antes de qualquer código de service, resolver a decisão arquitetural aberta — reutilizar `pagamentos_parciais` com UI-only scoping (Posição A) ou criar nova tabela `pagamentos_divida` com FK explícita para `dividas` (Posição B). Registrar em PROJECT.md como decisão chave. Posição B é recomendada pela pesquisa (extensibilidade e auditabilidade), mas Posição A tem zero risco de migration.
+**Success Criteria** (what must be TRUE):
+  1. Advogado abre a tela de uma dívida e consegue registrar um pagamento informando data, valor e observação — o novo pagamento aparece imediatamente na lista cronológica abaixo
+  2. Advogado vê o histórico completo de pagamentos da dívida em ordem cronológica, com data, valor e observação de cada lançamento
+  3. Advogado consegue editar ou excluir um pagamento lançado por engano, após confirmação, e o saldo é recalculado na mesma tela
+  4. O saldo exibido na tela da dívida reflete a imputação Art. 354 CC sequencial sobre todos os pagamentos registrados para aquela dívida
+  5. Quando o saldo calculado é ≤ 0, a dívida exibe o badge "Saldo quitado" na tela de detalhe
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 5: Contratos com Parcelas
+**Goal**: Advogado pode modelar uma relação contratual (NF/Duplicata, Compra e Venda, Empréstimo) como um contrato que gera automaticamente N parcelas como dívidas reais — e navegar do contrato ao detalhe de cada parcela com saldo individual vivo
+**Depends on**: Phase 4 (mecanismo de pagamentos por dívida necessário para saldo por parcela em DetalheContrato)
+**Requirements**: CON-01, CON-02, CON-03, CON-04, CON-05
+**Success Criteria** (what must be TRUE):
+  1. Advogado preenche um formulário de novo contrato (tipo, credor, devedor, valor total, data, nº parcelas) e o sistema gera N parcelas automaticamente — cada parcela aparece como uma linha real na tabela de dívidas
+  2. Advogado vê a lista global de contratos com tipo, partes envolvidas, valor total, número de parcelas e quantas estão em atraso
+  3. Advogado abre o detalhe de um contrato e vê o header com os dados do contrato mais uma tabela de parcelas onde cada parcela exibe seu saldo individual calculado via Art. 354 CC sobre os pagamentos registrados para aquela parcela
+  4. Parcelas de contratos aparecem na tabela global de dívidas (ModuloDividas) com uma indicação visual de que pertencem a um contrato — advogado consegue distinguir dívidas avulsas de parcelas contratuais sem abrir o detalhe
+**Plans**: TBD
+**UI hint**: yes
 
 ## Progress
 
@@ -28,3 +58,5 @@ _Próximo milestone a ser definido via `/gsd-new-milestone`_
 | 1. Refatoração Pessoas × Dívidas | v1.0 | 6/6 | Complete | 2026-04-20 |
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
+| 4. Pagamentos por Dívida | v1.1 | 0/? | Not started | — |
+| 5. Contratos com Parcelas | v1.1 | 0/? | Not started | — |

@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-20 — Milestone v1.1 Pagamentos e Contratos iniciado. Definindo requirements.
+Last activity: 2026-04-20 — Roadmap v1.1 criado. Phases 4–5 definidas. Pronto para planning da Phase 4.
 
 ## Project Reference
 
@@ -11,9 +11,16 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** None — definindo requirements
+**Active Phase:** Phase 4 — Pagamentos por Dívida (not started)
 **Current Plan:** —
-**Blockers/Concerns:** —
+**Blockers/Concerns:** Decisão arquitetural aberta deve ser resolvida antes do planning da Phase 4: reutilizar `pagamentos_parciais` (Posição A) vs nova tabela `pagamentos_divida` com FK para `dividas` (Posição B). Ver SUMMARY.md seção "Open Decision".
+
+## Roadmap v1.1
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | Not started |
+| 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | Blocked on Phase 4 |
 
 ## Pendências para próximo milestone
 
