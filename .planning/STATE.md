@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 4 completa. Service layer + PagamentosDivida.jsx + integração DetalheDivida/TabelaDividas. Code review: 5/5 issues fixed. Verificação: human_needed (5 UAT items).
+Last activity: 2026-04-21 — Phase 4 gap closure: plan 04-04 criado (CR-03 fix — recálculo no mount + Total Pago por dívida). Aguardando aprovação para execução.
 
 ## Project Reference
 
@@ -11,9 +11,9 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 5 — Contratos com Parcelas (next)
-**Current Plan:** —
-**Blockers/Concerns:** None
+**Active Phase:** Phase 4 — Pagamentos por Dívida (gap closure — plan 04-04 pendente)
+**Current Plan:** 04-04 (aguardando aprovação)
+**Blockers/Concerns:** UAT CR-03: recalcularESincronizar não chamada no mount; Total Pago lê pagamentos_parciais
 
 ## Roadmap v1.1
 
