@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 4 gap closure: plan 04-05 criado (CR-04 fix — sincronização de dividas.status com saldo_quitado). Aguardando execução.
+Last activity: 2026-04-21 — Phase 5 Plan 01 complete. contratos_dividas DDL migrations + contratos.js service (6 functions) committed as d7c01fc. All acceptance criteria verified via inline node test. Supabase migrations require manual execution in SQL Editor. Próxima: execute plan 05-02.
 
 ## Project Reference
 
@@ -11,15 +11,15 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 4 — Pagamentos por Dívida (gap closure — plan 04-05 pendente)
-**Current Plan:** 04-05 (aguardando execução)
-**Blockers/Concerns:** CR-04: dividas.status não sincronizado com saldo_quitado — filtro Quitada não funciona
+**Active Phase:** Phase 5 — Contratos com Parcelas (in progress)
+**Current Plan:** 05-02
+**Blockers/Concerns:** Supabase migrations (contratos_dividas table + dividas.contrato_id FK) must be run manually before 05-02 can insert data
 
 ## Roadmap v1.1
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | Complete (3/3) |
+| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | **COMPLETE** — 2026-04-21 |
 | 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | Not started |
 
 ## Pendências para próximo milestone
