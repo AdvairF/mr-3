@@ -36,7 +36,7 @@ function StatusBadgeDivida({ status }) {
   );
 }
 
-export default function DetalheDivida({ divida, devedores, credores, allPagamentos, hoje, onVoltar, onCarregarTudo, setTab }) {
+export default function DetalheDivida({ divida, devedores, credores, allPagamentos, hoje, onVoltar, onCarregarTudo, setTab, onVerContrato }) {
   const [showPrincipalWarning, setShowPrincipalWarning] = useState(false);
   const pendingActionRef = useRef(null);
 
@@ -197,6 +197,26 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
           onRemovePrincipal={handleRemovePrincipalWarning}
         />
       </div>
+
+      {/* Ver contrato pai — shown only when divida is a parcela and callback is provided */}
+      {divida.contrato_id && onVerContrato && (
+        <div style={{ marginBottom: 8 }}>
+          <button
+            onClick={() => onVerContrato(divida.contrato_id)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#64748b",
+              padding: 0,
+            }}
+          >
+            ← Ver contrato
+          </button>
+        </div>
+      )}
 
       {/* 6. Pagamentos por Dívida — D-04 LOCKED: seção fixa no final */}
       <PagamentosDivida
