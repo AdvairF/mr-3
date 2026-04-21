@@ -2,6 +2,8 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
 import { criarContratoComParcelas } from "../services/contratos.js";
+import DiretrizesContrato from "./DiretrizesContrato.jsx";
+import { fmt } from "../utils/formatters.js";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -21,6 +23,15 @@ const FORM_VAZIO = {
   num_parcelas: "",
   primeira_parcela_na_data_base: true,
   referencia: "",
+  indexador: "igpm",
+  data_inicio_atualizacao: "",
+  multa_pct: "0",
+  juros_tipo: "fixo_1",
+  juros_am: "0",
+  honorarios_pct: "0",
+  despesas: "0",
+  art523_opcao: "nao_aplicar",
+  custas: [],
 };
 
 export default function NovoContrato({ devedores, credores, onCarregarTudo, onVoltar, devedorPreSelecionado }) {
@@ -61,6 +72,15 @@ export default function NovoContrato({ devedores, credores, onCarregarTudo, onVo
         num_parcelas: parseInt(form.num_parcelas),
         primeira_parcela_na_data_base: form.primeira_parcela_na_data_base,
         referencia: form.referencia || null,
+        indice_correcao:         form.indexador || "igpm",
+        data_inicio_atualizacao: form.data_inicio_atualizacao || null,
+        multa_percentual:        parseFloat(form.multa_pct) || 0,
+        juros_tipo:              form.juros_tipo || "fixo_1",
+        juros_am_percentual:     parseFloat(form.juros_am) || 0,
+        honorarios_percentual:   parseFloat(form.honorarios_pct) || 0,
+        despesas:                parseFloat(form.despesas) || 0,
+        art523_opcao:            form.art523_opcao || "nao_aplicar",
+        custas:                  form.custas || [],
       };
       const { parcelas } = await criarContratoComParcelas(payload);
       await onCarregarTudo();
@@ -235,6 +255,46 @@ export default function NovoContrato({ devedores, credores, onCarregarTudo, onVo
           </div>
 
         </div>
+      </div>
+
+      <DiretrizesContrato
+        value={form}
+        onChange={(campo, v) => setForm(f => ({ ...f, [campo]: v }))}
+      />
+
+      <div style={{ background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 10, padding: 12, marginTop: 12, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "#c2410c", textTransform: "uppercase", letterSpacing: ".05em" }}>
+            🏛 Custas Judiciais <span style={{ fontWeight: 400, color: "#9a3412" }}>(só correção monetária, sem juros)</span>
+          </p>
+          <button
+            onClick={() => setForm(f => ({ ...f, custas: [...(f.custas || []), { id: Date.now(), descricao: "", valor: "", data: "" }] }))}
+            style={{ background: "#c2410c", color: "#fff", border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}
+          >+ Custa</button>
+        </div>
+        {(form.custas || []).map((c, ci) => (
+          <div key={c.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input placeholder="Descrição" value={c.descricao}
+              onChange={e => setForm(f => ({ ...f, custas: f.custas.map((x, xi) => xi === ci ? { ...x, descricao: e.target.value } : x) }))}
+              style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none", fontFamily: "Plus Jakarta Sans" }} />
+            <input type="number" placeholder="Valor (R$)" value={c.valor}
+              onChange={e => setForm(f => ({ ...f, custas: f.custas.map((x, xi) => xi === ci ? { ...x, valor: e.target.value } : x) }))}
+              style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none", fontFamily: "Plus Jakarta Sans" }} />
+            <input type="date" value={c.data}
+              onChange={e => setForm(f => ({ ...f, custas: f.custas.map((x, xi) => xi === ci ? { ...x, data: e.target.value } : x) }))}
+              style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none" }} />
+            <button onClick={() => setForm(f => ({ ...f, custas: f.custas.filter((_, xi) => xi !== ci) }))}
+              style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 5, padding: "4px 7px", cursor: "pointer", fontSize: 11 }}>✕</button>
+          </div>
+        ))}
+        {(form.custas || []).length === 0 && (
+          <p style={{ fontSize: 11, color: "#c2410c", opacity: 0.6 }}>Nenhuma custa lançada. Clique em "+ Custa" para adicionar.</p>
+        )}
+        {(form.custas || []).length > 0 && (
+          <div style={{ borderTop: "1px solid #fed7aa", paddingTop: 6, marginTop: 4, fontSize: 11, color: "#c2410c", fontWeight: 700, textAlign: "right" }}>
+            Total custas: {fmt((form.custas || []).reduce((s, c) => s + (parseFloat(c.valor) || 0), 0))}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
