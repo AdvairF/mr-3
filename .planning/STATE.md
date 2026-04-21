@@ -1,6 +1,6 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — Phase 4 Plan 3 complete. DetalheDivida integra PagamentosDivida + badge Saldo quitado; TabelaDividas exibe badge lendo d.saldo_quitado persistido.
+Last activity: 2026-04-21 — Phase 4 completa. Service layer + PagamentosDivida.jsx + integração DetalheDivida/TabelaDividas. Code review: 5/5 issues fixed. Verificação: human_needed (5 UAT items).
 
 ## Project Reference
 
@@ -11,16 +11,16 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 4 — Pagamentos por Dívida (complete — 3/3 plans complete)
-**Current Plan:** 04-03 (done) — Phase 4 complete
+**Active Phase:** Phase 5 — Contratos com Parcelas (next)
+**Current Plan:** —
 **Blockers/Concerns:** None
 
 ## Roadmap v1.1
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | In progress (1/3) |
-| 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | Blocked on Phase 4 |
+| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | Complete (3/3) |
+| 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | Not started |
 
 ## Pendências para próximo milestone
 
