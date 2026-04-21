@@ -14,12 +14,13 @@ Sistema de cobrança jurídica para pequenos escritórios de advocacia (2–10 a
 
 **O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.**
 
-## Estado Atual (após v1.0)
+## Estado Atual (após Phase 4)
 
 - Banco relacional real: tabela `dividas` (UUID PK) + `devedores_dividas` (FK) — sem JSONB embutido
 - Módulo Dívidas no sidebar: tabela global com 4 filtros + tela de detalhe + gerenciamento de pessoas vinculadas
 - Nova Dívida: criação com co-devedores, busca dropdown, modal criação rápida, salvamento atômico
 - Motor de cálculo sequencial (Art. 354 CC, IGPM/IPCA/SELIC/INPC/Art.406/Art.523)
+- **Pagamentos por dívida (v1.1):** tabela `pagamentos_divida` + CRUD service + `PagamentosDivida.jsx` + badge "Saldo quitado" em DetalheDivida e TabelaDividas
 - Suite de regressão Vitest (7 casos TJGO) como prebuild gate
 - App.jsx ainda monolítico (~6.700 linhas) — extração progressiva em andamento
 
@@ -76,8 +77,8 @@ A evolução agora foca em:
 
 ### Ativos (v1.1)
 
-- [ ] Pagamento por dívida específica — lançar pagamento direto na tela DetalheDivida (Art.354 por escopo)
-- [ ] Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda, Empréstimos (pode subsumir Fase 04)
+- [x] Pagamento por dívida específica — lançar pagamento direto na tela DetalheDivida (Art.354 por escopo) — Phase 4 complete 2026-04-21
+- [ ] Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda, Empréstimos (Phase 5)
 
 ### Deferred (v1.2+)
 
@@ -141,4 +142,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Última atualização: 2026-04-20 — Milestone v1.1 Pagamentos e Contratos iniciado*
+*Última atualização: 2026-04-21 — Phase 4 completa: pagamentos por dívida com Art. 354 CC*
