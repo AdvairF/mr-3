@@ -62,7 +62,7 @@ Plans:
 - [x] 05-01-PLAN.md — DB migration (contratos_dividas table + dividas.contrato_id FK) + contratos.js service (criarContratoComParcelas, gerarPayloadParcelas)
 - [x] 05-02-PLAN.md — NovoContrato.jsx (form com devedor typeahead + parcelas preview) + TabelaContratos.jsx (lista global 6 colunas)
 - [x] 05-03-PLAN.md — ModuloContratos.jsx (4-view state machine) + DetalheContrato.jsx (header + financial summary green + parcelas table com saldo lazy)
-- [ ] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
+- [x] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
 - [ ] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
 **UI hint**: yes
 

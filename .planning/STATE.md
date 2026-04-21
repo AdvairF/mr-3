@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Pagamentos e Contratos
-current_plan: 05-04
+current_plan: 05-05
 status: in_progress
-last_updated: "2026-04-21T19:53:18Z"
-last_activity: "2026-04-21 — Phase 5 Plan 03 complete. DetalheContrato.jsx (header card, green financial summary f0fdf4, parcelas table with lazy saldo via listarPagamentos + calcularSaldoPorDividaIndividual) + ModuloContratos.jsx (4-view state machine lista/detalhe/novo/parcela-detalhe, parcelasPorContrato useMemo Map, contratosAtivos count badge) committed as 4849ee6. All acceptance criteria verified. Próxima: execute plan 05-04."
+last_updated: "2026-04-21T20:05:00Z"
+last_activity: "2026-04-21 — Phase 5 Plan 04 complete. TabelaDividas.jsx (CONTRATO_BADGE_META + inline badge in Credor cell) + DetalheDivida.jsx (onVerContrato optional prop + '← Ver contrato' link above PagamentosDivida) committed as e7454e3/dc6c5da. All acceptance criteria verified. Próxima: execute plan 05-05."
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 11
-  completed_plans: 9
-  percent: 82
+  completed_plans: 10
+  percent: 91
 ---
 
 # Mr. Cobranças — Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 ## Status
 
 **Active Phase:** Phase 5 — Contratos com Parcelas (in progress)
-**Current Plan:** 05-03
+**Current Plan:** 05-05
 **Blockers/Concerns:** Supabase migrations (contratos_dividas table + dividas.contrato_id FK) must be run manually before runtime data insertion works
 
 ## Roadmap v1.1
