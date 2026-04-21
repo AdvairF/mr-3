@@ -20,6 +20,7 @@
  * ALTER TABLE public.dividas ADD COLUMN IF NOT EXISTS saldo_quitado BOOLEAN DEFAULT FALSE;
  */
 
+import { dbGet, dbInsert, dbUpdate, dbDelete } from "../config/supabase.js";
 import { calcularSaldosPorDivida } from "../utils/devedorCalc.js";
 
 const TABLE = "pagamentos_divida";
