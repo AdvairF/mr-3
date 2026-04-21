@@ -57,3 +57,19 @@ export async function atualizarDivida(dividaUuid, campos) {
 export async function excluirDivida(dividaUuid) {
   return sb(`${TABLE}?id=eq.${dividaUuid}`, "DELETE");
 }
+
+/**
+ * Atualiza a coluna saldo_quitado de uma dívida.
+ * Chamado após cada operação de pagamento (criar/editar/excluir).
+ * TRUE quando saldo ≤ 0, FALSE quando saldo > 0 (per D-03).
+ *
+ * @param {string} dividaUuid — UUID da dívida
+ * @param {boolean} quitado — true se saldo ≤ 0, false se saldo > 0
+ * @returns {Promise<Array>}
+ */
+export async function atualizarSaldoQuitado(dividaUuid, quitado) {
+  return sb(`${TABLE}?id=eq.${dividaUuid}`, "PATCH", {
+    saldo_quitado: quitado,
+    updated_at: new Date().toISOString(),
+  });
+}
