@@ -28,15 +28,21 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 ### Phase 4: Pagamentos por Dívida
 **Goal**: Advogado pode fechar o ciclo financeiro de uma dívida individual — registrar pagamentos com data e valor, ver o histórico, corrigir lançamentos errados, e saber quando a dívida está quitada
 **Depends on**: Phase 3 (DetalheDivida existente como ponto de entrada)
-**Requirements**: PAG-01, PAG-02, PAG-03, PAG-04, PAG-05, PAG-06
-**Decision point**: Antes de qualquer código de service, resolver a decisão arquitetural aberta — reutilizar `pagamentos_parciais` com UI-only scoping (Posição A) ou criar nova tabela `pagamentos_divida` com FK explícita para `dividas` (Posição B). Registrar em PROJECT.md como decisão chave. Posição B é recomendada pela pesquisa (extensibilidade e auditabilidade), mas Posição A tem zero risco de migration.
+**Requirements**: PAG-01, PAG-02, PAG-03, PAG-04, PAG-05, PAG-06, PAG-07, PAG-08
+**Decision point**: Resolvido — Posição B (nova tabela `pagamentos_divida` com FK para `dividas`). Ver CONTEXT.md D-01.
 **Success Criteria** (what must be TRUE):
   1. Advogado abre a tela de uma dívida e consegue registrar um pagamento informando data, valor e observação — o novo pagamento aparece imediatamente na lista cronológica abaixo
   2. Advogado vê o histórico completo de pagamentos da dívida em ordem cronológica, com data, valor e observação de cada lançamento
   3. Advogado consegue editar ou excluir um pagamento lançado por engano, após confirmação, e o saldo é recalculado na mesma tela
   4. O saldo exibido na tela da dívida reflete a imputação Art. 354 CC sequencial sobre todos os pagamentos registrados para aquela dívida
   5. Quando o saldo calculado é ≤ 0, a dívida exibe o badge "Saldo quitado" na tela de detalhe
-**Plans**: TBD
+  6. `dividas.saldo_quitado` é persistido no banco após cada operação de pagamento
+  7. Badge "Saldo quitado" exibido na TabelaDividas lendo `dividas.saldo_quitado`
+**Plans**: 3 plans
+Plans:
+- [ ] 04-01-PLAN.md — Service layer: pagamentos.js (CRUD + calcularSaldoPorDividaIndividual) + atualizarSaldoQuitado em dividas.js
+- [ ] 04-02-PLAN.md — Componente PagamentosDivida.jsx: histórico, edição inline, exclusão com confirm, formulário de registro
+- [ ] 04-03-PLAN.md — Integração: montar PagamentosDivida em DetalheDivida + badge "Saldo quitado" em DetalheDivida e TabelaDividas
 **UI hint**: yes
 
 ### Phase 5: Contratos com Parcelas
@@ -58,5 +64,5 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 | 1. Refatoração Pessoas × Dívidas | v1.0 | 6/6 | Complete | 2026-04-20 |
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
-| 4. Pagamentos por Dívida | v1.1 | 0/? | Not started | — |
+| 4. Pagamentos por Dívida | v1.1 | 0/3 | Not started | — |
 | 5. Contratos com Parcelas | v1.1 | 0/? | Not started | — |
