@@ -49,7 +49,7 @@ export async function criarPagamento(payload) {
  * @returns {Promise<Array>}
  */
 export async function atualizarPagamento(pagamentoId, campos) {
-  return dbUpdate(TABLE, `id=eq.${pagamentoId}`, campos);
+  return dbUpdate(TABLE, pagamentoId, campos);
 }
 
 /**
@@ -58,7 +58,7 @@ export async function atualizarPagamento(pagamentoId, campos) {
  * @returns {Promise<any>}
  */
 export async function excluirPagamento(pagamentoId) {
-  return dbDelete(TABLE, `id=eq.${pagamentoId}`);
+  return dbDelete(TABLE, pagamentoId);
 }
 
 /**
