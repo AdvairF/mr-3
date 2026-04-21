@@ -3,33 +3,42 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Pagamentos e Contratos
 current_plan: 05-06
-status: in_progress
-last_updated: "2026-04-21T21:00:00Z"
-last_activity: "2026-04-21 — CR-06 planejado. 05-06-PLAN.md criado: adicionar encargos (Diretrizes do Contrato) ao NovoContrato + propagar para parcelas via gerarPayloadParcelas. Aguardando Migration 3 no Supabase SQL Editor (Task 1 human-checkpoint) antes de executar Tasks 2-6."
+status: paused
+last_updated: "2026-04-21T22:00:00Z"
+last_activity: "2026-04-21 — UAT Fase 5 revelou escopo incorreto: modelo real do usuário é 3 níveis (Dívida agregada → Múltiplas NFs/documentos → Cada NF com suas próprias parcelas/duplicatas), não 2 níveis (Contrato → Parcelas). Fase 5 pausada. v1.1 fecha apenas com Fase 4. Fase 5 redesenhada no v1.2."
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 12
   completed_plans: 10
-  percent: 83
+  percent: 50
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — CR-06 planejado. 05-06-PLAN.md criado: adicionar encargos (Diretrizes do Contrato) ao NovoContrato + propagar para parcelas via gerarPayloadParcelas. Aguardando Migration 3 no Supabase SQL Editor (Task 1 human-checkpoint) antes de executar Tasks 2-6.
+Last activity: 2026-04-21 — UAT Fase 5 revelou escopo incorreto. Fase 5 pausada para redesenho no v1.2. v1.1 fecha com Fase 4 apenas.
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Valor central:** O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.
-**Foco atual:** Milestone v1.1 — Pagamentos e Contratos
+**Foco atual:** Milestone v1.1 encerrado com Fase 4. Próximo: v1.2 com Fase 5 redesenhada.
 
 ## Status
 
-**Active Phase:** Phase 5 — Contratos com Parcelas (in progress)
-**Current Plan:** 05-05
-**Blockers/Concerns:** Supabase migrations (contratos_dividas table + dividas.contrato_id FK) must be run manually before runtime data insertion works
+**Active Phase:** Phase 5 — Contratos com Parcelas — **PAUSED — scope revision needed**
+**Current Plan:** 05-06 (parcialmente executado — Tasks 2-5 commitadas, T6 descartada)
+**Blockers/Concerns:** Escopo incorreto descoberto em UAT. Modelo 2 níveis (Contrato → Parcelas) não reflete o fluxo real do advogado, que é 3 níveis. Ver 05-PAUSED.md.
+
+## Commits 05-06 — draft, NÃO descartar, reaproveitar no v1.2
+
+| Commit | Arquivo | Nota |
+|--------|---------|------|
+| `962198e` | DiretrizesContrato.jsx (criado) | Reutilizável no v1.2 sem alteração |
+| `c1e5c03` | DividaForm.jsx (refatorado) | Melhoria legítima, manter |
+| `7efb16f` | NovoContrato.jsx (encargos) | Form válido — adaptar no v1.2 para novo modelo |
+| `ec60b1c` | contratos.js (propagação) | Lógica de propagação reutilizável no v1.2 |
 
 ## Roadmap v1.1
 

@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 Refatoração Estrutural** — Phases 1–3 (shipped 2026-04-20)
-- 🚧 **v1.1 Pagamentos e Contratos** — Phases 4–5 (active)
+- ✅ **v1.1 Pagamentos** — Phase 4 only (shipped 2026-04-21)
+- 🔜 **v1.2 Contratos Redesenhados** — Phase 5 (redesenho 3 níveis) + backlog (04-06 saldo_atual)
 
 ## Phases
 
@@ -18,10 +19,14 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 </details>
 
-### 🚧 v1.1 — Pagamentos e Contratos
+### ✅ v1.1 — Pagamentos (SHIPPED 2026-04-21)
 
 - [x] **Phase 4: Pagamentos por Dívida** — Advogado registra, consulta e remove pagamentos diretamente na tela da dívida, com saldo recalculado via Art. 354 CC
-- [ ] **Phase 5: Contratos com Parcelas** — Advogado cria contratos (NF/Duplicata, Compra e Venda, Empréstimo) que geram parcelas reais em `dividas`, visualiza lista global e detalhe com saldo por parcela
+
+### 🔜 v1.2 — Contratos Redesenhados
+
+- [ ] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Dívida agregada → Múltiplas NFs/documentos → Cada NF com suas próprias parcelas/duplicatas. Ver `.planning/phases/05-contratos-com-parcelas/05-PAUSED.md` para contexto completo e pontos reutilizáveis.
+- [ ] **04-06 backlog: persistir saldo_atual no banco** — PAG-10, deferred desde v1.1
 
 ## Phase Details
 
@@ -63,9 +68,10 @@ Plans:
 - [x] 05-02-PLAN.md — NovoContrato.jsx (form com devedor typeahead + parcelas preview) + TabelaContratos.jsx (lista global 6 colunas)
 - [x] 05-03-PLAN.md — ModuloContratos.jsx (4-view state machine) + DetalheContrato.jsx (header + financial summary green + parcelas table com saldo lazy)
 - [x] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
-- [ ] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
-- [ ] 05-06-PLAN.md — CR-06: DiretrizesContrato.jsx (extract) + NovoContrato encargos + gerarPayloadParcelas propagation + DetalheContrato display + Migration 3
+- [x] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
+- [~] 05-06-PLAN.md — CR-06 parcial: Tasks 2-5 commitadas (DiretrizesContrato, DividaForm, NovoContrato, contratos.js). T6 (DetalheContrato) descartada. **DRAFT — reaproveitar no v1.2**
 **UI hint**: yes
+**Status**: PAUSED — scope revision needed. Ver 05-PAUSED.md.
 
 ## Progress
 
@@ -75,4 +81,4 @@ Plans:
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
-| 5. Contratos com Parcelas | v1.1 | 3/5 | In progress | — |
+| 5. Contratos com Parcelas | v1.2 | —/— | **Paused — scope revision** | — |
