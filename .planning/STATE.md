@@ -1,17 +1,17 @@
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-20 — Milestone v1.0 Refatoração Estrutural arquivado. Planning próximo milestone.
+Last activity: 2026-04-20 — Milestone v1.1 Pagamentos e Contratos iniciado. Definindo requirements.
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-04-20)
 
 **Valor central:** O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.
-**Foco atual:** Planning Milestone v1.1
+**Foco atual:** Milestone v1.1 — Pagamentos e Contratos
 
 ## Status
 
-**Active Phase:** None — entre milestones
+**Active Phase:** None — definindo requirements
 **Current Plan:** —
 **Blockers/Concerns:** —
 

@@ -66,16 +66,31 @@ A evolução agora foca em:
 - ✓ Gestão de usuários (somente admin)
 - ✓ Suite de regressão Vitest como prebuild gate
 
-### Ativos (próximo milestone)
+## Milestone Atual: v1.1 — Pagamentos e Contratos
+
+**Goal:** Fechar o ciclo financeiro da dívida — registrar pagamentos com Art. 354 CC e modelar contratos com parcelas como dívidas agregadas.
+
+**Target features:**
+- Pagamento por dívida específica — lançar pagamento direto na tela `DetalheDivida`; Art. 354 CC por escopo
+- Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda, Empréstimos; contrato agrega N parcelas (cada parcela = dívida)
+
+### Ativos (v1.1)
 
 - [ ] Pagamento por dívida específica — lançar pagamento direto na tela DetalheDivida (Art.354 por escopo)
-- [ ] Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda (pode subsumir Fase 04)
-- [ ] Limpeza Supabase — deletar pessoas "Criar %" e dívidas de teste (operacional)
-- [ ] Extração progressiva de componentes do App.jsx monolítico
+- [ ] Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda, Empréstimos (pode subsumir Fase 04)
+
+### Deferred (v1.2+)
+
 - [ ] Kanban de cobranças por etapa (aguardando, notificado, em acordo, encerrado)
 - [ ] Timeline cronológica por devedor (histórico de eventos)
 - [ ] Alertas automáticos de vencimentos, parcelas atrasadas e prazos processuais
 - [ ] Sistema de templates de petição editáveis pelo advogado
+
+### Housekeeping (pontual, fora de milestone)
+
+- [ ] Limpeza Supabase — deletar pessoas "Criar %" e dívidas de teste (operacional)
+- [ ] Extração progressiva de componentes do App.jsx monolítico
+- [ ] Config Vercel — desabilitar auto-deploy preview do submodule mr-3
 
 ### Fora do Escopo
 
@@ -126,4 +141,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Última atualização: 2026-04-20 após milestone v1.0 — Refatoração Estrutural*
+*Última atualização: 2026-04-20 — Milestone v1.1 Pagamentos e Contratos iniciado*
