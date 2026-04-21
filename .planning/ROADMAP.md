@@ -44,7 +44,8 @@ Plans:
 - [x] 04-02-PLAN.md — Componente PagamentosDivida.jsx: histórico, edição inline, exclusão com confirm, formulário de registro
 - [x] 04-03-PLAN.md — Integração: montar PagamentosDivida em DetalheDivida + badge "Saldo quitado" em DetalheDivida e TabelaDividas
 - [x] 04-04-PLAN.md — CR-03 gap closure: recalcularESincronizar no mount + Total Pago por pagamentos_divida (PAG-05, PAG-07)
-- [ ] 04-05-PLAN.md — CR-04 gap closure: sincronizar dividas.status com saldo_quitado (PAG-09)
+- [x] 04-05-PLAN.md — CR-04 gap closure: sincronizar dividas.status com saldo_quitado (PAG-09)
+- [~] 04-06-PLAN.md — CR-05 backlog v1.2: persistir saldo_atual no banco (PAG-10) — DEFERRED
 **UI hint**: yes
 
 ### Phase 5: Contratos com Parcelas
@@ -56,7 +57,13 @@ Plans:
   2. Advogado vê a lista global de contratos com tipo, partes envolvidas, valor total, número de parcelas e quantas estão em atraso
   3. Advogado abre o detalhe de um contrato e vê o header com os dados do contrato mais uma tabela de parcelas onde cada parcela exibe seu saldo individual calculado via Art. 354 CC sobre os pagamentos registrados para aquela parcela
   4. Parcelas de contratos aparecem na tabela global de dívidas (ModuloDividas) com uma indicação visual de que pertencem a um contrato — advogado consegue distinguir dívidas avulsas de parcelas contratuais sem abrir o detalhe
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 05-01-PLAN.md — DB migration (contratos_dividas table + dividas.contrato_id FK) + contratos.js service (criarContratoComParcelas, gerarPayloadParcelas)
+- [ ] 05-02-PLAN.md — NovoContrato.jsx (form com devedor typeahead + parcelas preview) + TabelaContratos.jsx (lista global 6 colunas)
+- [ ] 05-03-PLAN.md — ModuloContratos.jsx (4-view state machine) + DetalheContrato.jsx (header + financial summary green + parcelas table com saldo lazy)
+- [ ] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
+- [ ] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
 **UI hint**: yes
 
 ## Progress
@@ -66,5 +73,5 @@ Plans:
 | 1. Refatoração Pessoas × Dívidas | v1.0 | 6/6 | Complete | 2026-04-20 |
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
-| 4. Pagamentos por Dívida | v1.1 | 3/3 | Complete | 2026-04-21 |
-| 5. Contratos com Parcelas | v1.1 | 0/? | Not started | — |
+| 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
+| 5. Contratos com Parcelas | v1.1 | 0/5 | Not started | — |
