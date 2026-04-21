@@ -2,181 +2,206 @@
 phase: 04-pagamentos-por-divida
 reviewed: 2026-04-21T00:00:00Z
 depth: standard
-files_reviewed: 5
+files_reviewed: 2
 files_reviewed_list:
-  - src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx
   - src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx
-  - src/mr-3/mr-cobrancas/src/components/TabelaDividas.jsx
-  - src/mr-3/mr-cobrancas/src/services/dividas.js
-  - src/mr-3/mr-cobrancas/src/services/pagamentos.js
+  - src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx
 findings:
-  critical: 2
+  critical: 0
   warning: 3
-  info: 3
-  total: 8
+  info: 2
+  total: 5
 status: issues_found
 ---
 
-# Phase 04: Code Review Report
+# Phase 04: Code Review Report (Gap Closure — plan 04-04)
 
-**Reviewed:** 2026-04-21
-**Depth:** standard
-**Files Reviewed:** 5
+**Reviewed:** 2026-04-21  
+**Depth:** standard  
+**Files Reviewed:** 2  
 **Status:** issues_found
 
 ## Summary
 
-This phase introduces the payments-per-debt module (pagamentos_divida table, CRUD UI, and saldo_quitado sync). The architecture is sound: the `calcularSaldoPorDividaIndividual` adapter wraps the existing Art. 354 CC motor cleanly, and the optimistic state pattern in `PagamentosDivida` avoids full page reloads.
+This review covers the two surgical changes introduced by plan 04-04:
 
-Two critical bugs were found. Both are in `pagamentos.js` and involve a mismatch between the actual `dbUpdate`/`dbDelete` helper signatures (defined in `supabase.js`) and how the service calls them — resulting in malformed Supabase REST query strings at runtime. Every edit and delete operation will silently target zero rows. There are also three warnings covering missing edit-form validation, a potential NaN write, and an unguarded `pendingActionRef.current` dereference.
+1. `PagamentosDivida.jsx` — `recalcularESincronizar` is now called on mount after loading payments; a new optional prop `onTotalPagoChange` was added to emit the raw payment sum.
+2. `DetalheDivida.jsx` — added `totalPagoDivida` state (null initially), wired to `onTotalPagoChange` on `<PagamentosDivida>`, displayed in the "Total Pago" financial card instead of the old `totalPago` that read from `pagamentos_parciais`.
 
----
+The prop contract is correct: `onTotalPagoChange` is optional and guarded on lines 74-77 of `PagamentosDivida`. The three warnings below concern an unawaited async call on mount (producing a race between `setLoading(false)` and `onTotalPagoChange`), a spurious DB write triggered on every page load, and an unhandled error path that leaves the "Total Pago" card permanently at `"—"` on fetch failure. Two info items flag dead code left over from the old computation path.
 
-## Critical Issues
-
-### CR-01: `dbUpdate` called with pre-built filter string — query becomes double-encoded
-
-**File:** `src/mr-3/mr-cobrancas/src/services/pagamentos.js:52`
-
-**Issue:** `dbUpdate` is defined in `supabase.js` as:
-```js
-export const dbUpdate = (t, id, b) => sb(t, "PATCH", b, `?id=eq.${id}`);
-```
-Its second parameter (`id`) is meant to be a bare UUID. `pagamentos.js` passes the full filter expression `id=eq.${pagamentoId}` as that parameter, so the appended query string becomes `?id=eq.id=eq.<uuid>`. Supabase receives a malformed filter and matches zero rows — the PATCH silently does nothing, leaving the record unchanged while the UI shows "Pagamento atualizado".
-
-**Fix:** Pass only the UUID, not the filter expression:
-```js
-// pagamentos.js line 52 — was:
-return dbUpdate(TABLE, `id=eq.${pagamentoId}`, campos);
-
-// fix:
-return dbUpdate(TABLE, pagamentoId, campos);
-```
-
----
-
-### CR-02: `dbDelete` called with pre-built filter string — delete targets zero rows
-
-**File:** `src/mr-3/mr-cobrancas/src/services/pagamentos.js:61`
-
-**Issue:** Same class of bug as CR-01. `dbDelete` is defined as:
-```js
-export const dbDelete = (t, id) => sb(t, "DELETE", null, `?id=eq.${id}`);
-```
-Calling it with `id=eq.${pagamentoId}` produces the URL `?id=eq.id=eq.<uuid>`. The DELETE never fires on the correct row. The record persists in the database even though the UI removes the row from local state and shows "Pagamento excluído". On the next reload the deleted payment reappears.
-
-**Fix:**
-```js
-// pagamentos.js line 61 — was:
-return dbDelete(TABLE, `id=eq.${pagamentoId}`);
-
-// fix:
-return dbDelete(TABLE, pagamentoId);
-```
+No critical issues were found in the gap closure changes.
 
 ---
 
 ## Warnings
 
-### WR-01: Edit form submits without validating data or valor — can write NaN / empty date
+### WR-01: `recalcularESincronizar` not awaited on mount — `onTotalPagoChange` races with `setLoading(false)`
 
-**File:** `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx:109-125`
+**File:** `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx:54-62`
 
-**Issue:** `handleSalvarEdit` calls `parseFloat(editForm.valor)` and passes it directly to `atualizarPagamento`. If the user clears the valor field, `parseFloat("")` returns `NaN`, which is written to the database. Similarly, `editForm.data_pagamento` can be an empty string (user clears the date field while editing) and is sent as-is without validation. The create form (lines 73-75) correctly gates on empty fields, but the edit path has no such guard.
+**Issue:** In the mount `useEffect`, the `.then()` callback calls `recalcularESincronizar(lista)` but does not await it. `recalcularESincronizar` is an `async` function that internally calls `await atualizarSaldoQuitado(...)` before invoking `onTotalPagoChange`. Because the returned Promise is dropped, `.finally(() => setLoading(false))` runs immediately after `setPagamentos(lista)` — before the DB write completes and before `onTotalPagoChange` fires.
 
-**Fix:** Add validation at the top of `handleSalvarEdit`:
+Observable consequence: `DetalheDivida` exits the loading state (spinner removed) with `totalPagoDivida` still `null`, so the "Total Pago" card displays `"—"` for an additional network round-trip duration even though all payment data is already available. The card only updates when `atualizarSaldoQuitado` resolves and the callback eventually fires asynchronously.
+
 ```js
-async function handleSalvarEdit(row) {
-  if (!editForm.data_pagamento || !editForm.valor || isNaN(parseFloat(editForm.valor))) {
-    toast.error("Preencha data e valor");
-    return;
-  }
-  // ... rest of function unchanged
-}
+// Current (PagamentosDivida.jsx lines 54-62):
+listarPagamentos(divida.id)
+  .then(data => {
+    const lista = Array.isArray(data) ? data : [];
+    setPagamentos(lista);
+    recalcularESincronizar(lista);   // Promise dropped — no await
+  })
+  .catch(e => toast.error("Erro ao carregar pagamentos: " + e.message))
+  .finally(() => setLoading(false));
+```
+
+**Fix:** Await the call inside the `.then()` callback so `setLoading(false)` only fires after `onTotalPagoChange` has been called:
+
+```js
+listarPagamentos(divida.id)
+  .then(async (data) => {                       // async callback
+    const lista = Array.isArray(data) ? data : [];
+    setPagamentos(lista);
+    await recalcularESincronizar(lista);         // now awaited
+  })
+  .catch(e => toast.error("Erro ao carregar pagamentos: " + e.message))
+  .finally(() => setLoading(false));
 ```
 
 ---
 
-### WR-02: `recalcularESincronizar` silently swallows calculation errors — saldo_quitado can desync
+### WR-02: `atualizarSaldoQuitado` fires on every mount — spurious DB write on read-only views
 
-**File:** `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx:63-68`
+**File:** `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx:58, 65-78`
 
-**Issue:** `recalcularESincronizar` is called with `await` inside try/catch blocks in `handleCriar`, `handleSalvarEdit`, and `handleExcluir`. However, if `atualizarSaldoQuitado` throws (e.g. network error, RLS rejection), the error propagates up to the caller's catch, which shows a generic "Erro ao registrar/atualizar/excluir" message. This means the user believes the primary operation succeeded (the toast fires correctly) but `saldo_quitado` in the database is out of sync with no indication. The issue is that `recalcularESincronizar` does not have its own error handling and is not separated from the primary mutation's catch context.
+**Issue:** `recalcularESincronizar` calls `await atualizarSaldoQuitado(divida.id, quitado)` unconditionally. Before this gap-closure change, `recalcularESincronizar` was only called from mutation handlers (create, update, delete). Now it is also called on mount, which means every time a user opens the debt detail screen, the component issues an unnecessary PATCH to `dividas` even when no payment was modified.
 
-**Fix:** Isolate the sync step with its own error handling so a sync failure does not mask or get masked by the primary mutation:
+This produces three problems:
+
+- Extra write load on Supabase for a read-only navigation event.
+- If `atualizarSaldoQuitado` fails transiently (network blip, RLS edge case), users see the toast "Aviso: falha ao sincronizar status quitado" when they have done nothing — a confusing false alarm.
+- It weakens the invariant that `saldo_quitado` changes only in response to payment mutations, making audit logs harder to read.
+
+**Fix (two options):**
+
+Option A — Emit saldo and total from mount separately, without calling the full sync helper:
+
 ```js
-async function recalcularESincronizar(listaPagamentos) {
+useEffect(() => {
+  setLoading(true);
+  listarPagamentos(divida.id)
+    .then(async (data) => {
+      const lista = Array.isArray(data) ? data : [];
+      setPagamentos(lista);
+      // Mount: compute and emit only — no DB write
+      const novoSaldo = calcularSaldoPorDividaIndividual(divida, lista, hoje);
+      if (onSaldoChange) onSaldoChange(novoSaldo);
+      if (onTotalPagoChange) {
+        const total = lista.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+        onTotalPagoChange(total);
+      }
+    })
+    .catch(e => toast.error("Erro ao carregar pagamentos: " + e.message))
+    .finally(() => setLoading(false));
+}, [divida.id]);
+// recalcularESincronizar unchanged — still writes to DB — still called only from mutations
+```
+
+Option B — Add a boolean parameter to `recalcularESincronizar` to suppress the write:
+
+```js
+async function recalcularESincronizar(listaPagamentos, { writeBack = true } = {}) {
   const novoSaldo = calcularSaldoPorDividaIndividual(divida, listaPagamentos, hoje);
   const quitado = novoSaldo <= 0;
-  try {
-    await atualizarSaldoQuitado(divida.id, quitado);
-  } catch (e) {
-    toast.error("Aviso: falha ao sincronizar status quitado — " + e.message);
+  if (writeBack) {
+    try {
+      await atualizarSaldoQuitado(divida.id, quitado);
+    } catch (e) {
+      toast.error("Aviso: falha ao sincronizar status quitado — " + e.message);
+    }
   }
   if (onSaldoChange) onSaldoChange(novoSaldo);
+  if (onTotalPagoChange) {
+    const total = (listaPagamentos || []).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+    onTotalPagoChange(total);
+  }
 }
+
+// On mount:
+recalcularESincronizar(lista, { writeBack: false });
 ```
 
 ---
 
-### WR-03: `pendingActionRef.current` is read without null-guard in `handleConfirmarRemoverPrincipal`
+### WR-03: `onTotalPagoChange` never called on fetch error — "Total Pago" card stuck at `"—"` on failure
 
-**File:** `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx:52-53`
+**File:** `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx:60`
 
-**Issue:** `handleConfirmarRemoverPrincipal` destructures `pendingActionRef.current` with `|| {}` as a fallback:
+**Issue:** If `listarPagamentos` rejects, the `.catch()` shows a toast but never calls `onTotalPagoChange`. `DetalheDivida` keeps `totalPagoDivida === null` permanently. The "Total Pago" card renders `"—"` forever after the failure — visually identical to "still loading", giving the user no indication whether the dash is a transient or a permanent state.
+
+This asymmetry is notable because `saldoAtual` (the "Saldo Atualizado" card in the same row) does have a fallback: if `saldoDividaLocal` is null, `DetalheDivida` falls back to `saldoDivida` computed from `pagamentos_parciais`. `totalPagoDivida` has no such fallback.
+
+**Fix:** Emit `0` (or a fallback computed from `pagamentos_parciais`) in the catch path:
+
 ```js
-const { doRemove, resolve } = pendingActionRef.current || {};
-```
-This prevents a crash, but if `handleConfirmarRemoverPrincipal` is somehow called when `pendingActionRef.current` is already null (double-click on confirm, React StrictMode double-invoke, etc.), `doRemove` will be `undefined`, `resolve` will be `undefined`, and the modal will close silently with no action performed and no feedback to the user. The `if (doRemove)` guard below (line 54) prevents the actual remove from firing, but `resolve()` is never called, leaving the caller's `Promise` permanently pending.
-
-**Fix:** Add an early return if `pendingActionRef.current` is null:
-```js
-async function handleConfirmarRemoverPrincipal() {
-  setShowPrincipalWarning(false);
-  if (!pendingActionRef.current) return;
-  const { doRemove, resolve } = pendingActionRef.current;
-  pendingActionRef.current = null;
-  // ... rest unchanged
-}
+.catch(e => {
+  toast.error("Erro ao carregar pagamentos: " + e.message);
+  if (onTotalPagoChange) onTotalPagoChange(0);  // resolves card to R$ 0,00 instead of "—"
+})
 ```
 
 ---
 
 ## Info
 
-### IN-01: Hardcoded Supabase publishable key exposed in source
+### IN-01: `totalPago` and `calcularTotalPagoPorDivida` are dead code after 04-04
 
-**File:** `src/mr-3/mr-cobrancas/src/config/supabase.js:3`
+**File:** `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx:7, 85-86`
 
-**Issue:** `SUPABASE_KEY` is a publishable (anon) key embedded in source. For a Supabase project with RLS enabled this is expected and not a secret, but the key is committed to version control. If the project is ever made public or the key grants broader permissions than intended, this becomes exploitable. Using an environment variable is the conventional practice.
+**Issue:** Before 04-04 the "Total Pago" card used `totalPago` (computed from `pagamentos_parciais` via `calcularTotalPagoPorDivida`). After 04-04 it uses `totalPagoDivida` (from `onTotalPagoChange`). The old computation was not removed:
 
-**Fix:** Move to an environment variable:
+- Line 7: `calcularTotalPagoPorDivida` is still imported.
+- Lines 85-86: `pagoPorDividaMap` and `totalPago` are computed on every render.
+- Neither is referenced in any JSX or logic path.
+
+This is confusing to future readers: `totalPago` looks like it might be an intentional fallback, but the card renders `"—"` on error, not `totalPago`. The intent is ambiguous.
+
+**Fix (choose one):**
+
+Remove the dead code entirely:
+
 ```js
-export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Remove from line 7:
+import { calcularSaldosPorDivida } from "../utils/devedorCalc.js";
+// (drop calcularTotalPagoPorDivida from the import)
+
+// Remove lines 85-86:
+// const pagoPorDividaMap = devedor ? calcularTotalPagoPorDivida(...) : {};
+// const totalPago = pagoPorDividaMap[String(divida.id)] ?? 0;
+```
+
+Or make it a real fallback (which also resolves WR-03 without touching PagamentosDivida):
+
+```js
+// Line 81 — initialize with the stale pagamentos_parciais value
+const [totalPagoDivida, setTotalPagoDivida] = useState(totalPago ?? null);
+//                                                       ^^^^^^^^^
+// totalPago must be computed above this line (as it currently is)
 ```
 
 ---
 
-### IN-02: `fmtBRL` and `fmtData` helpers duplicated across three files
+### IN-02: Duplicate comment label `{/* 7. */}` on two separate JSX blocks
 
-**File:** `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx:10-13`, `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx:15-18`, `src/mr-3/mr-cobrancas/src/components/TabelaDividas.jsx:6-14`
+**File:** `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx:209, 221`
 
-**Issue:** The `fmtBRL` and `fmtData` utility functions are copy-pasted identically across all three component files. Any future change (locale, date format) needs to be applied in three places.
+**Issue:** Two consecutive comment blocks are both labeled `{/* 7. ... */}` — one for the "Editar Dívida" button and one for the principal removal warning modal. This is a minor documentation error that predates 04-04 but is worth noting for clarity.
 
-**Fix:** Extract to a shared utility file, e.g. `src/utils/format.js`, and import from there.
-
----
-
-### IN-03: `STATUS_DIVIDA_META` object duplicated in two components
-
-**File:** `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx:15-19`, `src/mr-3/mr-cobrancas/src/components/TabelaDividas.jsx:17-21`
-
-**Issue:** The status badge map and `StatusBadgeDivida` component are defined independently in both files with identical content. Adding a new status (e.g. "suspenso") requires editing both files.
-
-**Fix:** Move `STATUS_DIVIDA_META` and `StatusBadgeDivida` to a shared component file (e.g. `src/components/ui/StatusBadgeDivida.jsx`).
+**Fix:** Renumber the modal to `{/* 8. D-05 PRINCIPAL removal warning modal */}`.
 
 ---
 
-_Reviewed: 2026-04-21_
-_Reviewer: Claude (gsd-code-reviewer)_
+_Reviewed: 2026-04-21_  
+_Reviewer: Claude (gsd-code-reviewer)_  
 _Depth: standard_
