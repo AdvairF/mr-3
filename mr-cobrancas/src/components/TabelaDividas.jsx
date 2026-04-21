@@ -20,6 +20,12 @@ const STATUS_DIVIDA_META = {
   "acordo":      { bg: "#fef3c7", cor: "#d97706", label: "Acordo" },
 };
 
+const CONTRATO_BADGE_META = {
+  "NF/Duplicata":   { label: "[NF]",    bg: "#dbeafe", cor: "#1d4ed8" },
+  "Compra e Venda": { label: "[C&V]",   bg: "#fef3c7", cor: "#d97706" },
+  "Empréstimo":     { label: "[Empr.]", bg: "#ede9fe", cor: "#4c1d95" },
+};
+
 function StatusBadgeDivida({ status }) {
   const s = STATUS_DIVIDA_META[status] || { bg: "#f1f5f9", cor: "#64748b", label: status };
   return (
@@ -100,6 +106,25 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                         ? credor.nome
                         : <span style={{ color: "#94a3b8", fontStyle: "italic" }}>— sem credor</span>
                       }
+                      {d.contrato_id != null && d._contrato_tipo != null && (() => {
+                        const m = CONTRATO_BADGE_META[d._contrato_tipo] || { label: d._contrato_tipo, bg: "#f1f5f9", cor: "#64748b" };
+                        return (
+                          <span style={{
+                            display: "inline-block",
+                            background: m.bg,
+                            color: m.cor,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 99,
+                            marginLeft: 4,
+                            whiteSpace: "nowrap",
+                            verticalAlign: "middle",
+                          }}>
+                            {m.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={td}>{fmtBRL(d.valor_total)}</td>
                     <td style={td}>
