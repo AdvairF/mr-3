@@ -60,6 +60,7 @@ import FilaDevedor from "./components/FilaDevedor.jsx";
 
 // Módulo de Dívidas
 import ModuloDividas from "./components/ModuloDividas.jsx";
+import ModuloContratos from "./components/ModuloContratos.jsx";
 
 // Cálculo de saldo devedor (compartilhado com FilaDevedor)
 import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos, calcularPlanilhaCompleta } from "./utils/devedorCalc.js";
@@ -128,6 +129,8 @@ const I = {
   fila: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
   // Dívidas — documento com linhas de valor (diferenciado de I.proc pelo ponto de cifrão)
   dividas: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="13" x2="8" y2="13"/><line x1="12" y1="17" x2="8" y2="17"/><line x1="16" y1="13" x2="16.01" y2="13"/></svg>,
+  // Contratos — documento com grid (motif distinto de I.dividas e I.proc)
+  contratos: <svg style={{ width: 18, height: 18, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/><rect x="8" y="9" width="3" height="2" rx="0.5"/></svg>,
 };
 // ═══════════════════════════════════════════════════════════════
 // useConfirm HOOK — modal de confirmação customizado
@@ -8320,11 +8323,12 @@ export default function App() {
   const [lembretesList, setLembretesList] = useState([]);
   const [allPagamentos, setAllPagamentos] = useState([]);
   const [allDividas, setAllDividas] = useState([]);
+  const [allContratos, setAllContratos] = useState([]);
 
   const carregarTudo = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg, lems, pgtos, divs] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos] = await Promise.all([
         dbGet("devedores"),
         dbGet("credores"),
         dbGet("processos"),
@@ -8333,12 +8337,15 @@ export default function App() {
         dbGet("lembretes", "order=data_prometida.asc"),
         dbGet("pagamentos_parciais"),
         dbGet("dividas"),
+        dbGet("contratos_dividas", "order=created_at.desc"),
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
       setAllDividas(Array.isArray(divs) ? divs : []);
+      setAllContratos(Array.isArray(contratos) ? contratos : []);
       // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
       const parseJ = v => { if (!v) return []; if (Array.isArray(v)) return v; try { const r = JSON.parse(v); return Array.isArray(r) ? r : []; } catch { return []; } };
+      const contratosMap = new Map((contratos || []).map(c => [c.id, c.tipo]));
       const dividasMap = new Map();
       (divs || []).forEach(div => {
         const k = String(div.devedor_id);
@@ -8352,6 +8359,7 @@ export default function App() {
           juros_am: div.juros_am_percentual,
           multa_pct: div.multa_percentual,
           honorarios_pct: div.honorarios_percentual,
+          _contrato_tipo: div.contrato_id ? (contratosMap.get(div.contrato_id) ?? null) : null,
         });
       });
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
@@ -8432,6 +8440,7 @@ export default function App() {
     { id: "dashboard", label: "Dashboard", icon: I.dash, color: "#6366f1", bg: "rgba(99,102,241,.18)" },
     { id: "devedores", label: "Pessoas", icon: I.dev, color: "#ec4899", bg: "rgba(236,72,153,.18)" },
     { id: "dividas", label: "Dívidas", icon: I.dividas, color: "#7c3aed", bg: "rgba(124,58,237,.18)" },
+    { id: "contratos", label: "Contratos", icon: I.contratos, color: "#0d9488", bg: "rgba(13,148,136,.18)" },
     { id: "credores", label: "Credores", icon: I.cred, color: "#14b8a6", bg: "rgba(20,184,166,.18)" },
     { id: "calculadora", label: "Calculadora", icon: I.calc, color: "#f59e0b", bg: "rgba(245,158,11,.18)" },
     { id: "relatorios", label: "Relatórios", icon: I.rel, color: "#10b981", bg: "rgba(16,185,129,.18)" },
@@ -8466,6 +8475,18 @@ export default function App() {
       case "peticao": return <GerarPeticao devedores={devedores} credores={credores} />;
       case "dividas": return (
         <ModuloDividas
+          allDividas={allDividas}
+          devedores={devedores}
+          credores={credores}
+          allPagamentos={allPagamentos}
+          hoje={hoje_app}
+          onCarregarTudo={carregarTudo}
+          setTab={setTab}
+        />
+      );
+      case "contratos": return (
+        <ModuloContratos
+          allContratos={allContratos}
           allDividas={allDividas}
           devedores={devedores}
           credores={credores}
