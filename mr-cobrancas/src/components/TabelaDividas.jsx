@@ -109,7 +109,25 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                     </td>
                     <td style={td}>{fmtData(d.data_vencimento)}</td>
                     <td style={td}><StatusBadgeDivida status={d.status} /></td>
-                    <td style={td}><AtrasoCell dataVencimento={d.data_vencimento} /></td>
+                    <td style={td}>
+                      {d.saldo_quitado === true
+                        ? (
+                          <span style={{
+                            display: "inline-block",
+                            background: "#dcfce7",
+                            color: "#065f46",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "3px 8px",
+                            borderRadius: 99,
+                            whiteSpace: "nowrap",
+                          }}>
+                            Saldo quitado
+                          </span>
+                        )
+                        : <AtrasoCell dataVencimento={d.data_vencimento} />
+                      }
+                    </td>
                     <td style={td} onClick={e => e.stopPropagation()}>
                       <Btn sm outline onClick={() => onVerDetalhe(d)}>Ver Detalhe</Btn>
                     </td>
