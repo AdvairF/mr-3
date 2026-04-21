@@ -63,7 +63,11 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange }) {
   async function recalcularESincronizar(listaPagamentos) {
     const novoSaldo = calcularSaldoPorDividaIndividual(divida, listaPagamentos, hoje);
     const quitado = novoSaldo <= 0;
-    await atualizarSaldoQuitado(divida.id, quitado);
+    try {
+      await atualizarSaldoQuitado(divida.id, quitado);
+    } catch (e) {
+      toast.error("Aviso: falha ao sincronizar status quitado — " + e.message);
+    }
     if (onSaldoChange) onSaldoChange(novoSaldo);
   }
 
