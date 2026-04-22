@@ -1,192 +1,399 @@
-# Domain Pitfalls — v1.1 Pagamentos e Contratos
+# Domain Pitfalls — Mr. Cobranças
 
-**Domain:** Brownfield — adding payments (Art. 354 CC) and installment contracts to existing Brazilian legal debt SPA
-**Researched:** 2026-04-20
-**Confidence:** HIGH — all findings derived from direct codebase inspection + Brazilian Civil Code text
-
----
-
-## Critical Pitfalls
+**Domain:** Brownfield — legal debt-collection SPA (Brazil), React 18 + Vite + Supabase
+**Researched:** 2026-04-22 (v1.4 section added); original research 2026-04-20 (v1.1 section)
+**Confidence:** HIGH — all findings derived from direct codebase inspection (devedorCalc.js, contratos.js, pagamentos.js, supabase.js) and known PostgreSQL / browser-PDF behaviour
 
 ---
 
-## 1. Column Alias Desync — The `pagamentos_divida` Mirror Problem
+# Part A — v1.4 Pitfalls: Pagamentos por Contrato + PDF Demonstrativo
 
-**Risk:**
-The existing system stores dívidas with DB column names (`indice_correcao`, `juros_am_percentual`, `multa_percentual`, `honorarios_percentual`) but `devedorCalc.js` requires the JSONB-era aliases (`indexador`, `juros_am`, `multa_pct`, `honorarios_pct`). The alias injection happens in a single place: `carregarTudo()` in App.jsx (lines 8346-8355). A new `pagamentos_divida` table will introduce a second entity that flows through `devedorCalc.js`. If any new service or component fetches a dívida independently (bypassing `carregarTudo`), the aliases will be absent and the calc engine will silently receive `undefined` for every financial parameter, computing zeros.
-
-**Prevention:**
-- Create a `normalizarDivida(dbRow)` pure function in `dividas.js` that performs the alias injection. Apply it everywhere a dívida row is returned from Supabase — both in `carregarTudo` and in any new `buscarDividaComPagamentos()` function. Never inline the alias mapping again.
-- Add a Vitest unit test: `normalizarDivida` must map all four columns. Fail the prebuild if any alias is `undefined`.
-
-**Phase to Address:** First task of the pagamentos phase, before any Supabase query for `pagamentos_divida` is written.
+> These pitfalls are specific to the features added in Milestone v1.4 (Phase 7 + Phase 8).
+> They are integration-level: they arise from adding new behaviour to existing infrastructure.
 
 ---
 
-## 2. Art. 354 CC Scope Confusion — Devedor-Level vs. Dívida-Level
+## A1. Non-Atomic Contract Payment (No Client-Side Transactions)
 
-**Risk:**
-The current engine (`calcularSaldoDevedorAtualizado`) applies Art. 354 CC sequentially across *all dívidas of a devedor* in insertion order, sharing a single `pgtoRestantes` array. This is correct for the legacy flow (pagamentos_parciais keyed to `devedor_id`). The new `pagamentos_divida` table will be keyed to a specific `divida_id`. If a payment from `pagamentos_divida` is fed back into `calcularSaldoDevedorAtualizado` alongside `pagamentos_parciais`, the payment will be double-applied: once in the per-dívida Art. 354 loop and again in the cross-dívida loop. The saldo shown in Pessoas/Dashboard will be wrong.
+**Warning Sign:**
+The existing `adicionarDocumento()` in contratos.js already does `for (const p of parcelasPayload) { await dbInsert(...) }` — sequential REST calls with no rollback. F1 (contract-level payment) will follow the same pattern: iterate parcelas sorted by vencimento, PATCH each `pagamentos_divida` + `saldo_quitado`, then INSERT `contratos_historico`. If any call fails mid-loop the DB is left in a partially-applied state.
 
-**Prevention:**
-- Treat `pagamentos_parciais` (devedor scope) and `pagamentos_divida` (dívida scope) as separate sources. Do not merge them before feeding into the engine.
-- `calcularSaldosPorDivida` (already exists) is the correct function for the DetalheDivida view — it applies payments per-dívida. The devedor-level saldo in dashboard and Pessoas must continue to use `calcularSaldoDevedorAtualizado` with `pagamentos_parciais` only. Document this boundary explicitly in `devedorCalc.js`.
-- Add a regression test that verifies `calcularSaldoDevedorAtualizado(devedor, [], hoje)` equals the sum of `calcularSaldosPorDivida(devedor, [], hoje)` values, and that feeding a per-dívida payment into `calcularSaldoDevedorAtualizado` does not produce double-reduction.
+**Why It Matters:**
+A payment that should amortize three parcelas but crashes after the first produces a phantom payment: money is recorded on parcela 1 but parcelas 2–3 still show full saldo. The history event may or may not be written. A retry of the same operation will double-apply the amount to parcela 1. In a legal debt context, incorrect payment records are not a UX issue — they are a compliance risk.
 
-**Phase to Address:** Architecture decision at phase kickoff. Must be decided before writing the pagamentos service.
+**Specific Risk in This Codebase:**
+`supabase.js` uses raw `fetch` against PostgREST REST v1. There is no client-side transaction primitive. The Supabase JS SDK `rpc()` could call a PostgreSQL function in a BEGIN/COMMIT, but this project bypasses the SDK using its own `sb()` helper. Calling a stored procedure via `sb('rpc/registrar_pagamento_contrato', 'POST', body)` is the only safe path.
 
----
+**Prevention Strategy:**
+Phase 7 (PAGCON-01/02): Implement `registrar_pagamento_contrato` as a PL/pgSQL function called via `sb('rpc/registrar_pagamento_contrato', 'POST', payload)`. The function receives `contrato_id`, `data_pagamento`, `valor`, `observacao` and performs all mutations (insert pagamentos_divida rows, update saldo_quitado flags, insert contratos_historico) inside one transaction. No partial state is possible.
 
-## 3. Art. 354 CC Order — Juros Applied Before Multa in the Engine
+If a stored procedure is ruled out, the minimum client-side mitigation is:
+1. Pre-compute all mutations in memory before touching the DB.
+2. Write the `contratos_historico` event first with an idempotency key in `snapshot_campos`.
+3. On retry, check for that key — skip if already present.
 
-**Risk:**
-Art. 354 CC specifies the imputation order: juros → multa → principal. The current engine in `devedorCalc.js` computes `debitoTotal = pcSaldo + juros + multaVal + honorariosVal` and applies the payment as `abate = Math.min(pgto.remaining, debitoTotal)`, then sets `saldo = debitoTotal - abate`. This is lump-sum absorption — the Art. 354 order is *implicit* (if payment < full debt, the remainder stays as a unit). The danger is when building the `pagamentos_divida` UI: if a developer adds a UI that shows how much of a payment went to "juros" vs "principal" by doing a naive component breakdown, the split will be wrong. The correct breakdown must track whether the payment covered the full encargo stack or only part of it (and if partial, imputation starts from juros, not principal).
+This does not eliminate the window but makes duplicates detectable.
 
-**Prevention:**
-- The engine is correct as a balance calculator. Do not change it.
-- If building a payment breakdown display (e.g., "R$ X foi para juros, R$ Y para principal"), implement it by computing `debitoTotal` components, then applying the imputation: if `pgto.valor >= juros` → juros fully paid, if remaining `>= multa` → multa paid, remainder goes to principal. This must be a separate display-only function, not a change to the balance engine.
-- Add a specific test case: `pagamento = principal + juros + multa - epsilon` → saldo shows epsilon remaining in principal (not in juros), confirming Art. 354 order in the display layer.
-
-**Phase to Address:** When implementing the pagamentos_divida UI breakdown display. Not needed if only showing total saldo.
+**Phase to Address:** Phase 7 — first decision before writing any payment service code.
 
 ---
 
-## 4. Floating Point Currency — `parseFloat` Accumulation Without Rounding
+## A2. Partial Payment Spanning Mid-Parcela (1.5 Parcelas Edge Case)
 
-**Risk:**
-The engine uses `parseFloat()` throughout and operates in IEEE 754 doubles. For a dívida of R$ 10.000,00 with IGPM correction applied month-by-month, the accumulated floating point error is measurable. The existing tests allow `tolerancia_reais = 1.0`, masking this. When pagamentos_divida introduces many small payments, each `pgto.remaining -= abate` operation compounds the error. With 36 monthly payments of R$ 277,78 (≈ R$ 10.000), the final `remaining` of the last payment can drift by R$ 0,02-0,05 due to FP accumulation, causing the last payment to show a phantom residual.
+**Warning Sign:**
+The devedorCalc.js loop (lines 88–124) consumes a shared `pgtoRestantes` array with `remaining` subtracted in-place. The contract-level equivalent must compute the "saldo atualizado" of each parcela at payment date (via `calcularSaldoPorDividaIndividual`) and consume the payment value across sorted parcelas until exhausted. The boundary case — payment exceeds saldo of parcela 1 but is less than combined saldo of parcelas 1+2 — is where bugs cluster.
 
-**Prevention:**
-- Do not switch to a bigint/cents representation (that would be a breaking change to the engine and all existing tests). Instead, apply `Math.round(value * 100) / 100` at two points only: (a) when recording `valor` of a pagamento_divida to Supabase (round to 2 decimal places before INSERT), and (b) when computing the final `saldo` to display (round at display time, not inside the loop).
-- Never round intermediate values inside the Art. 354 loop — rounding during accumulation makes the error worse, not better.
-- The Vitest prebuild gate must include at least one test with installment-style payments (N equal payments summing to total) and assert the final saldo is within R$ 0,05 of zero.
+**Why It Matters:**
+Art. 354 CC requires payment applied to older debts first, with interest applied for the period to payment date. If the payment value exceeds the updated saldo of parcela 1 but does not cover parcela 2, the remainder must carry over to parcela 2. An off-by-one in the loop will either leave a "saldo negativo" on a parcela (over-applied) or silently drop an unconsumed `remaining`.
 
-**Phase to Address:** Pagamentos phase, in the `inserirPagamentoDivida` service function and the display layer.
+**Specific Risk in This Codebase:**
+The `saldo_quitado` flag on `dividas` is boolean. A parcela partially amortized but not fully paid must NOT be flagged `saldo_quitado = true`. The service must track partial residual correctly. Currently there is no `saldo_parcela_restante` column — partial amortization must be recorded as a `pagamentos_divida` row with the consumed portion only, leaving future payments to cover the remainder via the calc engine.
 
----
+**Prevention Strategy:**
+Phase 7: Before writing to the DB, run the amortization computation entirely in memory using a pure function:
 
-## 5. Supabase RLS — `pagamentos_divida` Inherits the `allow_all` Anti-Pattern
+```js
+// Pure — no side effects — returns mutation plan
+function computarAmortizacaoContrato(parcelasOrdenadas, valorPago, dataPagamento, hoje) {
+  // For each parcela: compute saldo_atualizado at dataPagamento
+  // Consume payment greedily from oldest to newest
+  // Return [{ parcela_id, valor_aplicado, quitada, saldo_restante }]
+}
+```
 
-**Risk:**
-The existing tables (`dividas`, `pagamentos_parciais`, `devedores_dividas`) all use `CREATE POLICY "allow_all" ... USING (true) WITH CHECK (true)`. This is acceptable for a single-tenant deployment (one escritório, all users trusted). However, when `pagamentos_divida` is created, there is a risk that the RLS is forgotten entirely (table created without `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`). Without RLS enabled, Supabase's anon key would expose all payment records to unauthenticated requests — worse than `allow_all`.
+Only write to the DB after the full plan is computed. Add Vitest unit tests covering:
+- Exact match: payment = saldo of one parcela
+- Underpayment: payment < saldo of first parcela
+- 1.5-parcela case: payment covers parcela 1 plus part of parcela 2
+- Overpayment: payment > sum of all parcelas (should cap at total saldo)
 
-**Prevention:**
-- The migration SQL for `pagamentos_divida` must include `ENABLE ROW LEVEL SECURITY` before the policy. Copy the exact three-line pattern from `migration_pagamentos_parciais.sql` lines 17-20.
-- Add a post-migration verification query: `SELECT tablename, rowsecurity FROM pg_tables WHERE tablename IN ('pagamentos_divida', 'contratos', 'parcelas_contrato')` — must return `rowsecurity = true` for all new tables.
-- If the project later moves toward real multi-tenant (v2), this is the table most likely to leak data. Flag in the migration comment.
-
-**Phase to Address:** Migration SQL for both pagamentos and contratos phases.
-
----
-
-## 6. Contract-Debt Relationship — Modeling Parcelas as Dividas Breaks `devedor_id` Denormalization
-
-**Risk:**
-The PROJECT.md decision log states: `devedor_id` in `dividas` = id do PRINCIPAL (desnormalizado) — marked with warning "Manutenção manual em mudanças de PRINCIPAL". A contrato aggregates N dívidas (each parcela = dívida). If a contrato has multiple co-devedores, and the `devedor_id` on each parcela-dívida points to the PRINCIPAL, then `carregarTudo` correctly groups all parcelas under the principal's `dividasMap`. But if a co-devedor views their record, they will not see the contract parcelas at all (their `devedor_id` is not the FK on the `dividas` row — they only appear in `devedores_dividas`). This creates an asymmetry: the principal sees all, co-devedores see nothing, and `calcularSaldoDevedorAtualizado` for the co-devedor returns zero.
-
-**Prevention:**
-- Do not use `dividas.devedor_id` as the only join key for contract parcelas. Build a `contratos` table with its own `devedor_id` (PRINCIPAL FK) plus join through `devedores_dividas` for co-devedores.
-- When querying contract parcelas for a devedor, always use `devedores_dividas.devedor_id = ?` (joining through the FK table), not `dividas.devedor_id = ?` directly.
-- The `calcularSaldoDevedorAtualizado` function reads `devedor.dividas[]` which is built in `carregarTudo` from `dividasMap.get(devedor.id)`. This means co-devedores will always get an empty dividas array for contracts. Either: (a) accept this and only compute saldo from the PRINCIPAL's perspective, or (b) rebuild the dividasMap to include dividas where the devedor appears in `devedores_dividas` (not just as `dividas.devedor_id`). Option (b) is the architecturally correct path but requires a more expensive `carregarTudo` query.
-
-**Phase to Address:** Contratos phase architecture design, before any migration.
+**Phase to Address:** Phase 7 — write and pass tests before implementing DB writes.
 
 ---
 
-## 7. Breaking the Prebuild Gate — Regression Suite Does Not Cover New Code Paths
+## A3. Race Condition on Concurrent Payment Registration
 
-**Risk:**
-The 7 TJGO test cases in `calculos.test.js` test `calcularSaldoDevedorAtualizado` and `calcularPlanilhaCompleta` with `pagamentos_parciais`-shaped payments (array of `{data_pagamento, valor}`). A new `pagamentos_divida` service might introduce a different data shape (e.g., `{data, valor, observacao}` without `data_pagamento`) that fails silently — `parseFloat(p.valor)` returns the value but `p.data_pagamento` is `undefined`, so the payment is treated as having no date and the Art. 354 loop skips the period calculation entirely (line 93-98 of `devedorCalc.js`: `if (!periodoFim || periodoFim <= periodoInicio)` → falls into the "no period" branch and absorbs without accruing).
+**Warning Sign:**
+Two advogados submit a payment for the same contract within seconds. Both read the current parcelas, both compute amortization against the same saldo, both write. The second write wins but neither is aware of the other. Alternatively: same user opens two tabs and submits twice.
 
-**Prevention:**
-- The `pagamentos_divida` DB schema and service must use `data_pagamento` as the column name (matching the existing payment shape the engine expects), not `data` or `data_pgto`.
-- Add at least 2 new test cases to `calculos.test.js` before writing any UI: (1) single per-dívida payment that partially covers juros, and (2) contract parcelas simulating 3 monthly installments with IGPM correction.
-- Run `npm run test:regressao` in CI. The prebuild gate is already in `package.json` — do not bypass it.
+**Why It Matters:**
+Both writes will attempt to set `saldo_quitado = true` on the same parcela. The second write is a no-op on the flag (already true) but creates a second `pagamentos_divida` row — the sum of payments now exceeds the actual debt. The `contratos_historico` will contain two events for the same amount. Detecting this after the fact requires manual DB audit.
 
-**Phase to Address:** First task of pagamentos phase, before implementing any payment form.
+**Specific Risk in This Codebase:**
+No optimistic locking, no `updated_at` version check, no Supabase Realtime subscription on the payment flow. The most common case (single user, double-click) is a UI problem; the concurrent-user case requires a DB guard.
 
----
+**Prevention Strategy:**
+Phase 7: Add UI-level double-submit guard — disable the "Registrar Pagamento" button immediately on first click, re-enable only on success or error resolution. For the stored-procedure approach, add a uniqueness check inside the function: reject if a `pagamentos_divida` row with the same `contrato_id` + `data_pagamento` + `valor` exists with `created_at > NOW() - INTERVAL '5 seconds'`. Document this as a known limitation for high-concurrency use.
 
-## 8. `primeiroperiodo` Flag — Multa and Honorários Only Apply Once Per Dívida
-
-**Risk:**
-The engine sets `primeiroperiodo = true` and applies multa and honorários only on the first payment period. After the first payment, `primeiroperiodo = false` and multa is never applied again to that dívida. This is correct legal behavior (Art. 389/395 CC — mora is established once). But a developer adding the pagamentos UI might misread the code and assume that entering a new payment always triggers multa recalculation — causing them to add client-side recalculation that double-applies the multa, or to incorrectly reset `primeiroperiodo` when re-running the engine after a new payment is inserted.
-
-**Prevention:**
-- The engine must never be called with `primeiroperiodo = true` manually. It is internal state. The engine is stateless and always starts `primeiroperiodo = true` per dívida — this is correct because the multa is determined by the first period between `data_inicio_atualizacao` and the first payment date.
-- Do not add any flag or parameter to `devedorCalc.js` functions to control `primeiroperiodo`. The only valid input is `{devedor, pagamentos[], hoje}`.
-- Document in the function JSDoc: "multa and honorários apply once, on the first period interval, regardless of number of payments."
-
-**Phase to Address:** Code review gate before any pagamentos_divida integration into the calc engine.
+**Phase to Address:** Phase 7 — UI guard on form submission; DB guard inside stored procedure.
 
 ---
 
-## 9. `pagamentos_parciais` vs `pagamentos_divida` — Two Tables, Two Scopes, One UI Conflict
+## A4. CHECK Constraint Migration: Adding 'pagamento_recebido'
 
-**Risk:**
-App.jsx line 2511 loads `pagamentos_parciais` keyed by `devedor_id` and displays them in the legacy "planilha de pagamentos" flow (gerarPlanilhaPDF path). The new `pagamentos_divida` table will be keyed by `divida_id`. If `carregarTudo` is updated to also load `pagamentos_divida` and merge them into `allPagamentos`, the legacy planilha PDF will include them as double-counted, because `calcularPlanilhaCompleta` already uses `pagamentos_parciais` separately. The two tables cannot share the same state variable.
+**Warning Sign:**
+`contratos_historico.tipo_evento` has:
+```sql
+CHECK (tipo_evento IN ('criacao', 'alteracao_encargos', 'cessao_credito',
+                       'assuncao_divida', 'alteracao_referencia', 'outros'))
+```
+Adding `'pagamento_recebido'` requires dropping and recreating the constraint.
 
-**Prevention:**
-- Keep `allPagamentos` (state) as `pagamentos_parciais` only — do not add `pagamentos_divida` to it.
-- Add a separate `allPagamentosDivida` state variable (or load per-dívida on demand in `DetalheDivida`).
-- The DetalheDivida component (line 72: `const pagamentosDoDevedor = allPagamentos.filter(...)`) currently shows pagamentos_parciais. For v1.1, it should show `pagamentos_divida` filtered by `divida_id` — this is a different filter key. Do not re-use the existing `pagamentosDoDevedor` variable for this.
+**Why It Matters:**
+Existing rows are NOT affected by a CHECK constraint change in PostgreSQL — the constraint is only evaluated on INSERT and UPDATE, not re-validated against existing rows on ALTER. However, two risks exist: (1) the constraint name is auto-generated and may not match assumptions; (2) if code that calls `registrarEvento(..., 'pagamento_recebido', ...)` is deployed before the migration runs, Supabase returns a 409/422. In `criarContrato()` this error is currently swallowed by `.catch(() => {})`. In the payment path it must not be swallowed — the payment would be written but the history event silently dropped.
 
-**Phase to Address:** Pagamentos phase, when wiring `DetalheDivida` to display `pagamentos_divida`.
+**Specific Risk in This Codebase:**
+The constraint name assumed in `contratos.js` comments is `contratos_historico_tipo_evento_check` (Postgres auto-generates `{table}_{col}_check`). If the table was created with a custom constraint name, the DROP will fail with "constraint does not exist". This error only surfaces at migration time, not in code.
 
----
+**Prevention Strategy:**
+Phase 7 (before any code ships to production):
+1. Query the actual constraint name:
+   ```sql
+   SELECT conname FROM pg_constraint
+   WHERE conrelid = 'contratos_historico'::regclass AND contype = 'c';
+   ```
+2. Run migration using the verified name:
+   ```sql
+   ALTER TABLE public.contratos_historico
+     DROP CONSTRAINT IF EXISTS <verified_name>,
+     ADD CONSTRAINT contratos_historico_tipo_evento_check
+       CHECK (tipo_evento IN (
+         'criacao','alteracao_encargos','cessao_credito',
+         'assuncao_divida','alteracao_referencia','outros','pagamento_recebido'
+       ));
+   ```
+3. Verify: INSERT a test row with `tipo_evento = 'pagamento_recebido'`, confirm success, rollback.
+4. Migration must run BEFORE code calling `registrarEvento(..., 'pagamento_recebido', ...)` is deployed.
+5. Remove the `.catch(() => {})` swallow pattern from any code path where the history event is load-bearing (i.e., the payment flow — unlike `criarContrato` where history is non-blocking).
 
-## 10. Art. 523 CPC — Applied After, Not During, Art. 354 Imputation
-
-**Risk:**
-`calcularSaldosPorDivida` applies Art. 523 (`calcularArt523`) at the *end* of each dívida's loop, after all payments have been absorbed. This is legally correct — Art. 523 §1º CPC multa is a court-imposed penalty applied to the residual balance, not to the original debt. A developer adding a "show breakdown" feature might calculate Art. 523 on the original `valor_total` (pre-payment), producing a breakdown that shows a much higher Art. 523 component than the engine actually uses.
-
-**Prevention:**
-- Any display of Art. 523 components must use values from the engine output, not independently recalculate from `divida.valor_total`.
-- The `calcularDetalheEncargos` function in `devedorCalc.js` already provides `art523` in `detalhePorDivida`. Use this, not a custom formula.
-
-**Phase to Address:** UI implementation in DetalheDivida when showing payment history.
-
----
-
-## 11. Contract Parcelas as Dívidas — `status` Field Inconsistency
-
-**Risk:**
-The `dividas` table has a `status TEXT DEFAULT 'em cobrança'` with values `'em cobrança'`, `'quitada'`, `'acordo'`. If each parcela of a contract is a separate dívida row, the `status` of each parcela must be individually managed. There is no automatic cascade: paying a parcela does not flip its status to `'quitada'`. The `AtrasoCell` badge (`5-tier por data_vencimento`) will show each parcela in red/overdue even after full payment because it reads `data_vencimento` from the row and does not check actual payment coverage.
-
-**Prevention:**
-- Define explicit business rules at design time: "a parcela-dívida is quitada when the sum of `pagamentos_divida` where `divida_id = parcela.id` covers the full saldo atualizado." Implement a server-side trigger or a client-side `atualizarStatusParcela()` function that runs after each payment insert.
-- `AtrasoCell` must be updated (or overridden for contract parcelas) to check payment coverage, not just `data_vencimento`.
-- The `ModuloDividas` table will show all parcelas as separate rows. Decide whether parcelas are visible in the global table or only inside the contract detail view. Showing them exposes N rows per contract, inflating the table.
-
-**Phase to Address:** Contratos phase, before any migration or UI work.
-
----
-
-## 12. `NUMERIC(15,2)` in DB vs. `parseFloat` in Engine — Supabase Returns Strings
-
-**Risk:**
-Supabase PostgREST returns `NUMERIC` columns as JSON strings (e.g., `"10000.00"`), not as JavaScript numbers. The engine calls `parseFloat(div.valor_total)` which handles this correctly. But for `pagamentos_divida.valor`, if a developer uses `Number(pgto.valor)` instead of `parseFloat`, and the value comes back as `"1000.50"`, `Number("1000.50")` returns `1000.5` — this is fine. However, `pgto.valor` could also be `null` (if the column is nullable and the INSERT omitted it), causing `Number(null) = 0` silently. `parseFloat(null) = NaN`, which the engine guards against with `|| 0`. Using inconsistent coercion patterns between the service layer and the engine will cause some edge cases to return wrong values instead of errors.
-
-**Prevention:**
-- Make `valor` in `pagamentos_divida` `NOT NULL` with a `CHECK (valor > 0)` constraint at the DB level.
-- In the service layer, always use `parseFloat(row.valor) || 0` (matching the engine's existing pattern). Never use `Number()`, `+value`, or `parseInt()` for currency values.
-- In the INSERT service for `inserirPagamentoDivida`, validate `valor > 0` client-side before hitting Supabase.
-
-**Phase to Address:** Migration SQL + `pagamentos_divida` service function, first pass.
+**Phase to Address:** Phase 7 — migration is prerequisite, must happen before coding F4.
 
 ---
 
-## Phase-Specific Warnings Summary
+## A5. "Valor Atualizado" Consistency Between UI and PDF
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|---|---|---|
-| `pagamentos_divida` migration | Missing `ENABLE ROW LEVEL SECURITY` | Copy pattern from `migration_pagamentos_parciais.sql` exactly |
-| `pagamentos_divida` service | Column name `data_pagamento` (not `data`) | The engine checks `pgto.data_pagamento` — wrong key = silent zero saldo |
-| Alias injection | Fetching dívida independently of `carregarTudo` | Centralize `normalizarDivida()` before writing any service |
-| Payment UI display | Art. 354 breakdown shown incorrectly | Use engine output, never recalculate components in UI |
-| Contract + co-devedores | `dividas.devedor_id` misses co-devedores | Use `devedores_dividas` join for contract queries |
-| Contract parcelas table | `AtrasoCell` shows paid parcelas as overdue | Add payment-coverage check to status logic |
-| `allPagamentos` state | Merging `pagamentos_divida` into `pagamentos_parciais` state | Keep separate state variables; never merge the two |
-| Regression suite | New payment shapes not covered | Add installment test cases before any UI work |
-| FP accumulation | Final installment phantom residual | Round only at INSERT and display, never inside the loop |
-| `primeiroperiodo` flag | Developer resets flag during recalc | Do not expose flag; keep it internal to engine |
+**Warning Sign:**
+The UI computes Valor Atualizado at component mount time with a `hoje` derived then. The PDF generator will compute with `hoje = new Date().toISOString().slice(0, 10)` at button-click time. If the user leaves the tab open across midnight, the UI shows yesterday's figure while the PDF shows today's.
+
+**Why It Matters:**
+An advogado presents a PDF to a debtor in the same session where the UI is open. Different values for the same parcela in the UI and the PDF undermine credibility. In judicial use, a demonstrativo that does not match other system outputs could be challenged by opposing counsel.
+
+**Specific Risk in This Codebase:**
+`calcularFatorCorrecao` is time-invariant for SELIC and Art.406 (pure date arithmetic). For IGPM/IPCA/INPC it reads from a rates table that only updates monthly. Within a single session (< 24 hours) the discrepancy is only possible across a date boundary. The real risk is that the UI caches the Valor Atualizado as component state and passes that cached value into the PDF generator as a prop — bypassing recalculation.
+
+**Prevention Strategy:**
+Phase 8 (PDF-02):
+1. Never pass `valorAtualizado` from UI component state into the PDF generator. The PDF generator must call `calcularSaldoPorDividaIndividual()` (or the equivalent for parcelas) directly, with `hoje` derived fresh at call time.
+2. Display "Data de emissão: DD/MM/YYYY" prominently in the PDF header so any discrepancy with the UI is self-documenting.
+3. Label UI values with their computation date: "Saldo em [data]" not just "Saldo Atualizado".
+
+**Phase to Address:** Phase 8 — architecture decision before writing PDF component.
+
+---
+
+## A6. Client-Side PDF: Fonts, Encoding, and Page Breaks
+
+**Warning Sign:**
+Brazilian legal text requires: `ç`, `ã`, `õ`, `á`, `é`, `ê`, `í`, `ó`, `ú` (Latin Extended), and currency formatted as `R$ 1.234,56` (period as thousands, comma as decimal). jsPDF's default Helvetica font does not support Latin Extended glyphs — they render as `?` or empty boxes.
+
+**Why It Matters:**
+A PDF demonstrativo presented in court or sent to a debtor that shows "Cobran?as" or "R$ 1,234.56" is legally problematic and professionally embarrassing. The fix requires rework after deployment.
+
+**Specific Risk in This Codebase:**
+The project already uses `docxtemplater` for petições (.docx) — that infrastructure does not carry over to PDF. There is no existing PDF pipeline to reuse. Three options exist, each with different tradeoffs:
+
+- **jsPDF + embedded font (recommended for this scope):** Embed Noto Sans Latin subset as Base64 via `doc.addFileToVFS()` + `doc.addFont()`. ~200–400 KB bundle cost. Full control over layout. Requires manual `checkPageBreak()` for tables.
+- **@react-pdf/renderer:** Declares PDF as a React tree, UTF-8 native, supports Google Fonts. ~250 KB additional bundle. Better for complex layouts. Introduces a significant new dependency.
+- **html2canvas + jsPDF (avoid):** Screenshots a hidden HTML div. Browser handles fonts — no encoding issue. Produces rasterized PDF (non-searchable text). Poor page-break control. Not appropriate for a legal document.
+
+For a contrato with 36 parcelas, the table will exceed one page. jsPDF requires manual page-break detection; react-pdf handles it declaratively.
+
+**Prevention Strategy:**
+Phase 8 (PDF-01/02):
+1. Decide between jsPDF + embedded font vs. react-pdf before writing any PDF code. Do not start with html2canvas.
+2. For jsPDF: use `value.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})` for all monetary values. Embed a Base64 Noto Sans Latin subset. Do not use Helvetica for any user-facing text.
+3. Test with a 36-parcela contract before declaring the feature done. Verify page breaks are correct.
+4. Test string rendering of: `ç ã õ á é ê í ó ú` — specifically words like "cobrança", "dívida", "honorários", "correção".
+5. Test on Chrome (Windows) and Safari (macOS) — different PDF rendering engines.
+
+**Phase to Address:** Phase 8 — library selection is first decision in the phase.
+
+---
+
+## A7. Floating-Point Residual Blocks `saldo_quitado = true`
+
+**Warning Sign:**
+The amortization loop subtracts `pgto.remaining -= abate` in-place using IEEE 754 doubles. With 12 monthly payments of R$ 83.33 (total R$ 999.96 on a R$ 1.000,00 debt with rounding on last), the final `remaining` can be `0.000000001` instead of `0`. A `saldo <= 0` check fails, leaving `saldo_quitado = false` on a fully-paid parcela.
+
+**Why It Matters:**
+The "Saldo quitado" badge remains red on a fully-paid contract. The advogado thinks there is still a balance. In court, presenting a "saldo devedor" of R$ 0,00000001 is at minimum embarrassing and at worst a data integrity signal.
+
+**Specific Risk in This Codebase:**
+devedorCalc.js intentionally does NOT round mid-loop (rounding intermediate values accumulates more error, not less). This is correct. The guard must be at the persistence layer: use `saldo < 0.005` (half-cent threshold) to determine quitada, not `saldo === 0` or `saldo <= 0`.
+
+**Prevention Strategy:**
+Phase 7 (PAGCON-02):
+- Use `Math.round(valor_aplicado * 100) / 100` when writing to `pagamentos_divida.valor`.
+- Use `saldoRestante < 0.005` (not `=== 0`) to determine when to set `saldo_quitado = true`.
+- Add a Vitest test: 10 parcelas of R$ 33.33 each, last parcela R$ 33.37 (total R$ 333.37), pay exactly R$ 333.37 in one payment — confirm all 10 parcelas are marked quitada and the engine returns saldo `< 0.01`.
+
+**Phase to Address:** Phase 7 — unit test must exist before DB writes are implemented.
+
+---
+
+## A8. `saldo_quitado` Stored State vs. Engine-Computed State Drift
+
+**Warning Sign:**
+`dividas.saldo_quitado` is a stored boolean on the `dividas` table. The existing `PagamentosDivida.jsx` writes it. The v1.4 contract payment will also write it. Meanwhile, `devedorCalc.js` computes saldo independently from `pagamentos_divida` records — it does not read `saldo_quitado`. Two sources of truth.
+
+**Why It Matters:**
+If `saldo_quitado = true` is written prematurely (partial payment rounded to "done") but `pagamentos_divida` records do not fully cover the computed saldo, the badge "Saldo quitado" lies. Conversely, if a payment does clear a parcela but `saldo_quitado` is not updated, the badge stays red despite full coverage.
+
+**Specific Risk in This Codebase:**
+The amortization function must set `saldo_quitado = true` ONLY when the computed `saldo_restante < 0.005` after consuming the new payment. It must NOT rely on the payment face value alone (a payment of R$ 100,00 against a parcela with updated saldo of R$ 99,99 must set quitada; against a saldo of R$ 100,01 it must not). The function must recompute saldo using `calcularSaldoPorDividaIndividual()` (already exported from pagamentos.js) with the new payment included, not assume from input values.
+
+**Prevention Strategy:**
+Phase 7: After the pure amortization computation (see A2), verify each affected parcela's `saldo_restante` using `calcularSaldoPorDividaIndividual(parcela, [...existingPagamentos, newPayment], hoje)`. Only write `saldo_quitado = true` when this returns `< 0.005`. Never infer quitada from the payment amount alone.
+
+**Phase to Address:** Phase 7 — verification step in the amortization computation function.
+
+---
+
+## A9. `registrarEvento` Silent Swallow Pattern Must Not Extend to Payments
+
+**Warning Sign:**
+In `criarContrato()`:
+```js
+registrarEvento(contrato.id, "criacao", {...}).catch(() => {}); // non-blocking — swallow silently
+```
+This is acceptable for history events that are supplementary (losing the "criacao" event does not break the contract). For the payment flow (F4 — HIS-05), the history event contains the snapshot of which parcelas were affected. If this is swallowed, there is no audit trail for the payment.
+
+**Why It Matters:**
+Legal debt collection requires audit trails. If a payment is registered but no `contratos_historico` event is written (due to the CHECK constraint being wrong, or a transient network error), the advogado has no record of what was amortized. In a stored-procedure approach, this is automatically atomic. In the sequential REST approach, the history write must be last and its failure must be surfaced as an error to the user (with a retry prompt), not swallowed.
+
+**Prevention Strategy:**
+Phase 7: In the payment registration function, do NOT copy the `.catch(() => {})` pattern. The history event is load-bearing for audit. Either:
+- Use the stored-procedure approach (history insert is inside the transaction — atomic).
+- Or write history last and `throw` on failure, triggering a user-visible error toast: "Pagamento registrado, mas histórico não foi gravado. Tente novamente."
+
+**Phase to Address:** Phase 7 — code review gate: search for `.catch(() => {})` in payment service, remove any instance.
+
+---
+
+## Phase-Specific Warnings Summary — v1.4
+
+| Phase | Topic | Pitfall | Mitigation |
+|-------|-------|---------|------------|
+| Phase 7 | F1 — Amortização | Sequential REST writes leave partial state on failure | Stored procedure via `sb('rpc/...')` before any sequential approach |
+| Phase 7 | F1 — Amortização | 1.5-parcela boundary: remainder silently dropped | Pure computation function + Vitest tests before DB writes |
+| Phase 7 | F1 — Amortização | Double-submit / concurrent writes | UI button disable + DB idempotency guard in stored procedure |
+| Phase 7 | F4 — CHECK constraint | Unknown constraint name → DROP fails silently | Query `pg_constraint` before migration; use `DROP CONSTRAINT IF EXISTS` |
+| Phase 7 | F4 — CHECK constraint | Migration runs after code deploy → 409 swallowed | Deploy migration first; remove `.catch(() => {})` in payment path |
+| Phase 7 | PAGCON-02 | FP residual prevents `saldo_quitado = true` | Use `< 0.005` threshold; Vitest test for installment rounding |
+| Phase 7 | PAGCON-02 | `saldo_quitado` set from face value, not computed saldo | Always verify via `calcularSaldoPorDividaIndividual()` after applying |
+| Phase 7 | HIS-05 | History event swallowed like `criarContrato` | History is load-bearing in payment flow — throw, do not swallow |
+| Phase 8 | PDF-01 | Latin chars render as `?` in jsPDF Helvetica | Embed Noto Sans Latin subset; decide library before coding |
+| Phase 8 | PDF-01 | Currency formatted `1,234.56` not `1.234,56` | `toLocaleString('pt-BR', {style:'currency', currency:'BRL'})` everywhere |
+| Phase 8 | PDF-02 | `hoje` stale from UI cache differs from PDF `hoje` | Always compute `hoje` fresh inside PDF generator, never from props |
+| Phase 8 | PDF-02 | 36-parcela table overflows page without page-break logic | Test max-parcela contract before shipping; implement break strategy |
+
+---
+
+---
+
+# Part B — v1.1 Pitfalls: Pagamentos por Dívida + Contratos (Original)
+
+> These pitfalls were identified at v1.1 research (2026-04-20). Many remain relevant as integration
+> risks in v1.4 since the same infrastructure is extended.
+
+---
+
+## B1. Column Alias Desync — The `pagamentos_divida` Mirror Problem
+
+**Warning Sign:**
+The existing system stores dívidas with DB column names (`indice_correcao`, `juros_am_percentual`, `multa_percentual`, `honorarios_percentual`) but `devedorCalc.js` requires the JSONB-era aliases (`indexador`, `juros_am`, `multa_pct`, `honorarios_pct`). The alias injection happens in a single place: `carregarTudo()` in App.jsx. A new `pagamentos_divida` service or a contract-level amortization function that fetches parcelas independently (bypassing `carregarTudo`) will receive raw DB column names and the engine will silently compute zeros.
+
+**Prevention Strategy:**
+Create a `normalizarDivida(dbRow)` pure function in `dividas.js` that performs alias injection. Apply it everywhere a dívida row is returned from Supabase. Never inline the alias mapping again.
+
+**Phase to Address:** Phase 7 — before any Supabase query for contract parcelas is written in the payment service.
+
+---
+
+## B2. Art. 354 CC Scope Confusion — Devedor-Level vs. Contract-Level
+
+**Warning Sign:**
+`calcularSaldoDevedorAtualizado` applies Art. 354 CC across all dívidas of a devedor using a shared `pgtoRestantes` array. Contract-level payments target specific parcelas by `contrato_id`. If contract payments are fed into the devedor-level engine alongside `pagamentos_parciais`, the payment is double-applied.
+
+**Prevention Strategy:**
+Keep `pagamentos_parciais` (devedor scope) and `pagamentos_divida` (dívida/parcela scope) as separate sources. Never merge them before feeding into the engine. The devedor dashboard must continue to use `calcularSaldoDevedorAtualizado` with `pagamentos_parciais` only.
+
+**Phase to Address:** Phase 7 — architectural decision at kickoff.
+
+---
+
+## B3. Art. 354 CC Order — Juros Before Multa in Engine
+
+**Warning Sign:**
+The engine computes `debitoTotal = pcSaldo + juros + multaVal + honorariosVal` and absorbs payment as a lump. If a UI breakdown shows "how much went to juros vs. principal," a naive component breakdown will be wrong. The imputation order (juros → multa → principal) is implicit in the engine, not explicit in output.
+
+**Prevention Strategy:**
+If building a payment breakdown display, implement a separate display-only function using the imputation order. Do not change the balance engine. Do not recalculate components in the UI from raw values.
+
+**Phase to Address:** Phase 7 — when implementing F2 (Pagamentos Recebidos section).
+
+---
+
+## B4. Floating Point Currency Accumulation
+
+**Warning Sign:**
+Summing `parseFloat(p.valor) || 0` across many payments without rounding at persistence time produces phantom residuals (e.g., `0.000000001`) that block `saldo <= 0` checks.
+
+**Prevention Strategy:**
+Round only at INSERT (write to DB) and at display (format for UI/PDF). Never round inside the Art. 354 loop. Use `< 0.005` threshold for "quitada" check.
+
+**Phase to Address:** Phase 7 — in `inserirPagamentoDivida` service function and display layer.
+
+---
+
+## B5. Supabase RLS — New Tables Must Have RLS Enabled
+
+**Warning Sign:**
+All existing tables use `USING(true) WITH CHECK(true)` policy. A new table created without `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` before the policy exposes all rows to the anon key.
+
+**Prevention Strategy:**
+Every new table migration must include `ENABLE ROW LEVEL SECURITY` before `CREATE POLICY`. Post-migration verification: `SELECT tablename, rowsecurity FROM pg_tables WHERE tablename = 'new_table'` must return `rowsecurity = true`.
+
+**Phase to Address:** Phase 7 — migration SQL for any new table (e.g., a `pagamentos_contrato` aggregate table if that approach is chosen).
+
+---
+
+## B6. Contract Parcelas as Dívidas — `devedor_id` Denormalization
+
+**Warning Sign:**
+`dividas.devedor_id` points to the PRINCIPAL. Co-devedores only appear in `devedores_dividas`. A co-devedor queried via `dividas.devedor_id = ?` will miss all contract parcelas.
+
+**Prevention Strategy:**
+When querying parcelas for a devedor, use `devedores_dividas.devedor_id = ?` join (not `dividas.devedor_id = ?` directly) for any multi-party contract context.
+
+**Phase to Address:** Phase 7 — documented limitation; accepted for v1.4 scope (single devedor per contrato).
+
+---
+
+## B7. Regression Suite Gaps — New Payment Shapes Not Covered
+
+**Warning Sign:**
+The 7 TJGO test cases test `calcularSaldoDevedorAtualizado` and `calcularPlanilhaCompleta` with `pagamentos_parciais`-shaped payments. A new contract payment shape or a renamed field (`data` instead of `data_pagamento`) will fail silently — the engine skips the period calculation for payments without a valid `data_pagamento`.
+
+**Prevention Strategy:**
+Add Vitest unit tests for contract-level amortization before writing any UI. Use `data_pagamento` as the field name everywhere (the engine reads `pgto.data_pagamento` — wrong key = silent zero saldo).
+
+**Phase to Address:** Phase 7 — tests written before implementing payment DB writes.
+
+---
+
+## B8. `primeiroperiodo` Flag — Multa Applies Only Once Per Dívida
+
+**Warning Sign:**
+The engine applies multa and honorários only on the first period per dívida (`primeiroperiodo = true`). A developer building the contract payment flow might assume multa recalculates on each new payment, causing a UI that shows inflated charges.
+
+**Prevention Strategy:**
+Do not expose `primeiroperiodo` as a parameter. Document in JSDoc: "multa and honorários apply once, on the first period interval, regardless of number of payments." The engine is always correct as-is — do not add overrides.
+
+**Phase to Address:** Phase 7 — code review gate before payment service merges.
+
+---
+
+## B9. `pagamentos_parciais` vs `pagamentos_divida` — Two Tables, One State Variable
+
+**Warning Sign:**
+App.jsx loads `pagamentos_parciais` into `allPagamentos` state and feeds it into `calcularPlanilhaCompleta`. If `pagamentos_divida` is merged into `allPagamentos`, the legacy planilha PDF will double-count payments.
+
+**Prevention Strategy:**
+Keep separate state variables. `allPagamentos` = `pagamentos_parciais` only. Load `pagamentos_divida` per-contrato on demand, never merged into the devedor-level payment pool.
+
+**Phase to Address:** Phase 7 — state architecture decision before any component wiring.
+
+---
+
+## B10. Art. 523 CPC — Applied After, Not During, Art. 354 Imputation
+
+**Warning Sign:**
+`calcularSaldosPorDivida` applies Art. 523 at the end of each dívida's loop, after all payments. A UI developer might calculate Art. 523 on `valor_total` (pre-payment), producing a much larger figure than the engine uses.
+
+**Prevention Strategy:**
+Any display of Art. 523 components must use values from engine output (`calcularDetalheEncargos` → `detalhePorDivida[n].art523`), not independently recalculate from `divida.valor_total`.
+
+**Phase to Address:** Phase 7/8 — when building the PDF table showing "Valor Atualizado" components.
+
+---
+
+## B11. `NUMERIC(15,2)` Returns as String from PostgREST
+
+**Warning Sign:**
+Supabase PostgREST returns `NUMERIC` as JSON strings (`"1000.50"`). The engine uses `parseFloat()` which handles this. If any new code uses `Number()` or `parseInt()` on a `null` DB value, `Number(null) = 0` silently — no error.
+
+**Prevention Strategy:**
+Always use `parseFloat(row.valor) || 0` (matching the engine pattern). Make `valor` columns `NOT NULL CHECK (valor > 0)` at the DB level. Validate `valor > 0` client-side before INSERT.
+
+**Phase to Address:** Phase 7 — migration SQL + payment service function.

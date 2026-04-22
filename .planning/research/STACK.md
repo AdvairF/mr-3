@@ -1,130 +1,147 @@
-# Technology Stack — v1.1 Payments and Installment Contracts
+# Technology Stack — v1.4 Pagamentos por Contrato + PDF Demonstrativo
 
 **Project:** Mr. Cobranças
-**Milestone:** v1.1 — Pagamentos e Contratos
-**Researched:** 2026-04-20
-**Scope:** Additions/changes only — existing React 18 + Vite + Supabase (no-backend SPA) stack is locked.
+**Milestone:** v1.4
+**Researched:** 2026-04-22
+**Scope:** Additions only — existing React 18 + Vite 8 + Supabase (no-backend SPA) stack is locked.
 
 ---
 
-## Schema Additions
+## Recommendation Summary
 
-### 1. `pagamentos_divida` — Payment per debt
+Add exactly two runtime packages:
 
-This is the core table for v1.1 feature 1. The existing `pagamentos_parciais` is keyed by `devedor_id` and feeds the Art. 354 CC sequential engine across all debts of a debtor. The new table is keyed by `divida_id` to support scoped payment recording directly in `DetalheDivida`.
-
-```sql
-CREATE TABLE IF NOT EXISTS pagamentos_divida (
-  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  divida_id      UUID NOT NULL REFERENCES dividas(id) ON DELETE CASCADE,
-  devedor_id     BIGINT NOT NULL REFERENCES devedores(id) ON DELETE CASCADE,
-  data_pagamento DATE NOT NULL,
-  valor          NUMERIC(15,2) NOT NULL CHECK (valor > 0),
-  observacao     TEXT,
-  created_at     TIMESTAMPTZ DEFAULT NOW(),
-  updated_at     TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_pagamentos_divida_divida
-  ON pagamentos_divida(divida_id);
-
-CREATE INDEX IF NOT EXISTS idx_pagamentos_divida_devedor
-  ON pagamentos_divida(devedor_id);
-
-ALTER TABLE pagamentos_divida ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "allow_all" ON pagamentos_divida
-  FOR ALL USING (true) WITH CHECK (true);
+```bash
+# inside src/mr-3/mr-cobrancas/
+npm install jspdf@4.2.1 jspdf-autotable@5.0.7
 ```
 
-**Why `devedor_id` is redundant but necessary:** `carregarTudo()` in `App.jsx` fetches `pagamentos_parciais` by `devedor_id` (line 8334). The new table needs the same query pattern for `allPagamentos` to include these payments in the Art. 354 engine. Alternatively, the calc engine is fed from `pagamentos_divida` separately per divida — that architectural decision goes in FEATURES.md, not here. The column must exist either way.
+No vite.config.js changes needed. No polyfills needed. No other packages.
 
-**Field naming follows `pagamentos_parciais` pattern exactly** — `data_pagamento`, `valor`, `observacao`, `created_at`. No deviation so that the engine can treat both tables' rows uniformly.
+The amortization logic for F1/F2 (PAGCON-01 through PAGCON-04) requires **zero new libraries** — it is pure arithmetic that extends the existing `devedorCalc.js` pattern. The "Valor Atualizado" per parcela is already computable with `devedorCalc.js` by passing each parcela's own `data_vencimento`, `indexador`, `juros_am_percentual`, etc., and computing up to `today`.
 
 ---
 
-### 2. `contratos` — Installment contract header
+## Library Analysis: PDF Generation
 
-```sql
-CREATE TABLE IF NOT EXISTS contratos (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  devedor_id      BIGINT NOT NULL REFERENCES devedores(id) ON DELETE CASCADE,
-  credor_id       BIGINT REFERENCES credores(id),
-  tipo_contrato   TEXT NOT NULL
-                  CHECK (tipo_contrato IN ('nota_fiscal','duplicata','compra_venda','emprestimo','outro')),
-  descricao       TEXT,
-  valor_total     NUMERIC(15,2),
-  data_contrato   DATE,
-  status          TEXT DEFAULT 'ativo'
-                  CHECK (status IN ('ativo','quitado','rescindido','inadimplente')),
-  observacoes     TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+### Candidate 1: jsPDF + jsPDF-AutoTable (RECOMMENDED)
 
-CREATE INDEX IF NOT EXISTS idx_contratos_devedor ON contratos(devedor_id);
-CREATE INDEX IF NOT EXISTS idx_contratos_credor  ON contratos(credor_id);
+**Versions:** jsPDF 4.2.1, jsPDF-AutoTable 5.0.7 (latest as of 2026-04-22)
 
-ALTER TABLE contratos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "allow_all" ON contratos
-  FOR ALL USING (true) WITH CHECK (true);
+**Why this wins for this project:**
+
+jsPDF is a pure ES module with no Node.js dependencies and no `Buffer`/`stream` polyfills required. Vite 8 handles its ESM bundle natively without any vite.config.js modifications. The library has had Vite-native ESM output since v2.5 and currently ships a clean `/dist/jspdf.es.min.js` entry point that Vite tree-shakes correctly.
+
+jsPDF-AutoTable is the critical differentiator. The PDF-02 requirement is a multi-column judicial table (# | Vencimento | Valor Original | Valor Atualizado | Pago | Saldo) with per-row totals and a footer. AutoTable delivers this in ~15 lines of JS: column definitions, a body array, `headStyles`, `columnStyles` for right-aligned currency columns, and a `didDrawPage` hook for page headers and page-number footers. This is not a "nice to have" — building an equivalent table layout manually in pdf-lib would require 150–200 lines of coordinate arithmetic.
+
+AutoTable also handles pagination transparently: if the parcelas table overflows one A4 page, AutoTable inserts new pages and reprints the column header automatically. This is essential for contracts with many parcelas (common in installment debt collections).
+
+The `willDrawPage`/`didDrawPage` hooks are exactly what is needed for the judicial header (escritório name, OAB number, case reference) that must appear on every page.
+
+**PT-BR characters (ç, ã, õ, é):** The standard 14 PDF fonts do not cover Latin Extended-B. jsPDF requires a custom TTF font for correct rendering of Portuguese characters. The solution is to fetch a Google Fonts TTF at runtime (e.g., Roboto or Noto Sans from the CDN or from the project's `public/` folder) and register it via `doc.addFileToVFS` + `doc.addFont`. This is a one-time setup, ~10 lines, documented and verified in jsPDF official docs.
+
+**Bundle size:** jsPDF ESM min is ~290 KB. AutoTable adds ~45 KB. Total ~335 KB gzipped is acceptable for a SPA used by lawyers on desktops — this is not a consumer mobile app.
+
+**Confidence: HIGH** — verified against Context7/official jsPDF docs and npm registry.
+
+---
+
+### Candidate 2: pdf-lib (NOT RECOMMENDED)
+
+**Version:** 1.17.1
+
+pdf-lib excels at modifying existing PDFs — loading a template, filling fields, saving. It has no table primitive: every cell border, every text placement, every row is positioned manually with `page.drawRectangle()` + `page.drawText()` at exact x/y coordinates. Building the judicial table required by PDF-02 from scratch would require several hundred lines of coordinate math, manual line wrapping, manual pagination detection, and manual page-number insertion. This is disproportionate effort compared to AutoTable.
+
+pdf-lib's font embedding is more ergonomic than jsPDF (no base64 conversion required — you pass an ArrayBuffer directly), but that single advantage does not outweigh the absence of a table engine.
+
+Use case where pdf-lib would win: modifying a pre-built PDF template (e.g., a court form with fillable fields). That is not what PDF-02 requires.
+
+**Confidence: HIGH**
+
+---
+
+### Candidate 3: @react-pdf/renderer (NOT RECOMMENDED)
+
+**Version:** 4.5.1
+
+@react-pdf/renderer is a React renderer that compiles JSX to PDF via a Yoga layout engine and a custom text engine. It produces beautiful, print-ready PDFs with a component model familiar to React developers.
+
+However, it has two blockers for this project:
+
+1. **Vite bundle complexity.** The renderer depends on `canvas`, `fontkit`, `linebreak`, and `blob-stream` — all Node.js-origin packages. Vite 8 requires explicit `optimizeDeps.exclude` and `build.commonjsOptions` configuration to bundle it correctly. The official react-pdf repo ships a Vite example that documents these workarounds, but they are non-trivial and fragile across Vite major versions. Given that this project has a `prebuild` gate that must pass cleanly on every build, adding a package with known bundler friction is a risk.
+
+2. **Bundle size.** @react-pdf/renderer adds ~800 KB minified. For a SPA that will load this on the click of a single button, this is significant overhead.
+
+The output quality is higher than jsPDF, but PDF-02's judicial format (simple header + table + totals + footer) does not require the typographic precision that react-pdf provides. The added complexity is unjustified.
+
+**Confidence: HIGH**
+
+---
+
+## Vite Integration
+
+### jsPDF + AutoTable: zero Vite config changes needed
+
+jsPDF 4.x ships a proper ESM export (`"module"` field in package.json pointing to `dist/jspdf.es.min.js`). Vite 8 resolves ESM packages natively. No `optimizeDeps`, no `resolve.alias`, no `define`, no `plugins` addition required.
+
+jsPDF-AutoTable 5.x is also ESM-first. The functional import pattern (`import { autoTable } from 'jspdf-autotable'`) works cleanly with Vite's module resolution.
+
+**The one gotcha to document:** On Windows development machines (like this project's env), jsPDF's `doc.save('file.pdf')` triggers a browser download using `FileSaver.js` (bundled inside jsPDF). This works correctly in Chrome/Firefox. In Vite's dev server (`localhost:3000`), the download will proceed via `bloburl` → `<a download>` — no special config needed.
+
+### Font asset handling
+
+The PT-BR font TTF should be placed in `src/mr-3/mr-cobrancas/public/fonts/` and fetched at PDF generation time:
+
+```js
+const fontResponse = await fetch('/fonts/NotoSans-Regular.ttf');
+const fontBuffer = await fontResponse.arrayBuffer();
+const fontBase64 = btoa(String.fromCharCode(...new Uint8Array(fontBuffer)));
+doc.addFileToVFS('NotoSans-Regular.ttf', fontBase64);
+doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
+doc.setFont('NotoSans');
 ```
 
+Vite serves everything in `public/` at the root path without hashing. This means the font URL is stable between builds — no import resolution needed, no Vite plugin needed.
+
+**Alternative (no network request):** Convert the TTF to base64 at build time and import it as a JS constant. This eliminates the async fetch but adds ~100 KB to the bundle as a string literal. Given that this font is only loaded when generating a PDF, the fetch approach is preferable — lazy-loads the font only when needed.
+
 ---
 
-### 3. `contrato_id` column on `dividas` — Link installment to contract
+## Supporting Libs: Currency Formatting
 
-Each installment (parcela) of a contract is a row in `dividas`. Add a nullable FK to link them:
+**No new library needed.**
 
-```sql
-ALTER TABLE dividas
-  ADD COLUMN IF NOT EXISTS contrato_id UUID REFERENCES contratos(id) ON DELETE SET NULL;
+The existing `formatters.js` (confirmed in v1.1 STACK.md) already exports `fmt()` and `fmtBRL()` using `Intl.NumberFormat("pt-BR", {style:"currency", currency:"BRL"})`. Use these same functions to format all monetary values before passing them as strings to AutoTable's `body` array.
 
-CREATE INDEX IF NOT EXISTS idx_dividas_contrato ON dividas(contrato_id);
+```js
+// Inside gerarPDF():
+const body = parcelas.map(p => [
+  p.numero,
+  fmtDate(p.data_vencimento),
+  fmtBRL(p.valor_original),
+  fmtBRL(calcularValorAtualizado(p)),   // devedorCalc.js, see below
+  fmtBRL(p.valor_pago ?? 0),
+  fmtBRL(calcularSaldo(p)),
+]);
 ```
 
-**Why parcelas-as-dividas:** Each installment needs the full Art. 354 CC engine — its own `data_vencimento`, `indexador`, `juros_am_percentual`, `multa_percentual`, `honorarios_percentual`. Reusing `dividas` means zero new calculator code. The contract header (`contratos`) is only a grouping entity for display and aggregation. This mirrors how the existing JSONB `dividas[].parcelas` worked but normalizes it into the relational model already established in v1.0.
-
-**Why not a separate `parcelas` table:** Would require a third set of service functions, a third calc engine adaptation, and new RLS — for no gain since `dividas` already has every field needed. The existing `dividas.parcelas JSONB` column on the old model is already deprecated post-v1.0; this recycles the correct pattern.
+AutoTable receives pre-formatted strings. No number formatting happens inside the PDF generation layer. This is the correct separation of concerns.
 
 ---
 
-### Column alias invariant (critical — do not break)
+## Amortization Logic: No New Library
 
-`carregarTudo()` in `App.jsx` lines 8351–8354 maps DB columns to calc-engine aliases:
+The amortization for PAGCON-01/PAGCON-02 (Art. 354 CC across parcelas of a contract) requires no new library. The existing `devedorCalc.js` already implements Art. 354 sequential allocation. The new logic is:
 
-| DB column (`dividas`) | Calc-engine alias (devedorCalc.js) |
-|-----------------------|------------------------------------|
-| `indice_correcao` | `indexador` |
-| `juros_am_percentual` | `juros_am` |
-| `multa_percentual` | `multa_pct` |
-| `honorarios_percentual` | `honorarios_pct` |
-| `observacoes` | `descricao` |
+1. Fetch parcelas ordered by `data_vencimento ASC` (oldest first — Art. 354 requires this).
+2. For each parcela compute its `valor_atualizado` by calling the existing calc engine with the parcela's own encargos fields up to `today`.
+3. Apply the payment amount greedily to parcelas in order: subtract from `valor_atualizado`, mark as `saldo_quitado = true` if fully covered, carry remainder to next parcela.
+4. Record each affected parcela's `id` and amount applied in `pagamentos_divida`.
+5. Insert one row in `contratos_historico` with `tipo_evento = 'pagamento_recebido'` and a JSON snapshot.
 
-Any new service that loads `dividas` rows and feeds them to `devedorCalc.js` must apply the same alias mapping. Do not add new columns to `dividas` with calc-engine names directly — the mapping layer in `carregarTudo` is the single source of truth.
+This is pure arithmetic. No library needed. The implementation belongs in a new `src/services/amortizacao.js` file (or as a function exported from the existing `devedorCalc.js`) that the phase implementer writes.
 
----
-
-## Library Additions
-
-### No new runtime libraries needed
-
-**Rationale:** All required capabilities are already present or trivially implementable with existing tools.
-
-| Capability | Existing solution | Verdict |
-|------------|-------------------|---------|
-| Currency formatting | `formatters.js` line 1: `Intl.NumberFormat("pt-BR", {style:"currency", currency:"BRL"})` | Already exists — `fmt()` and `fmtBRL()` in `DetalheDivida.jsx` |
-| Date display | `formatters.js` line 2: `fmtDate()` with `"pt-BR"` locale | Already exists |
-| Date arithmetic (month-stepping for installments) | Native `Date` — already used in `App.js` line 2068 (`gerarParcs` function) | Already exists — identical pattern needed for contract installment generation |
-| Monetary arithmetic | Native JS `parseFloat` + `NUMERIC(15,2)` in Supabase | Sufficient for this domain; no floating-point accumulation risk at legal-debt scale |
-| Form state | `useState` — consistent with `DividaForm.jsx` and `NovaDivida.jsx` patterns | No new state management lib needed |
-| Toast notifications | `react-hot-toast` ^2.6.0 — already in package.json | Already present |
-| HTTP to Supabase | Custom `sb()` fetch wrapper in `supabase.js` | Already present; new services follow same pattern |
-
-**No `date-fns`, `dayjs`, `luxon`, or `moment`:** The existing codebase does all date work with native `Date` and string slicing (`toISOString().slice(0,10)`). Adding a date library now would create two competing date-handling styles and adds bundle weight for no functional gain.
-
-**No `decimal.js` or `big.js`:** The existing monetary engine uses `parseFloat` throughout `devedorCalc.js` without issue. Legal precision requirements are met by `NUMERIC(15,2)` at the DB layer. Introducing a decimal library would require migrating all existing calc code — out of scope.
-
-**No `react-hook-form` or `formik`:** `DividaForm.jsx` is a controlled-component pattern without a form library. New forms (payment entry, contract creation) should follow the same pattern to maintain codebase consistency.
+**"Valor Atualizado" per parcela:** Each parcela is a row in `dividas` with its own `data_vencimento`, `indice_correcao`, `juros_am_percentual`, `multa_percentual`, `honorarios_percentual`. The existing `devedorCalc.js` computes the updated value for any such record up to any target date. Call it per-parcela with `dataBase = today`. No new library.
 
 ---
 
@@ -132,64 +149,40 @@ Any new service that loads `dividas` rows and feeds them to `devedorCalc.js` mus
 
 | Item | Why not |
 |------|---------|
-| Supabase JS client (`@supabase/supabase-js`) | The project uses a custom `sb()` fetch wrapper against PostgREST directly. Introducing the Supabase JS client would create two competing auth and request patterns. The existing wrapper handles JWT correctly and is battle-tested in production. |
-| Supabase Realtime / subscriptions | Not needed for this milestone. Payment recording is a user-initiated action; polling every 60s (existing pattern in `App.jsx` line 5936) is sufficient. |
-| Supabase Edge Functions | No server-side logic needed for payments or contract creation. All business logic (Art. 354 allocation, installment generation) runs client-side in `devedorCalc.js` — this is an intentional architectural constraint (SPA, no own backend). |
-| TypeScript | Explicitly out of scope per PROJECT.md. |
-| React Router | No routing needed. The existing view-state pattern (`useState` for active view in `ModuloDividas`) is sufficient for DetalheDivida and a new Contrato detail view. |
-| Redux / Zustand / Jotai | `useState` + prop drilling or `useCallback` with reload pattern (as in `useDevedoresDividas.js`) is sufficient. Adding global state for two new tables would be over-engineering. |
-| A currency input mask library | The existing `masks.js` and `type="number"` inputs handle entry. A dedicated lib (e.g., `react-currency-input-field`) adds a dependency for no UX gain given the existing patterns. |
-| ORM or query builder | PostgREST via the `sb()` wrapper is the ORM. Service files (`dividas.js`, `devedoresDividas.js`) are the query layer. Follow that pattern for `pagamentos.js` and `contratos.js`. |
+| `html2pdf.js` | Converts DOM to canvas to PDF — output is a rasterized image, not searchable text. A judicial PDF must have selectable text so courts can copy values. Hard no. |
+| `pdfmake` | Mature alternative to jsPDF+AutoTable, but uses a custom JSON document definition language and ships its own font VFS system. The learning curve is not justified when AutoTable already provides exactly what is needed. |
+| `@react-pdf/renderer` | Vite bundler friction, large bundle, no advantage over jsPDF+AutoTable for this use case. Detailed analysis above. |
+| `pdf-lib` | No table engine. Would require 200+ lines of manual coordinate layout. Detailed analysis above. |
+| `date-fns` / `dayjs` | Existing codebase uses native `Date` and `toISOString().slice(0,10)`. Do not introduce a date library now — it creates two competing date-handling styles. The amortization logic only needs date comparison (`isAfter`, `isBefore`) and `Date.now()` — trivially done with native JS. |
+| `decimal.js` / `big.js` | Existing `devedorCalc.js` uses `parseFloat` throughout. The DB stores `NUMERIC(15,2)`. Introducing a decimal library requires migrating all existing calc code — out of scope and unjustified for legal precision at this scale. |
+| Supabase Edge Functions | No server-side PDF rendering needed or wanted. The SPA constraint is intentional (see PROJECT.md). All PDF logic runs client-side. |
+| A dedicated "amortization library" (e.g., `financial`, `loan-amortization`) | These libraries model loan amortization (PMT, IRR, NPV). The project's amortization is Art. 354 CC sequential payment allocation — a different algorithm. `devedorCalc.js` already encodes the correct legal logic. Do not import generic finance libraries that embed different assumptions. |
 
 ---
 
-## Migration Notes
+## Install Commands
 
-### Approach: manual SQL in Supabase SQL Editor (existing convention)
-
-All prior migrations (001_devedores_dividas.sql, 002_dividas_tabela.sql, migration_pagamentos_parciais.sql) are standalone SQL files run manually in Supabase Dashboard > SQL Editor. Continue this pattern — no migration runner (Flyway, golang-migrate, Supabase CLI migrations) is set up, and adding one is out of scope.
-
-**File naming convention:** `migration_pagamentos_divida.sql`, `migration_contratos.sql`.
-
-### Migration ordering
-
-1. `migration_contratos.sql` first — `dividas` FK depends on `contratos` existing.
-2. `migration_dividas_contrato_id.sql` second — adds `contrato_id` FK to `dividas`.
-3. `migration_pagamentos_divida.sql` — independent, can run in any order relative to 1 and 2, but run after the `dividas` table is confirmed stable.
-
-### Idempotency requirement
-
-Every migration must use `IF NOT EXISTS` and `DO $$ BEGIN IF NOT EXISTS ... END $$` guards, matching the existing pattern. The SQL Editor does not track applied migrations — re-runs must be safe.
-
-### RLS policy pattern
-
-All existing tables use `allow_all` / `FOR ALL USING (true) WITH CHECK (true)`. This is an intentional choice (single-tenant, JWT auth handled at application layer, not row level). New tables must use the same policy or the existing `sb()` wrapper will receive 403s.
-
-**Note:** The current RLS pattern is permissive and relies on the Supabase anon key + JWT combination for auth. If multi-tenancy or stricter access control is added in v2, all policies will need revisiting. That is documented in PROJECT.md as out of scope.
-
-### `carregarTudo()` integration for `pagamentos_divida`
-
-The `carregarTudo()` call in `App.jsx` (line 8327) uses a `Promise.all` to fetch everything. Payment records from `pagamentos_divida` are only needed in `DetalheDivida`, not in the global list view. Load lazily inside `DetalheDivida` on mount — same pattern as `pagamentos_parciais` in `FilaDevedor.jsx` (line 2511, loaded per devedor on mount). This avoids growing the global `carregarTudo()` payload.
-
-```js
-// Inside DetalheDivida or usePagamentosDivida hook:
-const rows = await dbGet("pagamentos_divida", `divida_id=eq.${dividaId}&order=data_pagamento.asc`);
+```bash
+# Run from: src/mr-3/mr-cobrancas/
+npm install jspdf@4.2.1 jspdf-autotable@5.0.7
 ```
 
-### `schema_reload` signal
+No changes to `vite.config.js`.
 
-Every migration must end with `SELECT pg_notify('pgrst', 'reload schema');` — required for PostgREST to pick up new tables immediately without a service restart, as established in `002_dividas_tabela.sql` line 69.
+Add font file:
+```
+src/mr-3/mr-cobrancas/public/fonts/NotoSans-Regular.ttf
+```
+(Download from Google Fonts — free, OFL licensed, safe for judicial documents.)
 
 ---
 
-## Service Layer Pattern
+## Sources
 
-New service files follow `dividas.js` exactly — one file per table, exports named async functions, uses `sb()` wrapper:
-
-- `src/services/pagamentos.js` — CRUD for `pagamentos_divida`, query by `divida_id`
-- `src/services/contratos.js` — CRUD for `contratos`, query by `devedor_id`
-
-New custom hook consistent with `useDevedoresDividas.js`:
-- `src/services/usePagamentosDivida.js` — `useState` + `useEffect` + reload pattern, accepts `dividaId`
-
-No other HTTP client. No SDK. No middleware.
+- Context7 / jsPDF official docs: https://context7.com/parallax/jspdf/llms.txt
+- Context7 / jsPDF-AutoTable official docs: https://context7.com/simonbengtsson/jspdf-autotable/llms.txt
+- Context7 / pdf-lib official docs: https://context7.com/hopding/pdf-lib/llms.txt
+- Context7 / react-pdf official docs: https://context7.com/diegomura/react-pdf/llms.txt
+- npm registry versions verified 2026-04-22: jsPDF 4.2.1, jsPDF-AutoTable 5.0.7, pdf-lib 1.17.1, @react-pdf/renderer 4.5.1
+- Existing project STACK.md (v1.1): confirmed formatters.js exports, devedorCalc.js interface, sb() wrapper pattern
+- PROJECT.md (v1.4): confirmed SPA constraint, no TypeScript, Vercel deploy, prebuild gate
