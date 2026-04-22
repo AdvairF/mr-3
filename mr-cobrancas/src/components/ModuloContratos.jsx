@@ -40,6 +40,8 @@ export default function ModuloContratos({
   function handleVerParcela(divida) { setSelectedParcela(divida); setView("parcela-detalhe"); }
   function handleVoltarDaParcela() { setView("detalhe"); setSelectedParcela(null); }
   function handleVoltarDoNovo() { setView("lista"); }
+  // D-06: after criarContrato, navigate to detalhe of new contrato (not back to lista)
+  function handleContratoCreado(contrato) { setSelectedContrato(contrato); setView("detalhe"); }
 
   return (
     <div style={{ padding: "4px 0 32px 0" }}>
@@ -69,11 +71,23 @@ export default function ModuloContratos({
         </div>
       )}
 
+      {/* NOVO VIEW */}
+      {view === "novo" && (
+        <NovoContrato
+          devedores={devedores}
+          credores={credores}
+          devedorPreSelecionado={devedorPreSelecionado}
+          onCarregarTudo={onCarregarTudo}
+          onVoltar={handleVoltarDoNovo}
+          onVoltarComContrato={handleContratoCreado}
+        />
+      )}
+
       {/* DETALHE VIEW */}
       {view === "detalhe" && selectedContrato && (
         <DetalheContrato
           contrato={selectedContrato}
-          dividas={(allDividas || []).filter(d => d.contrato_id === selectedContrato.id)}
+          dividas={(allDividas || []).filter(d => String(d.contrato_id) === String(selectedContrato.id))}
           devedores={devedores}
           credores={credores}
           allPagamentos={allPagamentos}
@@ -84,7 +98,7 @@ export default function ModuloContratos({
         />
       )}
 
-      {/* PARCELA DETALHE VIEW — embedded DetalheDivida */}
+      {/* PARCELA-DETALHE VIEW — embedded DetalheDivida */}
       {view === "parcela-detalhe" && selectedParcela && (
         <DetalheDivida
           divida={selectedParcela}
@@ -96,17 +110,6 @@ export default function ModuloContratos({
           onCarregarTudo={onCarregarTudo}
           setTab={setTab}
           onVerContrato={() => { setSelectedParcela(null); setView("detalhe"); }}
-        />
-      )}
-
-      {/* NOVO VIEW */}
-      {view === "novo" && (
-        <NovoContrato
-          devedores={devedores}
-          credores={credores}
-          devedorPreSelecionado={devedorPreSelecionado}
-          onCarregarTudo={onCarregarTudo}
-          onVoltar={handleVoltarDoNovo}
         />
       )}
 
