@@ -1,29 +1,46 @@
 # Requirements — Mr. Cobranças
 
-**Milestone atual:** v1.3 — Edição de Contrato + Histórico
+**Milestone atual:** v1.4 — Pagamentos por Contrato + PDF Demonstrativo
 **Updated:** 2026-04-22
 
 ---
 
-## v1.3 Requirements
+## v1.4 Requirements
 
-### Edição de Contrato (EDT)
+### Pagamentos por Contrato (PAGCON)
 
-- [ ] **EDT-01:** Advogado pode editar credor, devedor e referência de um contrato existente via form inline no DetalheContrato
-- [ ] **EDT-02:** Advogado pode editar os encargos padrão do contrato (índice de correção, juros, multa, honorários, despesas, art.523, data_inicio_atualizacao) via form inline no DetalheContrato
-- [ ] **EDT-03:** Ao alterar credor ou devedor, a mudança propaga automaticamente em cascata para todos os documentos e parcelas do contrato (incluindo parcelas quitadas)
-- [ ] **EDT-04:** Encargos editados no contrato funcionam como template para novos documentos — não retroagem em parcelas já geradas
+- [ ] **PAGCON-01:** Advogado registra pagamento no Contrato (data, valor, observação) via form no DetalheContrato
+- [ ] **PAGCON-02:** Sistema amortiza parcelas em aberto pela mais antiga (Art. 354 CC), atualizando `pagamentos_divida` + `saldo_quitado` de cada parcela afetada — via stored procedure PL/pgSQL para atomicidade
+- [ ] **PAGCON-03:** Toast exibe quantas parcelas foram amortizadas após registrar pagamento
+- [ ] **PAGCON-04:** Advogado vê seção colapsável "Pagamentos Recebidos" no DetalheContrato com lista cronológica (data, valor total, parcelas afetadas, observação)
+- [ ] **PAGCON-05:** Form valida: valor > 0, valor ≤ saldo devedor total do contrato, data ≤ hoje — toast de erro claro em cada caso de falha
+- [ ] **PAGCON-06:** Advogado pode editar ou excluir pagamento registrado na seção Pagamentos Recebidos; exclusão reverte amortização das parcelas afetadas e registra evento `pagamento_revertido`; edição com mudança de valor/data faz estorno + re-aplicação; operação bloqueada se alguma parcela afetada foi excluída
 
-### Histórico de Eventos (HIS)
+### PDF Demonstrativo (PDF)
 
-- [ ] **HIS-01:** Ao criar um contrato, o sistema registra automaticamente um evento `criacao` em `contratos_historico` com snapshot dos campos iniciais
-- [ ] **HIS-02:** Ao salvar uma edição, o sistema registra um evento em `contratos_historico` com snapshot JSON dos campos alterados (valor_antigo → valor_novo) e usuario_id via auth.uid()
-- [ ] **HIS-03:** Advogado vê o histórico cronológico de eventos do contrato em seção colapsável no DetalheContrato, com data, tipo e campos alterados
-- [ ] **HIS-04:** Tabela `contratos_historico` existe no banco com RLS USING(true) WITH CHECK(true), contrato_id FK, tipo_evento CHECK, usuario_id, e campos de snapshot JSON
+- [ ] **PDF-01:** Advogado gera PDF demonstrativo via botão no DetalheContrato
+- [ ] **PDF-02:** PDF contém tabela de parcelas (# | Vencimento | Valor Original | Valor Atualizado | Pago | Saldo)
+- [ ] **PDF-03:** PDF contém lista de pagamentos recebidos (data, valor, parcelas afetadas)
+- [ ] **PDF-04:** PDF contém cabeçalho com dados do escritório (hardcoded), totais (Valor Total Atualizado + Total Pago + Saldo Devedor) e rodapé jurídico
+
+### Histórico de Contratos (HIS)
+
+- [ ] **HIS-05:** Cada pagamento registra evento `pagamento_recebido` em `contratos_historico` com snapshot (valor + parcelas afetadas); reversão/edição registra evento `pagamento_revertido` — ambos adicionados ao CHECK constraint da tabela
 
 ---
 
 ## Validated Requirements
+
+### v1.3 — Edição de Contrato + Histórico (Phase 6 — complete 2026-04-22)
+
+- [x] **EDT-01:** Advogado pode editar credor, devedor e referência de um contrato existente via form inline no DetalheContrato
+- [x] **EDT-02:** Advogado pode editar os encargos padrão do contrato (índice de correção, juros, multa, honorários, despesas, art.523, data_inicio_atualizacao) via form inline no DetalheContrato
+- [x] **EDT-03:** Ao alterar credor ou devedor, a mudança propaga automaticamente em cascata para todos os documentos e parcelas do contrato (incluindo parcelas quitadas)
+- [x] **EDT-04:** Encargos editados no contrato funcionam como template para novos documentos — não retroagem em parcelas já geradas
+- [x] **HIS-01:** Ao criar um contrato, o sistema registra automaticamente um evento `criacao` em `contratos_historico` com snapshot dos campos iniciais
+- [x] **HIS-02:** Ao salvar uma edição, o sistema registra um evento em `contratos_historico` com snapshot JSON dos campos alterados (valor_antigo → valor_novo) e usuario_id via auth.uid()
+- [x] **HIS-03:** Advogado vê o histórico cronológico de eventos do contrato em seção colapsável no DetalheContrato, com data, tipo e campos alterados
+- [x] **HIS-04:** Tabela `contratos_historico` existe no banco com RLS USING(true) WITH CHECK(true), contrato_id FK, tipo_evento CHECK, usuario_id, e campos de snapshot JSON
 
 ### v1.2 — Contratos Redesenhados (Phase 5 — complete 2026-04-22)
 
@@ -46,7 +63,7 @@
 
 ---
 
-## Future Requirements (v1.4+)
+## Future Requirements (v1.5+)
 
 - Kanban de cobranças por etapa (aguardando, notificado, em acordo, encerrado)
 - Timeline cronológica por devedor (histórico de eventos)
@@ -54,7 +71,7 @@
 - Sistema de templates de petição editáveis pelo advogado
 - Breakdown de pagamento por componente (juros/multa/principal)
 - Forma de pagamento (PIX/TED/boleto)
-- Comprovante PDF de pagamento
+- Upload de logo do escritório para o PDF
 - Auto-update status do contrato quando todas as parcelas quitadas
 - Excluir contrato com rollback de parcelas
 - Persistir saldo_atual no banco (PAG-10, deferred desde v1.1)
@@ -77,11 +94,8 @@
 |--------|-------|--------|
 | PAG-01..08 | Phase 4 | Complete |
 | CON-01..05 | Phase 5 | Complete |
-| EDT-01 | Phase 6 | Planned |
-| EDT-02 | Phase 6 | Planned |
-| EDT-03 | Phase 6 | Planned |
-| EDT-04 | Phase 6 | Planned |
-| HIS-01 | Phase 6 | Planned |
-| HIS-02 | Phase 6 | Planned |
-| HIS-03 | Phase 6 | Planned |
-| HIS-04 | Phase 6 | Planned |
+| EDT-01..04 | Phase 6 | Complete |
+| HIS-01..04 | Phase 6 | Complete |
+| PAGCON-01..06 | Phase 7 | Planned |
+| HIS-05 | Phase 7 | Planned |
+| PDF-01..04 | Phase 8 | Planned |
