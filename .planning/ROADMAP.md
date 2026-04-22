@@ -5,6 +5,7 @@
 - ✅ **v1.0 Refatoração Estrutural** — Phases 1–3 (shipped 2026-04-20)
 - ✅ **v1.1 Pagamentos** — Phase 4 only (shipped 2026-04-21)
 - ✅ **v1.2 Contratos Redesenhados** — Phase 5 (redesenho 3 níveis) (shipped 2026-04-22)
+- ✅ **v1.3 Edição de Contrato + Histórico** — Phase 6 (UAT verified 2026-04-22) — **ready to ship**
 
 ## Phases
 
@@ -28,9 +29,9 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 - [x] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Contrato (guarda-chuva) → Documentos (NF/boleto/etc.) → Parcelas (dividas reais). Ver `.planning/phases/05-contratos-com-parcelas/05-CONTEXT.md` para decisões D-01..D-09.
 - [ ] **04-06 backlog: persistir saldo_atual no banco** — PAG-10, deferred para v1.3
 
-### 🔜 v1.3 — Edição de Contrato + Histórico
+### ✅ v1.3 — Edição de Contrato + Histórico (UAT verified 2026-04-22 — ready to ship)
 
-- [ ] **Phase 6: Edição de Contrato + Histórico** — Advogado edita credor/devedor/referência/encargos com cascade automático e visualiza histórico cronológico de eventos do contrato
+- [x] **Phase 6: Edição de Contrato + Histórico** — Advogado edita credor/devedor/referência/encargos com cascade automático e visualiza histórico cronológico de eventos do contrato
 
 ## Phase Details
 
@@ -92,9 +93,53 @@ Plans:
   6. Advogado abre seção "Histórico" colapsável e vê timeline vertical com eventos criacao e edicao em ordem cronológica
 **Plans**: 3 plans
 Plans:
-- [ ] 06-01-PLAN.md — DB migration (contratos_historico) + contratos.js service (editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico) + criarContrato modificado para HIS-01
-- [ ] 06-02-PLAN.md — DetalheContrato.jsx edit mode: form unificado (referência + credor + devedor + DiretrizesContrato), cascade confirm, save/cancel handlers, spinner, HIS-02
-- [ ] 06-03-PLAN.md — DetalheContrato.jsx Histórico section: toggle colapsável, lazy load, empty state, timeline vertical (criacao + edicao events)
+- [x] 06-01-PLAN.md — DB migration (contratos_historico) + contratos.js service (editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico) + criarContrato modificado para HIS-01
+- [x] 06-02-PLAN.md — DetalheContrato.jsx edit mode: form unificado (referência + credor + devedor + DiretrizesContrato), cascade confirm, save/cancel handlers, spinner, HIS-02
+- [x] 06-03-PLAN.md — DetalheContrato.jsx Histórico section: toggle colapsável, lazy load, empty state, timeline vertical (criacao + edicao events)
+UAT fixes (3 commits pós-plans):
+- window.confirm condicional (N > 0) + opção vazia nos selects credor/devedor
+- cascade restrito a `dividas` (removido PATCH incorreto em `documentos_contrato`)
+- TIPO_EVENTO_LABELS (6 labels PT-BR) + resolve credor/devedor ID → nome na timeline
+
+## Deploy Notes — SQL Migrations (v1.3)
+
+As migrations abaixo foram executadas manualmente no Supabase SQL Editor durante o desenvolvimento/UAT.
+**Re-executar em produção antes do deploy.**
+
+### Migration 1 — Tabela contratos_historico
+
+```sql
+CREATE TABLE IF NOT EXISTS public.contratos_historico (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  contrato_id     UUID         NOT NULL REFERENCES public.contratos_dividas(id) ON DELETE CASCADE,
+  tipo_evento     TEXT         NOT NULL CHECK (tipo_evento IN (
+                                 'criacao', 'alteracao_encargos', 'cessao_credito',
+                                 'assuncao_divida', 'alteracao_referencia', 'outros')),
+  snapshot_campos JSONB        NOT NULL DEFAULT '{}',
+  usuario_id      UUID         DEFAULT auth.uid(),
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.contratos_historico ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso autenticado" ON public.contratos_historico
+  FOR ALL USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_contratos_historico_contrato_id
+  ON public.contratos_historico (contrato_id, created_at DESC);
+```
+
+### Migration 2 — Corrigir tipo de contratos_dividas.credor_id (UUID → BIGINT)
+
+Schema legado v1.0 definia `credor_id UUID` mas `credores.id` é BIGINT. Corrigido durante UAT.
+
+```sql
+-- Zerar valores existentes (eram UUIDs inválidos ou NULL) antes de converter
+UPDATE public.contratos_dividas SET credor_id = NULL;
+ALTER TABLE public.contratos_dividas
+  ALTER COLUMN credor_id TYPE BIGINT USING NULL;
+```
+
+> **Nota**: se houver dados de produção com `credor_id` preenchido como UUID válido referenciando
+> a tabela `credores`, fazer mapeamento UUID → BIGINT antes de executar. Em ambiente de dev/staging
+> todos os valores eram NULL ou inválidos — truncate seguro.
 
 ## Progress
 
@@ -105,4 +150,4 @@ Plans:
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
 | 5. Contratos com Parcelas | v1.2 | 5/5 | **Complete** | 2026-04-22 |
-| 6. Edição de Contrato + Histórico | v1.3 | 0/3 | **Planned** | — |
+| 6. Edição de Contrato + Histórico | v1.3 | 3/3 (+3 UAT fixes) | **Complete** | 2026-04-22 |
