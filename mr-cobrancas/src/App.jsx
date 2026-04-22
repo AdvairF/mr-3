@@ -8343,7 +8343,6 @@ export default function App() {
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
-      setAllDividas(Array.isArray(divs) ? divs : []);
       setAllContratos(Array.isArray(contratos) ? contratos : []);
       setAllDocumentos(Array.isArray(documentos) ? documentos : []);
       // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
@@ -8365,6 +8364,8 @@ export default function App() {
           _contrato_tipo: div.documento_id ? (documentosMap.get(String(div.documento_id)) ?? null) : null,
         });
       });
+      // allDividas must be set after enrichment so _contrato_tipo is available in TabelaDividas badges
+      setAllDividas([...dividasMap.values()].flat());
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
       setDevedores((devs || []).map(d => {
         const dividas = dividasMap.get(String(d.id)) || [];
