@@ -192,12 +192,14 @@ export default function DetalheContrato({
         documentos.some(doc => String(doc.id) === String(d.documento_id))
       );
       const N = parcelas.length;
-      const campos = [
-        credorAlterado  && "credor",
-        devedorAlterado && "devedor",
-      ].filter(Boolean).join(" e ");
-      const msg = `Alterar ${campos} vai atualizar ${N} parcelas (incluindo quitadas). Confirmar?`;
-      if (!window.confirm(msg)) return;
+      if (N > 0) {
+        const campos = [
+          credorAlterado  && "credor",
+          devedorAlterado && "devedor",
+        ].filter(Boolean).join(" e ");
+        const msg = `Alterar ${campos} vai atualizar ${N} parcelas (incluindo quitadas). Confirmar?`;
+        if (!window.confirm(msg)) return;
+      }
     }
 
     setSalvando(true);
@@ -270,8 +272,8 @@ export default function DetalheContrato({
   const credor  = credores?.find(c => String(c.id) === String(contrato.credor_id));
   const totalQuitado = (dividas || []).filter(d => d.saldo_quitado).reduce((s, d) => s + (d.valor_total || 0), 0);
   const emAberto = (contrato.valor_total || 0) - totalQuitado;
-  const credoresOptions = (credores || []).map(c => ({ v: String(c.id), l: c.nome }));
-  const devedoresOptions = (devedores || []).map(d => ({ v: String(d.id), l: d.nome }));
+  const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
+  const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 0 32px 0" }}>
