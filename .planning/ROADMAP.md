@@ -28,6 +28,10 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 - [x] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Contrato (guarda-chuva) → Documentos (NF/boleto/etc.) → Parcelas (dividas reais). Ver `.planning/phases/05-contratos-com-parcelas/05-CONTEXT.md` para decisões D-01..D-09.
 - [ ] **04-06 backlog: persistir saldo_atual no banco** — PAG-10, deferred para v1.3
 
+### 🔜 v1.3 — Edição de Contrato + Histórico
+
+- [ ] **Phase 6: Edição de Contrato + Histórico** — Advogado edita credor/devedor/referência/encargos com cascade automático e visualiza histórico cronológico de eventos do contrato
+
 ## Phase Details
 
 ### Phase 4: Pagamentos por Dívida
@@ -83,3 +87,4 @@ Plans:
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
 | 5. Contratos com Parcelas | v1.2 | 5/5 | **Complete** | 2026-04-22 |
+| 6. Edição de Contrato + Histórico | v1.3 | 0/3 | **Planned** | — |
