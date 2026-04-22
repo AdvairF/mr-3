@@ -1,6 +1,20 @@
 /**
  * contratos.js — Service CRUD para modelo 3 níveis: Contrato → Documento → Parcela.
  *
+ * MIGRATIONS EXECUTADAS (2026-04-22) — Phase 6 — Edição de Contrato + Histórico
+ *
+ * CREATE TABLE IF NOT EXISTS public.contratos_historico (
+ *   id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+ *   contrato_id   UUID         NOT NULL REFERENCES public.contratos_dividas(id) ON DELETE CASCADE,
+ *   tipo_evento   TEXT         NOT NULL CHECK (tipo_evento IN ('criacao', 'alteracao_encargos', 'cessao_credito', 'assuncao_divida', 'alteracao_referencia', 'outros')),
+ *   snapshot_campos JSONB      NOT NULL DEFAULT '{}',
+ *   usuario_id    UUID         DEFAULT auth.uid(),
+ *   created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+ * );
+ * ALTER TABLE public.contratos_historico ENABLE ROW LEVEL SECURITY;
+ * CREATE POLICY "Acesso autenticado" ON public.contratos_historico FOR ALL USING (true) WITH CHECK (true);
+ * CREATE INDEX IF NOT EXISTS idx_contratos_historico_contrato_id ON public.contratos_historico (contrato_id, created_at DESC);
+ *
  * MIGRATIONS EXECUTADAS (2026-04-21) — Supabase SQL Editor:
  *
  * -- Block 1: Modificar contratos_dividas (remove tipo, adiciona desnormalizados + encargos)
@@ -50,6 +64,7 @@
 import { dbGet, dbInsert, dbUpdate } from "../config/supabase.js";
 
 const TABLE = "contratos_dividas";
+const HIST_TABLE = "contratos_historico";
 
 export function listarContratos() {
   return dbGet(TABLE, "order=created_at.desc");
@@ -59,12 +74,88 @@ export function buscarContrato(contratoId) {
   return dbGet(TABLE, `id=eq.${encodeURIComponent(contratoId)}&limit=1`);
 }
 
-export function criarContrato(payload) {
-  return dbInsert(TABLE, payload);
+/**
+ * Registra um evento em contratos_historico.
+ * HIS-02: snapshot_campos format depends on tipo_evento:
+ *   criacao: flat object { credor_id, devedor_id, referencia, indice_correcao, ... }
+ *   outros tipos: diff object { campo: { antes: String, depois: String } } — only changed fields
+ * usuario_id is filled by Supabase DEFAULT auth.uid() — do NOT pass it explicitly.
+ */
+export async function registrarEvento(contratoId, tipoEvento, snapshotCampos) {
+  return dbInsert(HIST_TABLE, {
+    contrato_id:     contratoId,
+    tipo_evento:     tipoEvento,
+    snapshot_campos: snapshotCampos,
+  });
+}
+
+export async function criarContrato(payload) {
+  const res = await dbInsert(TABLE, payload);
+  const contrato = Array.isArray(res) ? res[0] : res;
+  if (contrato?.id) {
+    // HIS-01: fire-and-forget — do not block or fail contract creation if history insert fails
+    registrarEvento(contrato.id, "criacao", {
+      credor_id:             contrato.credor_id             ?? null,
+      devedor_id:            contrato.devedor_id            ?? null,
+      referencia:            contrato.referencia            ?? null,
+      indice_correcao:       contrato.indice_correcao       ?? null,
+      multa_percentual:      contrato.multa_percentual      ?? null,
+      juros_tipo:            contrato.juros_tipo            ?? null,
+      juros_am_percentual:   contrato.juros_am_percentual   ?? null,
+      honorarios_percentual: contrato.honorarios_percentual ?? null,
+      despesas:              contrato.despesas              ?? null,
+      art523_opcao:          contrato.art523_opcao          ?? null,
+    }).catch(() => {}); // non-blocking — swallow silently
+  }
+  return res;
 }
 
 export function listarDocumentosPorContrato(contratoId) {
   return dbGet("documentos_contrato", `contrato_id=eq.${encodeURIComponent(contratoId)}&order=created_at.asc`);
+}
+
+/**
+ * Edita os campos header/encargos de um contrato.
+ * EDT-04: encargos funciona como template — não retroage em parcelas já geradas.
+ */
+export async function editarContrato(contratoId, payload) {
+  return dbUpdate(TABLE, contratoId, payload);
+}
+
+/**
+ * Propaga credor_id e/ou devedor_id para todos os documentos e parcelas do contrato.
+ * EDT-03: inclui parcelas com saldo_quitado = true.
+ * Operação sequencial (sem batch PATCH disponível via dbUpdate).
+ */
+export async function cascatearCredorDevedor(contratoId, { credor_id, devedor_id }) {
+  const updatePatch = {};
+  if (credor_id  !== undefined) updatePatch.credor_id  = credor_id;
+  if (devedor_id !== undefined) updatePatch.devedor_id = devedor_id;
+  if (!Object.keys(updatePatch).length) return;
+
+  // Step 1: update documentos_contrato
+  const docs = await listarDocumentosPorContrato(contratoId);
+  const docsArr = Array.isArray(docs) ? docs : [];
+  for (const doc of docsArr) {
+    await dbUpdate("documentos_contrato", doc.id, updatePatch);
+  }
+
+  // Step 2: update dividas (parcelas) for each documento
+  for (const doc of docsArr) {
+    const parcelas = await dbGet("dividas", `documento_id=eq.${encodeURIComponent(doc.id)}`);
+    const parcelasArr = Array.isArray(parcelas) ? parcelas : [];
+    for (const p of parcelasArr) {
+      await dbUpdate("dividas", p.id, updatePatch);
+    }
+  }
+}
+
+/**
+ * Retorna eventos de contratos_historico para um contrato, ordenados do mais recente.
+ * INT-05: lazy-loaded on first open of Histórico section in DetalheContrato.
+ */
+export async function listarHistorico(contratoId) {
+  return dbGet(HIST_TABLE, `contrato_id=eq.${encodeURIComponent(contratoId)}&order=created_at.desc`);
 }
 
 /**
