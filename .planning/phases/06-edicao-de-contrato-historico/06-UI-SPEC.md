@@ -45,9 +45,9 @@ All values are multiples of 4. Source: existing patterns in DetalheContrato.jsx 
 
 Exceptions:
 - Timeline dot column: fixed 32px wide (left gutter for timeline icon + line)
-- Timeline vertical line: 2px wide, positioned at 15px from left of gutter (centered on dot)
+- Timeline vertical line: 2px wide, positioned at `left: 16px` from left of gutter (centers the 2px line within 32px gutter — multiple of 4)
 - Touch-safe buttons: minimum height 36px for Salvar/Cancelar in edit mode
-- Inp component internal padding: 8px 10px (matches existing Inp.jsx — do not change)
+- Inp component internal padding: `8px 10px` — frozen legacy API, do not apply spacing rules
 - DiretrizesContrato grid gap: 12px (matches existing component — do not change)
 
 ---
@@ -58,12 +58,13 @@ Source: Existing codebase — DetalheContrato.jsx, PagamentosDivida.jsx, Inp.jsx
 
 | Role | Size | Weight | Line Height | Font | Usage |
 |------|------|--------|-------------|------|-------|
-| Body | 13px | 400 | 1.5 | Plus Jakarta Sans | Metadata lines (credor, devedor lines in read mode), timeline event body, confirm dialog text |
-| Label | 11px | 700 | 1.4 | Plus Jakarta Sans | Section headers (uppercase + letterSpacing .05em), input labels, badge text, table headers |
+| Body | 13px | 400 | 1.5 | Plus Jakarta Sans | Metadata lines (credor, devedor lines in read mode), timeline event header label, timeline event body (changed fields, creation snapshot), confirm dialog text |
+| Label | 11px | 700 | 1.4 | Plus Jakarta Sans | Section headers (uppercase + letterSpacing .05em), input labels, badge text, table headers, timeline event date |
 | Heading | 22px | 700 | 1.2 | Space Grotesk | Contract referencia in header card (read and edit mode title) |
 | Display | — | — | — | — | Not used in this phase |
 
 Note: section section-label pattern (e.g. "Histórico"): 13px, weight 700, color #0f172a, Space Grotesk — matches "Documentos" section label already in DetalheContrato.
+Note: empty state heading ("Sem histórico disponível"): 13px, weight 700 — emphasis achieved through fontWeight, not a larger size.
 
 ---
 
@@ -82,6 +83,8 @@ Accent (#4f46e5) reserved for:
 1. "Editar Contrato" button (primary action triggering edit mode)
 2. "Histórico" section heading label color (matches existing DiretrizesContrato section label pattern at #4f46e5)
 3. Timeline vertical line color
+4. Timeline event dots (criacao: #4f46e5 2px border on #0f172a fill; edicao: #4f46e5 fill)
+5. Loading spinner inside "Salvar" button during cascade (border-top: #fff on rgba(255,255,255,.3) base — spinner renders inside accent-colored button)
 
 Secondary semantic colors used in this phase:
 - Edit mode card border: #c7d2fe (indigo-200 — matches expanded document border in DetalheContrato)
@@ -285,7 +288,7 @@ Loading state (lazy load on first open):
 Empty state (no rows returned from contratos_historico):
 ```
 <div style={{ textAlign: "center", padding: "24px 0", color: "#94a3b8" }}>
-  <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Sem histórico disponível</p>
+  <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Sem histórico disponível</p>
   <p style={{ fontSize: 13 }}>Este contrato não possui eventos registrados.</p>
 </div>
 ```
@@ -308,8 +311,8 @@ Vertical line (pseudo-line — rendered as a positioned div, not ::before):
 ```
 style={{
   position: "absolute",
-  left: 14,           // 14px from left = center of 28px gutter
-  top: 8,             // start below first dot
+  left: 16,            // 16px from left = centered within 32px gutter (multiple of 4)
+  top: 8,              // start below first dot
   bottom: 8,
   width: 2,
   background: "#e2e8f0",
@@ -330,7 +333,7 @@ Dot (criacao event — tipo_evento === 'criacao'):
 ```
 style={{
   position: "absolute",
-  left: -19,           // (-32px gutter + 13px) centers dot on the line at left:14
+  left: -19,           // (-32px gutter + 13px) centers dot on the line at left:16
   top: 3,
   width: 12,
   height: 12,
@@ -362,7 +365,7 @@ style={{
 Event header row:
 ```jsx
 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
-  <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+  <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
     {evento.tipo_evento === "criacao" ? "Contrato criado" : "Edição salva"}
   </span>
   <span style={{ fontSize: 11, color: "#94a3b8" }}>
@@ -375,7 +378,7 @@ Note on usuario_id (Claude's discretion — resolved): Do NOT display usuario_id
 
 Changed fields block (only for tipo_evento === 'edicao'):
 ```jsx
-<div style={{ fontSize: 12, color: "#374151", lineHeight: 1.7 }}>
+<div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
   {camposAlterados.map(({ campo, antes, depois }) => (
     <div key={campo}>
       <span style={{ color: "#64748b" }}>{FIELD_LABELS[campo] ?? campo}:</span>{" "}
@@ -391,7 +394,7 @@ Truncation rule (Claude's discretion — resolved): Values exceeding 40 characte
 
 Creation event body (tipo_evento === 'criacao'):
 ```jsx
-<div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.7 }}>
+<div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.7 }}>
   Credor: {snapshot.credor_nome || snapshot.credor_id || "—"}<br />
   Devedor: {snapshot.devedor_nome || snapshot.devedor_id || "—"}<br />
   {snapshot.referencia && <>Referência: {snapshot.referencia}<br /></>}
