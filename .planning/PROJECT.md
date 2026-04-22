@@ -14,15 +14,16 @@ Sistema de cobrança jurídica para pequenos escritórios de advocacia (2–10 a
 
 **O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.**
 
-## Estado Atual (após Phase 4)
+## Estado Atual (após Phase 5 — v1.2)
 
 - Banco relacional real: tabela `dividas` (UUID PK) + `devedores_dividas` (FK) — sem JSONB embutido
 - Módulo Dívidas no sidebar: tabela global com 4 filtros + tela de detalhe + gerenciamento de pessoas vinculadas
 - Nova Dívida: criação com co-devedores, busca dropdown, modal criação rápida, salvamento atômico
 - Motor de cálculo sequencial (Art. 354 CC, IGPM/IPCA/SELIC/INPC/Art.406/Art.523)
 - **Pagamentos por dívida (v1.1):** tabela `pagamentos_divida` + CRUD service + `PagamentosDivida.jsx` + badge "Saldo quitado" em DetalheDivida e TabelaDividas
+- **Contratos 3 níveis (v1.2):** Contrato → Documento → Parcela; tabelas `contratos_dividas` + `documentos_contrato`; ModuloContratos 4-view; badges [NF]/[C&V]/[Empr.] em TabelaDividas
 - Suite de regressão Vitest (7 casos TJGO) como prebuild gate
-- App.jsx ainda monolítico (~6.700 linhas) — extração progressiva em andamento
+- App.jsx ainda monolítico (~8.400 linhas) — extração progressiva em andamento
 
 ## Contexto
 
@@ -67,20 +68,28 @@ A evolução agora foca em:
 - ✓ Gestão de usuários (somente admin)
 - ✓ Suite de regressão Vitest como prebuild gate
 
-## Milestone Atual: v1.1 — Pagamentos e Contratos
+## Milestone Atual: v1.3 — Edição de Contrato + Histórico
 
-**Goal:** Fechar o ciclo financeiro da dívida — registrar pagamentos com Art. 354 CC e modelar contratos com parcelas como dívidas agregadas.
+**Goal:** Advogado pode editar um contrato existente (credor, devedor, referência, encargos padrão) com propagação em cascata e ver o histórico cronológico de todas as alterações.
 
 **Target features:**
-- Pagamento por dívida específica — lançar pagamento direto na tela `DetalheDivida`; Art. 354 CC por escopo
-- Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda, Empréstimos; contrato agrega N parcelas (cada parcela = dívida)
+- Edição inline de contrato (credor, devedor, referência, encargos) com form no DetalheContrato
+- Cascata automática credor/devedor → documentos_contrato + dividas
+- Tabela `contratos_historico` com snapshot JSON de cada edição + evento de criação
+- Seção "Histórico" colapsável no DetalheContrato
 
-### Ativos (v1.1)
+### Ativos (v1.3)
 
-- [x] Pagamento por dívida específica — lançar pagamento direto na tela DetalheDivida (Art.354 por escopo) — Phase 4 complete 2026-04-21
-- [ ] Modelo de Contrato com parcelas — NF/Duplicatas, Compra e Venda, Empréstimos (Phase 5)
+- [ ] EDT-01: Editar credor, devedor e referência via form inline — Phase 6
+- [ ] EDT-02: Editar encargos padrão do contrato — Phase 6
+- [ ] EDT-03: Cascade credor/devedor → documentos + parcelas — Phase 6
+- [ ] EDT-04: Encargos editados como template (sem retroagir em parcelas) — Phase 6
+- [ ] HIS-01: Registro automático evento `criacao` ao criar contrato — Phase 6
+- [ ] HIS-02: Registro de edições com snapshot JSON + usuario_id — Phase 6
+- [ ] HIS-03: Seção Histórico colapsável no DetalheContrato — Phase 6
+- [ ] HIS-04: Tabela `contratos_historico` com RLS + tipo_evento CHECK — Phase 6
 
-### Deferred (v1.2+)
+### Deferred (v1.4+)
 
 - [ ] Kanban de cobranças por etapa (aguardando, notificado, em acordo, encerrado)
 - [ ] Timeline cronológica por devedor (histórico de eventos)
@@ -142,4 +151,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Última atualização: 2026-04-21 — Phase 4 completa: pagamentos por dívida com Art. 354 CC*
+*Última atualização: 2026-04-22 — Milestone v1.3 iniciado: Edição de Contrato + Histórico*

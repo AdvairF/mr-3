@@ -1,22 +1,22 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Contratos Redesenhados
+milestone: v1.3
+milestone_name: Edição de Contrato + Histórico
 current_plan: —
-status: complete
+status: planned
 last_updated: "2026-04-22T00:00:00Z"
-last_activity: "2026-04-22 — Phase 5 complete. E2E verified. v1.2 ready-to-ship."
+last_activity: "2026-04-22 — Milestone v1.3 iniciado. 8 requirements (EDT-01..04, HIS-01..04). Phase 6 a planejar."
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 17
-  completed_plans: 15
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-22 — Phase 5 complete. E2E verificado (28 steps). v1.2 ready-to-ship.
+Last activity: 2026-04-22 — Milestone v1.3 iniciado. 8 requirements definidos. Próximo: /gsd-plan-phase 6.
 
 ## Project Reference
 
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** — (milestone v1.2 completo)
+**Active Phase:** Phase 6 — Edição de Contrato + Histórico (planejamento)
 **Current Plan:** —
-**Blockers/Concerns:** Nenhum. v1.2 ready-to-ship.
+**Blockers/Concerns:** Nenhum. Pronto para /gsd-plan-phase 6.
 
 ## Commits 05-06 — draft, NÃO descartar, reaproveitar no v1.2
 
