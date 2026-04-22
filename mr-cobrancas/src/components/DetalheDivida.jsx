@@ -198,23 +198,24 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
         />
       </div>
 
-      {/* Ver contrato pai — shown only when divida is a parcela and callback is provided */}
-      {divida.contrato_id && onVerContrato && (
-        <div style={{ marginBottom: 8 }}>
-          <button
-            onClick={() => onVerContrato(divida.contrato_id)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#64748b",
-              padding: 0,
-            }}
-          >
-            ← Ver contrato
-          </button>
+      {(divida.documento_id || divida.contrato_id) && onVerContrato && (
+        <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+          {divida.documento_id && (
+            <button
+              onClick={() => onVerContrato(divida.contrato_id)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#64748b", padding: 0 }}
+            >
+              ← Ver documento
+            </button>
+          )}
+          {divida.contrato_id && (
+            <button
+              onClick={() => onVerContrato(divida.contrato_id)}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#64748b", padding: 0 }}
+            >
+              ← Ver contrato
+            </button>
+          )}
         </div>
       )}
 
