@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Refatoração Estrutural** — Phases 1–3 (shipped 2026-04-20)
 - ✅ **v1.1 Pagamentos** — Phase 4 only (shipped 2026-04-21)
-- 🔜 **v1.2 Contratos Redesenhados** — Phase 5 (redesenho 3 níveis) + backlog (04-06 saldo_atual)
+- ✅ **v1.2 Contratos Redesenhados** — Phase 5 (redesenho 3 níveis) (shipped 2026-04-22)
 
 ## Phases
 
@@ -23,10 +23,10 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 - [x] **Phase 4: Pagamentos por Dívida** — Advogado registra, consulta e remove pagamentos diretamente na tela da dívida, com saldo recalculado via Art. 354 CC
 
-### 🔜 v1.2 — Contratos Redesenhados
+### ✅ v1.2 — Contratos Redesenhados (SHIPPED 2026-04-22)
 
-- [ ] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Contrato (guarda-chuva) → Documentos (NF/boleto/etc.) → Parcelas (dividas reais). Ver `.planning/phases/05-contratos-com-parcelas/05-CONTEXT.md` para decisões D-01..D-09.
-- [ ] **04-06 backlog: persistir saldo_atual no banco** — PAG-10, deferred desde v1.1
+- [x] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Contrato (guarda-chuva) → Documentos (NF/boleto/etc.) → Parcelas (dividas reais). Ver `.planning/phases/05-contratos-com-parcelas/05-CONTEXT.md` para decisões D-01..D-09.
+- [ ] **04-06 backlog: persistir saldo_atual no banco** — PAG-10, deferred para v1.3
 
 ## Phase Details
 
@@ -66,13 +66,13 @@ Plans:
   5. Parcelas de contratos aparecem na tabela global de dívidas (ModuloDividas) com badge [NF]/[C&V]/[Empr.] no campo Credor
 **Plans**: 5 plans
 Plans:
-- [ ] 05-01-PLAN.md — DB migration (documentos_contrato table + ALTER contratos_dividas + dividas.documento_id FK) + contratos.js service (3-level: criarContrato, adicionarDocumento, gerarPayloadParcelasDocumento, recalcularTotaisContrato)
-- [ ] 05-02-PLAN.md — NovoContrato.jsx (header only: credor + devedor + referência + encargos via DiretrizesContrato) + TabelaContratos.jsx (6 colunas: Credor, Devedor, Docs, Parcelas, Valor Total, Em Atraso)
-- [ ] 05-03-PLAN.md — AdicionarDocumento.jsx (novo: tipo + numero_doc + valor + data_emissao + num_parcelas + encargos herdados editáveis)
-- [ ] 05-04-PLAN.md — DetalheContrato.jsx (header + financial summary green + documentos colapsáveis + inline AdicionarDocumento) + DetalheDivida.jsx (breadcrumb duplo ← Ver documento + ← Ver contrato) + TabelaDividas.jsx (badge [NF]/[C&V]/[Empr.])
-- [ ] 05-05-PLAN.md — ModuloContratos.jsx (4-view state machine: lista/novo/detalhe/parcela-detalhe) + App.jsx (allContratos + allDocumentos state, documentosMap enrichment, NAV, renderPage) + human verify
+- [x] 05-01-PLAN.md — DB migration (documentos_contrato table + ALTER contratos_dividas + dividas.documento_id FK) + contratos.js service (3-level: criarContrato, adicionarDocumento, gerarPayloadParcelasDocumento, recalcularTotaisContrato)
+- [x] 05-02-PLAN.md — NovoContrato.jsx (header only: credor + devedor + referência + encargos via DiretrizesContrato) + TabelaContratos.jsx (6 colunas: Credor, Devedor, Docs, Parcelas, Valor Total, Em Atraso)
+- [x] 05-03-PLAN.md — AdicionarDocumento.jsx (novo: tipo + numero_doc + valor + data_emissao + num_parcelas + encargos herdados editáveis)
+- [x] 05-04-PLAN.md — DetalheContrato.jsx (header + financial summary green + documentos colapsáveis + inline AdicionarDocumento) + DetalheDivida.jsx (breadcrumb duplo ← Ver documento + ← Ver contrato) + TabelaDividas.jsx (badge [NF]/[C&V]/[Empr.])
+- [x] 05-05-PLAN.md — ModuloContratos.jsx (4-view state machine: lista/novo/detalhe/parcela-detalhe) + App.jsx (allContratos + allDocumentos state, documentosMap enrichment, NAV, renderPage) + human verify
 **UI hint**: yes
-**Status**: Replanned 2026-04-21 — 3-level model. Ready to execute.
+**Status**: Complete 2026-04-22 — 3-level model. All 5 plans verified E2E.
 
 ## Progress
 
@@ -82,4 +82,4 @@ Plans:
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
-| 5. Contratos com Parcelas | v1.2 | 0/5 | **Replanned — ready** | — |
+| 5. Contratos com Parcelas | v1.2 | 5/5 | **Complete** | 2026-04-22 |

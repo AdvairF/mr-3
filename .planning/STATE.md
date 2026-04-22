@@ -1,22 +1,22 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Pagamentos e Contratos
-current_plan: 05-discuss
-status: context-ready
-last_updated: "2026-04-21T23:00:00Z"
-last_activity: "2026-04-21 — Contexto Phase 5 reescrito para modelo 3 níveis (Contrato→Documento→Parcela). Pronto para planning."
+milestone: v1.2
+milestone_name: Contratos Redesenhados
+current_plan: —
+status: complete
+last_updated: "2026-04-22T00:00:00Z"
+last_activity: "2026-04-22 — Phase 5 complete. E2E verified. v1.2 ready-to-ship."
 progress:
   total_phases: 2
-  completed_phases: 1
-  total_plans: 12
-  completed_plans: 10
-  percent: 50
+  completed_phases: 2
+  total_plans: 17
+  completed_plans: 15
+  percent: 100
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-21 — UAT Fase 5 revelou escopo incorreto. Fase 5 pausada para redesenho no v1.2. v1.1 fecha com Fase 4 apenas.
+Last activity: 2026-04-22 — Phase 5 complete. E2E verificado (28 steps). v1.2 ready-to-ship.
 
 ## Project Reference
 
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-04-20)
 
 ## Status
 
-**Active Phase:** Phase 5 — Contratos com Parcelas — **PAUSED — scope revision needed**
-**Current Plan:** 05-06 (parcialmente executado — Tasks 2-5 commitadas, T6 descartada)
-**Blockers/Concerns:** Escopo incorreto descoberto em UAT. Modelo 2 níveis (Contrato → Parcelas) não reflete o fluxo real do advogado, que é 3 níveis. Ver 05-PAUSED.md.
+**Active Phase:** — (milestone v1.2 completo)
+**Current Plan:** —
+**Blockers/Concerns:** Nenhum. v1.2 ready-to-ship.
 
 ## Commits 05-06 — draft, NÃO descartar, reaproveitar no v1.2
 
