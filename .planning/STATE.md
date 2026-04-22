@@ -1,37 +1,37 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Edição de Contrato + Histórico
+milestone: v1.4
+milestone_name: Pagamentos por Contrato + PDF Demonstrativo
 current_plan: —
-status: Complete — ready to ship
+status: Defining requirements
 last_updated: "2026-04-22T00:00:00Z"
-last_activity: "2026-04-22 — Phase 6 UAT verified. 3 plans + 3 UAT fixes committed. Milestone v1.3 COMPLETE."
-stopped_at: "Phase 6 complete — awaiting push/deploy"
+last_activity: "2026-04-22 — Milestone v1.4 started"
+stopped_at: —
 resume_file: —
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-22 — Milestone v1.3 COMPLETE. Phase 6 (Edição de Contrato + Histórico) UAT verified. 6 commits (3 plans + 3 UAT fixes). Ready to ship.
+Last activity: 2026-04-22 — Milestone v1.4 iniciado: Pagamentos por Contrato + PDF Demonstrativo. Requirements and roadmap being defined.
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-20)
+See: .planning/PROJECT.md (updated 2026-04-22)
 
 **Valor central:** O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.
-**Foco atual:** Milestone v1.3 encerrado com Phase 6. Próximo milestone a definir.
+**Foco atual:** Milestone v1.4 — Pagamentos no nível do Contrato + PDF Demonstrativo.
 
 ## Status
 
-**Active Phase:** — (nenhuma)
+**Active Phase:** — (não iniciada)
 **Current Plan:** —
-**Blockers/Concerns:** Nenhum. Pronto para push e deploy.
+**Blockers/Concerns:** Nenhum.
 
 ## Commits 05-06 — draft, NÃO descartar, reaproveitar no v1.2
 
