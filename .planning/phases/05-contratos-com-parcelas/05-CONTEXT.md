@@ -1,151 +1,153 @@
-# Phase 5: Contratos com Parcelas — Context
+# Phase 5: Contratos com Parcelas — Context (Redesenho v1.2)
 
-**Gathered:** 2026-04-21
+**Gathered:** 2026-04-21 (reescrito após pausa UAT)
 **Status:** Ready for planning
 
 <domain>
 ## Phase Boundary
 
-Modelar contratos jurídicos (NF/Duplicata, Compra e Venda, Empréstimo) como entidade própria que gera automaticamente N parcelas como dívidas reais na tabela `dividas`. Advogado cria o contrato, visualiza a lista global de contratos e acessa o detalhe de cada contrato com saldo por parcela calculado via Art. 354 CC.
+Redesenhar o módulo de Contratos com modelo **3 níveis** real do advogado:
+
+```
+Contrato  (nível 1 — guarda-chuva da relação comercial)
+  └── Documento  (nível 2 — NF, boleto, doc de Compra e Venda, etc.)
+        └── Parcela  (nível 3 — row real em dividas, com vencimento individual)
+```
 
 **O que ENTRA nesta fase:**
-- Nova tabela `contratos_dividas` no Supabase (separada da tabela legada `contratos` usada pela FilaDevedor)
-- `ADD COLUMN contrato_id UUID REFERENCES contratos_dividas(id)` em `dividas`
-- Service layer `src/services/contratos.js` (criar contrato + geração automática de parcelas)
-- Formulário "Novo Contrato" com tipo, credor, devedor, valor total, data base, nº parcelas, referência (opcional) e dropdown de data da 1ª parcela
-- Módulo "Contratos" no sidebar (irmão de ModuloDividas) com lista global (`TabelaContratos.jsx`)
-- `DetalheContrato.jsx` — header completo + tabela de parcelas com saldo individual
-- Badge de tipo de contrato em `TabelaDividas` (ModuloDividas global) para parcelas
-- Botão "Novo Contrato" também acessível pela ficha do devedor (pré-seleciona devedor)
-- Extração do componente `ModuloContratos.jsx` (padrão de extração incremental do App.jsx)
+- Migration DB: nova tabela `documentos_contrato` (nível 2) + ajuste `contratos_dividas` (DROP tipo, adicionar campos desnormalizados) + `dividas.documento_id` FK
+- Service `contratos.js` refatorado: criar contrato, adicionar documento, gerar parcelas, recalcular campos desnormalizados (sem SQL trigger)
+- `NovoContrato.jsx` recriado — form de contrato apenas (credor, devedor, referência, encargos padrão)
+- `DetalheContrato.jsx` recriado — header do contrato + botão "Adicionar Documento" + lista de documentos com parcelas
+- `AdicionarDocumento.jsx` novo — form: tipo, número do doc, valor, data emissão, nº parcelas, encargos herdados/editáveis
+- `ModuloContratos.jsx` e `TabelaContratos.jsx` recriados para o novo modelo 3 níveis
+- Breadcrumb duplo em `DetalheDivida`: "← Ver documento" + "← Ver contrato" quando parcela pertence a um documento
+- `DiretrizesContrato.jsx` (já existe, extraído na Fase 5 anterior) — reutilizado sem alteração como componente de encargos nos forms
 
 **O que NÃO entra nesta fase:**
-- Exclusão de contrato — sem botão de delete no v1.1 (v1.2+)
-- Edição do header do contrato após criação — v1.2
-- Geração de parcelas com juros embutidos (tabela Price, SAC) — v1.2
-- Auto-update de status do contrato quando todas as parcelas quitadas — v1.2
-- Alterar a tabela legada `contratos` ou `parcelas` usadas pela FilaDevedor
+- Edição de Documento após criação — v1.3
+- Exclusão de Contrato — v1.3
+- Edição do header do Contrato após criação — v1.3
+- Geração de parcelas com tabela Price/SAC — v1.3
+- Alterar tabela legada `contratos` ou `parcelas` usadas pela FilaDevedor
 
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-### D-01 — Arquitetura DB: nova tabela `contratos_dividas` (LOCKED)
+### D-01 — Nomenclatura dos 3 níveis (LOCKED)
 
-Nova tabela isolada, **não** reutiliza nem altera a tabela legada `contratos` (usada por `filaDevedor.js` com campos `estagio`, `valor_original`).
+| Nível | Nome na UI | Entidade de banco |
+|-------|-----------|-------------------|
+| 1 | **Contrato** | `contratos_dividas` (existente, ajustada) |
+| 2 | **Documento** | `documentos_contrato` (nova) |
+| 3 | **Parcela** | `dividas` (existente) |
+
+### D-02 — Modelo de banco: 3 tabelas distintas (LOCKED)
 
 ```sql
-CREATE TABLE public.contratos_dividas (
+-- NÍVEL 1: contratos_dividas (existente — ajustar)
+-- Remover: DROP COLUMN tipo (tipo vai para documentos_contrato)
+-- Adicionar campos desnormalizados:
+ALTER TABLE public.contratos_dividas
+  DROP COLUMN tipo,
+  ADD COLUMN num_documentos INT NOT NULL DEFAULT 0,
+  ADD COLUMN num_parcelas_total INT NOT NULL DEFAULT 0;
+-- valor_total já existe: manter como desnormalizado (soma dos documentos)
+
+-- NÍVEL 2: documentos_contrato (NOVA)
+CREATE TABLE public.documentos_contrato (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contrato_id UUID NOT NULL REFERENCES public.contratos_dividas(id),
   tipo TEXT NOT NULL CHECK (tipo IN ('NF/Duplicata', 'Compra e Venda', 'Empréstimo')),
-  credor_id UUID NOT NULL,
-  devedor_id BIGINT NOT NULL,
-  valor_total NUMERIC(15,2) NOT NULL,
-  data_inicio DATE NOT NULL,
+  numero_doc TEXT,                  -- ex: "NF 001", "NF 2024/123"
+  valor NUMERIC(15,2) NOT NULL,
+  data_emissao DATE NOT NULL,
   num_parcelas INT NOT NULL CHECK (num_parcelas >= 1),
   primeira_parcela_na_data_base BOOLEAN NOT NULL DEFAULT TRUE,
-  referencia TEXT,          -- campo opcional "Descrição/Referência" do form
+  -- Encargos próprios do documento (valores finais usados no cálculo):
+  indice_correcao TEXT,             -- 'IGPM'|'IPCA'|'SELIC'|'INPC'|'Art.406'|'Art.523'
+  juros_mensais NUMERIC(5,4),       -- ex: 0.01 = 1% a.m.
+  multa NUMERIC(5,4),               -- ex: 0.02 = 2%
+  honorarios NUMERIC(5,4),          -- ex: 0.10 = 10%
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE public.contratos_dividas ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Acesso autenticado" ON public.contratos_dividas
-  FOR ALL USING (auth.role() = 'authenticated');
+ALTER TABLE public.documentos_contrato ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Acesso autenticado" ON public.documentos_contrato
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- NÍVEL 3: dividas (existente — adicionar FK)
+ALTER TABLE public.dividas
+  ADD COLUMN documento_id UUID REFERENCES public.documentos_contrato(id);
+-- dividas.contrato_id (já existe) — manter para lookup direto sem JOIN extra
 ```
 
-**FK em dividas:**
+### D-03 — Tipo por Documento, não por Contrato (LOCKED)
 
-```sql
-ALTER TABLE public.dividas ADD COLUMN contrato_id UUID
-  REFERENCES public.contratos_dividas(id);
-```
+Cada Documento tem seu próprio tipo (`NF/Duplicata`, `Compra e Venda`, `Empréstimo`). Um mesmo Contrato pode ter Documentos de tipos diferentes. O Contrato não tem mais campo `tipo`.
 
-### D-02 — Tipos de contrato: 3 fixos (LOCKED)
+### D-04 — Campos desnormalizados no Contrato via service layer (LOCKED)
 
-Dropdown com exatamente 3 valores: `'NF/Duplicata'`, `'Compra e Venda'`, `'Empréstimo'`. Sem opção "Outro". Personalização textual via campo `referencia` (opcional).
+`contratos_dividas` mantém campos calculados atualizados pelo service JS (sem SQL trigger — padrão da Fase 4 com `saldo_quitado`):
 
-### D-03 — Geração de parcelas: data de vencimento (LOCKED)
+| Campo | Cálculo | Quando atualizar |
+|-------|---------|-----------------|
+| `valor_total` | `SUM(documentos_contrato.valor)` | criar/excluir Documento |
+| `num_documentos` | `COUNT(documentos_contrato)` | criar/excluir Documento |
+| `num_parcelas_total` | `SUM(documentos_contrato.num_parcelas)` | criar/excluir Documento |
 
-Campo `primeira_parcela_na_data_base BOOLEAN` no formulário e persistido no banco.
+Função service: `recalcularTotaisContrato(contrato_id)` — lê documentos, recalcula, faz UPDATE em `contratos_dividas`.
 
-- `primeira_parcela_na_data_base = TRUE` (default): parcela 1 vence em `data_inicio`, parcela N vence em `data_inicio + (N-1) meses`.
-- `primeira_parcela_na_data_base = FALSE`: parcela 1 vence em `data_inicio + 1 mês`, parcela N vence em `data_inicio + N meses`.
+### D-05 — Encargos: template no Contrato, sobrescritível por Documento (LOCKED)
 
-UI do dropdown no form "Novo Contrato":
-- "Mesma data base (NF/Duplicata)" → `TRUE`
-- "Um mês depois da data base (Compra e Venda / Empréstimo)" → `FALSE`
+- `contratos_dividas` persiste encargos padrão (`indice_correcao`, `juros_mensais`, `multa`, `honorarios`) — são o **template** inicial.
+- `documentos_contrato` persiste os mesmos campos de encargos — são os **valores finais** usados no cálculo das parcelas.
+- Ao criar um Documento, encargos vêm pré-preenchidos do Contrato mas são editáveis por documento.
+- Se documento tem encargos **diferentes** do contrato: exibir badge "Custom" (ou ícone ✏️) no `DetalheContrato` ao lado daquele documento.
+- `DiretrizesContrato.jsx` (já existe) é reutilizado como componente de encargos em ambos os forms.
 
-### D-04 — Geração de parcelas: valor (LOCKED)
+### D-06 — Fluxo de criação: Contrato primeiro, Documentos depois (LOCKED)
 
-`valor_parcela = floor(valor_total / num_parcelas)` para as parcelas 1 a N-1.
-Parcela N = `valor_total - valor_parcela * (num_parcelas - 1)` (absorve centavos restantes).
+1. Advogado clica "Novo Contrato" → preenche form: credor, devedor, referência, encargos padrão → salva
+2. Sistema abre `DetalheContrato` do novo contrato (lista de documentos vazia)
+3. Advogado clica "+ Adicionar Documento" → form `AdicionarDocumento`: tipo, número do doc, valor, data emissão, nº parcelas, encargos (herdados do contrato, editáveis)
+4. Ao salvar Documento, sistema gera as N parcelas (`dividas`) automaticamente + recalcula totais no Contrato
 
-Exemplo: R$ 1.000,00 ÷ 3 → R$ 333,33 + R$ 333,33 + **R$ 333,34**.
+### D-07 — Geração de parcelas (LOCKED, herança Fase 5 v1.1)
 
-### D-05 — Geração de parcelas: descrição da divida (LOCKED)
+Mesma lógica do modelo anterior:
+- `primeira_parcela_na_data_base = TRUE`: parcela 1 vence em `data_emissao`, parcela N em `data_emissao + (N-1) meses`
+- `primeira_parcela_na_data_base = FALSE`: parcela 1 vence em `data_emissao + 1 mês`
+- Valor: `floor(valor / num_parcelas)` para parcelas 1..N-1; parcela N absorve centavos restantes
+- Descrição auto-gerada: `"{numero_doc} — Parcela {n}/{total}"` se `numero_doc` preenchido; `"{tipo} — Parcela {n}/{total}"` se não
 
-Formato auto-gerado:
-- Sem `referencia`: `"{tipo} — Parcela {n}/{total}"` → ex: `"NF/Duplicata — Parcela 1/3"`
-- Com `referencia`: `"{referencia} — Parcela {n}/{total}"` → ex: `"NF 1234 — Parcela 1/3"`
+### D-08 — Navegação e breadcrumb (LOCKED)
 
-Advogado pode editar a descrição de cada parcela individualmente em `DetalheDivida` após a criação.
+- Parcelas aparecem em `TabelaDividas` (ModuloDividas global) com badge `[NF]`/`[C&V]`/`[Empr.]` — herança do que já existe, manter
+- Clicar em parcela → abre `DetalheDivida` existente (sem mudança no componente, exceto breadcrumb)
+- `DetalheDivida` com `documento_id` preenchido: exibe breadcrumb duplo:
+  - `← Ver documento` → abre `DetalheDocumento` dentro de `ModuloContratos`
+  - `← Ver contrato` → abre `DetalheContrato` dentro de `ModuloContratos`
 
-### D-06 — Geração de parcelas: status e credor/devedor (LOCKED)
+### D-09 — Componentes v1.1: descartar e recriar do zero (LOCKED)
 
-- `dividas.status = 'em cobrança'` (padrão das dívidas avulsas)
-- `dividas.devedor_id` = `contratos_dividas.devedor_id` (principal do contrato)
-- `dividas.credor_id` = `contratos_dividas.credor_id`
-- `dividas.contrato_id` = UUID do contrato recém-criado
-- `dividas.data_vencimento` = calculado conforme D-03
-- `dividas.valor_total` = calculado conforme D-04
+`ModuloContratos.jsx`, `NovoContrato.jsx`, `TabelaContratos.jsx`, `DetalheContrato.jsx` foram commitados para o modelo 2 níveis incorreto. Todos serão **descartados via `git checkout`** e recriados do zero para o modelo 3 níveis. Evita ambiguidades sobre o que é legado do modelo errado.
 
-### D-07 — Navegação: módulo Contratos no sidebar (LOCKED)
-
-Novo item "Contratos" no sidebar como irmão de ModuloDividas (não como aba dentro dele).
-
-- `ModuloContratos.jsx` espelhando a estrutura de `ModuloDividas.jsx`
-- Botão "Novo Contrato" no header do ModuloContratos
-- Botão "Novo Contrato" também disponível na ficha do devedor (pré-seleciona devedor no formulário)
-- `DetalheContrato.jsx` como view dentro do `ModuloContratos`, navegação sem router (state local, padrão já usado no app)
-
-### D-08 — Indicação visual em TabelaDividas (LOCKED)
-
-Parcelas de contratos exibem um badge com o tipo do contrato abreviado na coluna de status/credor da `TabelaDividas`:
-- `[NF]`, `[C&V]`, `[Empr.]` — badge pequeno, estilo consistente com `AtrasoCell.jsx` e badge "Saldo quitado"
-
-Clicar em uma linha de parcela na `TabelaDividas` abre `DetalheDivida` da parcela (comportamento idêntico às dívidas avulsas). Dentro de `DetalheDivida`, pode ter link "Ver contrato pai" (Claude decide a implementação).
-
-### D-09 — DetalheContrato: layout (LOCKED)
-
-**Header:** tipo, credor, devedor, valor_total, data_inicio, num_parcelas, referencia (se preenchida). Somente leitura no v1.1.
-
-**Tabela de parcelas:**
-
-```
-| #  | Vencimento  | Valor      | Saldo     | Status     |
-|----|-------------|------------|-----------|------------|
-| 1  | 01/01/2025  | R$ 333,33  | R$     0  | ✅ Quitado |
-| 2  | 01/02/2025  | R$ 333,33  | R$ 350,10 | ⚠ 60 dias  |
-| 3  | 01/03/2025  | R$ 333,34  | R$ 360,22 | ⚠ 90 dias  |
-```
-
-- Saldo calculado via Art. 354 CC lendo `pagamentos_divida` por parcela (mesma lógica de `DetalheDivida`)
-- Clique em qualquer linha abre `DetalheDivida` daquela parcela
-- Sem ações de edição/exclusão de parcelas individuais nesta tela (advogado vai ao `DetalheDivida`)
-
-### D-10 — Exclusão de contrato: sem botão no v1.1 (LOCKED)
-
-Não implementar exclusão de contrato no v1.1. Funcionalidade fica para v1.2.
+**Manter sem alteração:**
+- `DiretrizesContrato.jsx` — componente de encargos, reutilizável como está
+- `DividaForm.jsx` (refatorado na Fase 5 v1.1) — melhoria independente, manter
+- Badge `[NF]`/`[C&V]`/`[Empr.]` em `TabelaDividas` — independente do modelo de contrato, manter
 
 ### Claude's Discretion
 
-- Estrutura interna de `ModuloContratos.jsx` (props, callbacks para App.jsx)
-- Visual exato do badge de tipo de contrato em `TabelaDividas` (cor, tamanho — seguir AtrasoCell)
-- Link "Ver contrato pai" em `DetalheDivida` (se/como implementar)
-- Loading state e tratamento de erro em `DetalheContrato`
-- Ordenação da `TabelaContratos` na lista global (padrão: mais recente primeiro)
-- `TabelaContratos` colunas de lista: tipo, credor, devedor, valor_total, num_parcelas, parcelas_em_atraso
+- Layout exato de `DetalheContrato` (cards vs tabela para lista de documentos)
+- Visual do badge "Custom" nos documentos com encargos diferentes
+- Ordenação de documentos dentro do DetalheContrato (por data de emissão ou criação)
+- Loading/error state em `DetalheContrato` ao carregar documentos
+- Paginação ou scroll em `TabelaContratos` na lista global
+- Exibir ou não `DetalheDocumento` como view separada vs inline em `DetalheContrato`
 
 </decisions>
 
@@ -154,27 +156,24 @@ Não implementar exclusão de contrato no v1.1. Funcionalidade fica para v1.2.
 
 **Downstream agents MUST read these before planning or implementing.**
 
-### Motor de cálculo (herança Phase 4)
-- `src/mr-3/mr-cobrancas/src/utils/devedorCalc.js` — Art.354 CC: `calcularSaldosPorDivida`. Cada parcela é uma `divida_id` independente — reutilizar sem alteração.
-- `src/mr-3/mr-cobrancas/src/utils/correcao.js` — funções de correção monetária
+### Motor de cálculo e pagamentos (herança Phase 4)
+- `src/mr-3/mr-cobrancas/src/utils/devedorCalc.js` — Art.354 CC: `calcularSaldosPorDivida`. Parcelas são `divida_id` independentes — reutilizar sem alteração.
+- `src/mr-3/mr-cobrancas/src/services/pagamentos.js` — CRUD `pagamentos_divida`; parcelas de contratos o herdam automaticamente.
 
-### Tabela legada a NÃO alterar
-- `src/mr-3/mr-cobrancas/src/services/filaDevedor.js` — usa tabela `contratos` (legada) com `estagio`, `valor_original`, `devedor_id`. Não confundir com `contratos_dividas` do Phase 5. Não alterar este arquivo.
+### Tabelas e services a NÃO alterar
+- `src/mr-3/mr-cobrancas/src/services/filaDevedor.js` — usa tabela `contratos` (legada) com `estagio`, `valor_original`. Não confundir com `contratos_dividas`. Não alterar.
 
-### Componentes de referência para padrões de UI
-- `src/mr-3/mr-cobrancas/src/components/ModuloDividas.jsx` — estrutura de módulo com lista + detalhe (espelhar para ModuloContratos)
-- `src/mr-3/mr-cobrancas/src/components/TabelaDividas.jsx` — onde adicionar badge de tipo de contrato
-- `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx` — ponto de integração de parcelas; já recebe `divida` com `contrato_id`
-- `src/mr-3/mr-cobrancas/src/components/PagamentosDivida.jsx` — parcelas herdam o mecanismo de pagamentos (sem alteração)
-- `src/mr-3/mr-cobrancas/src/components/AtrasoCell.jsx` — padrão de badges de status (replicar para badge tipo contrato)
-- `src/mr-3/mr-cobrancas/src/components/NovaDivida.jsx` — padrão de formulário de criação (referência para NovoContrato)
+### Componentes reutilizáveis desta fase
+- `src/mr-3/mr-cobrancas/src/components/DiretrizesContrato.jsx` — componente de encargos extraído na Fase 5 v1.1. Usar como-is em NovoContrato e AdicionarDocumento.
+- `src/mr-3/mr-cobrancas/src/components/AtrasoCell.jsx` — padrão de badges (replicar para badge tipo e badge "Custom")
+- `src/mr-3/mr-cobrancas/src/components/DetalheDivida.jsx` — adicionar breadcrumb duplo quando `documento_id` preenchido
+- `src/mr-3/mr-cobrancas/src/components/ModuloDividas.jsx` — estrutura de state machine a espelhar em `ModuloContratos`
 
-### Service layer de referência
-- `src/mr-3/mr-cobrancas/src/services/dividas.js` — CRUD com `dbGet/dbInsert/dbUpdate/dbDelete`; adicionar coluna `contrato_id` ao schema
-- `src/mr-3/mr-cobrancas/src/services/pagamentos.js` — service de pagamentos por dívida (Phase 4); parcelas usam automaticamente
+### Pattern de desnormalização (referência de implementação)
+- `src/mr-3/mr-cobrancas/src/services/dividas.js` — função `atualizarSaldoQuitado` como referência para o pattern `recalcularTotaisContrato` (service layer, sem trigger SQL)
 
 ### Requisitos
-- `.planning/REQUIREMENTS.md` — CON-01 a CON-05 (todos mapeados para Phase 5)
+- `.planning/REQUIREMENTS.md` — CON-01 a CON-05 (modelo 2 níveis antigo — downstream deve tratar como referência de intenção, não de implementação. O CONTEXT.md é a fonte de verdade do redesenho.)
 
 </canonical_refs>
 
@@ -182,54 +181,60 @@ Não implementar exclusão de contrato no v1.1. Funcionalidade fica para v1.2.
 ## Existing Code Insights
 
 ### Reusable Assets
-- `devedorCalc.js:calcularSaldosPorDivida` — motor Art.354 por `divida_id`; parcelas são dívidas → zero adaptação
-- `pagamentos.js` + `PagamentosDivida.jsx` — mecanismo de pagamentos completo; parcelas o herdam sem alteração
-- `ModuloDividas.jsx` — estrutura de módulo com lista/detalhe a espelhar em `ModuloContratos.jsx`
-- `AtrasoCell.jsx` — sistema de badges por status; adicionar badge de tipo de contrato
-- `dbGet/dbInsert/dbUpdate/dbDelete` — utilitários globais, sem import direto
+- `DiretrizesContrato.jsx` — pronto para uso como bloco de encargos em forms
+- `DividaForm.jsx` refatorado — manter, independente do modelo de contrato
+- `devedorCalc.js:calcularSaldosPorDivida` — motor Art.354 por `divida_id`; parcelas são dívidas normais, zero adaptação
+- `pagamentos.js` + `PagamentosDivida.jsx` — mecanismo de pagamentos completo; parcelas herdam sem alteração
+- `AtrasoCell.jsx` — sistema de badges por status; base visual para badges de tipo e "Custom"
+- `dbGet/dbInsert/dbUpdate/dbDelete` — utilitários globais, usar em `contratos.js`
 
 ### Established Patterns
-- Módulo com state local (sem router): `ModuloDividas` — lista → detalhe via `setViewAtual` ou `setDividaSelecionada`
+- State machine sem router: `ModuloDividas` — lista → detalhe via `setViewAtual` / `setSelecionado`
 - Carregamento lazy ao montar: `useEffect(() => dbGet(...).then(set...), [id])`
 - `window.confirm()` para ações destrutivas
-- Toast: `toast.success()` / `toast.error()` de `react-hot-toast`
-- Extração incremental do `App.jsx` — criar `ModuloContratos.jsx` como novo componente extraído
+- Toast: `toast.success()` / `toast.error()` via `react-hot-toast`
+- Desnormalização via service JS (sem trigger): `atualizarSaldoQuitado` em `dividas.js` (Fase 4)
+- Extração incremental do `App.jsx` — `ModuloContratos.jsx` como componente extraído
 
 ### Integration Points
-- `App.jsx` — adicionar entrada de sidebar + renderizar `<ModuloContratos />` quando tab ativa
-- `TabelaDividas.jsx` — ler `divida.contrato_id` para exibir badge de tipo do contrato
-- `dividas.js` (service) — nova coluna `contrato_id` no schema de leitura e escrita
-- Supabase: migration para `contratos_dividas` + `ALTER TABLE dividas ADD COLUMN contrato_id`
+- `App.jsx` — entrada de sidebar "Contratos" já existe (da Fase 5 v1.1), ajustar para novo componente recriado
+- `TabelaDividas.jsx` — `divida.contrato_id` já exibe badge de tipo; adicionar leitura de `divida.documento_id` para breadcrumb
+- `dividas.js` — adicionar `documento_id` ao schema de leitura/escrita
+- Supabase: migration para `documentos_contrato` + ALTER `contratos_dividas` + ALTER `dividas`
 
-### Known Codebase Constraint
-- A tabela legada `contratos` (referenciada em `filaDevedor.js`) JÁ EXISTE no Supabase e não pode ser renomeada. A nova tabela **deve** ter nome diferente → `contratos_dividas`.
-- A tabela `parcelas` (legada, `contrato_id` FK para `contratos`) também existe; parcelas Phase 5 são rows em `dividas`, não nessa tabela.
+### Known Constraints
+- Tabela legada `contratos` (FilaDevedor) — existe e não pode ser alterada. Nova tabela `documentos_contrato` não conflita.
+- Tabela `parcelas` legada (`contrato_id → contratos`) — existe; parcelas Fase 5 são rows em `dividas`, não nessa tabela.
+- `contratos_dividas` já tem RLS — nova tabela `documentos_contrato` precisa de RLS idêntico: `USING(true) WITH CHECK(true)` (padrão do projeto, não `auth.role()='authenticated'`).
+- Sem TypeScript. Styling: inline `style={{}}` com hex values. Sem Tailwind, sem CSS modules.
 
 </code_context>
 
 <specifics>
 ## Specific Ideas
 
-- Badge de tipo de contrato em `TabelaDividas`: abreviado (`[NF]`, `[C&V]`, `[Empr.]`) ao lado do credor ou na coluna de status — estilo visual consistente com badge "Saldo quitado"
-- Descrição de parcela: `"{referencia} — Parcela {n}/{total}"` quando referencia preenchida, `"{tipo} — Parcela {n}/{total}"` quando não — exemplo: `"NF 1234 — Parcela 1/3"` ou `"NF/Duplicata — Parcela 1/3"`
-- Tabela de parcelas em `DetalheContrato`: saldo calculado em tempo real (lendo `pagamentos_divida` por `divida_id`), mesma lógica que `DetalheDivida`
-- Botão "Novo Contrato" na ficha do devedor deve pré-selecionar o devedor no formulário
+- Badge "Custom" (ou ✏️) no DetalheContrato ao lado de documentos com encargos diferentes do contrato pai
+- Campos desnormalizados no Contrato: `valor_total`, `num_documentos`, `num_parcelas_total` — atualizados via `recalcularTotaisContrato(contrato_id)` no service JS
+- Breadcrumb duplo em `DetalheDivida`: "← Ver documento" e "← Ver contrato" — só exibido quando `divida.documento_id` não é null
+- Encargos do Documento vêm pré-preenchidos do Contrato ao abrir o form `AdicionarDocumento` (UX: menos digitação no caso comum)
+- `numero_doc` no Documento é opcional — quando vazio, usa `{tipo} — Parcela {n}/{total}` na descrição gerada
 
 </specifics>
 
 <deferred>
 ## Deferred Ideas
 
-- Exclusão de contrato (com ou sem cascade) — v1.2
-- Edição do header do contrato após criação — v1.2
-- Tabela Price / SAC para geração de parcelas com juros embutidos — v1.2
-- Auto-update status do contrato quando todas as parcelas quitadas — v1.2
-- Filtro de contratos na lista global por tipo/devedor/credor/status — v1.2
-- Link "Ver contrato pai" em `DetalheDivida` — Claude decide no v1.1 (discretion)
+- Edição de Documento após criação — v1.3
+- Exclusão de Contrato (com cascade de documentos e parcelas) — v1.3
+- Edição do header do Contrato após criação — v1.3
+- Tabela Price/SAC para parcelas com juros embutidos — v1.3
+- Auto-update de status do Contrato quando todos os documentos quitados — v1.3
+- Filtro na TabelaContratos por tipo/devedor/credor/status — v1.3
+- Exportar contrato como PDF — v2
 
 </deferred>
 
 ---
 
 *Phase: 05-contratos-com-parcelas*
-*Context gathered: 2026-04-21*
+*Context gathered: 2026-04-21 (redesenho v1.2 — modelo 3 níveis)*
