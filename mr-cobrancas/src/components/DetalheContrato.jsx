@@ -5,7 +5,7 @@ import AtrasoCell from "./AtrasoCell.jsx";
 import AdicionarDocumento from "./AdicionarDocumento.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import { Inp } from "./ui/Inp.jsx";
-import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento } from "../services/contratos.js";
+import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -60,6 +60,11 @@ function initEditForm(c) {
   };
 }
 
+function truncate(str, max) {
+  const s = String(str ?? "");
+  return s.length > max ? s.slice(0, max) + "..." : s;
+}
+
 const CONTRATO_BADGE_META = {
   "NF/Duplicata":   { label: "[NF]",    bg: "#dbeafe", cor: "#1d4ed8" },
   "Compra e Venda": { label: "[C&V]",   bg: "#fef3c7", cor: "#d97706" },
@@ -99,6 +104,10 @@ export default function DetalheContrato({
   const [editando,  setEditando]  = useState(false);
   const [salvando,  setSalvando]  = useState(false);
   const [editForm,  setEditForm]  = useState(() => initEditForm(contrato));
+  const [historicoAberto,    setHistoricoAberto]    = useState(false);
+  const [historico,          setHistorico]           = useState([]);
+  const [historicoLoading,   setHistoricoLoading]    = useState(false);
+  const [historicoCarregado, setHistoricoCarregado]  = useState(false);
 
   useEffect(() => {
     setLoadingDocumentos(true);
@@ -131,7 +140,24 @@ export default function DetalheContrato({
   useEffect(() => {
     setEditForm(initEditForm(contrato));
     setEditando(false);
+    setHistoricoAberto(false);
+    setHistorico([]);
+    setHistoricoCarregado(false);
   }, [contrato.id]);
+
+  useEffect(() => {
+    if (!historicoAberto || historicoCarregado) return;
+    setHistoricoLoading(true);
+    listarHistorico(contrato.id)
+      .then(rows => {
+        setHistorico(Array.isArray(rows) ? rows : []);
+        setHistoricoCarregado(true);
+      })
+      .catch(e => {
+        toast.error("Erro ao carregar histórico: " + e.message);
+      })
+      .finally(() => setHistoricoLoading(false));
+  }, [historicoAberto, contrato.id]);
 
   function handleEncargos(field, val) {
     setEditForm(f => ({ ...f, encargos: { ...f.encargos, [field]: val } }));
@@ -451,6 +477,138 @@ export default function DetalheContrato({
           onDocumentoAdicionado={handleDocumentoAdicionado}
           onCancelar={() => setAdicionandoDocumento(false)}
         />
+      )}
+
+      {/* 6. Histórico section */}
+      <div
+        onClick={() => setHistoricoAberto(h => !h)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          padding: "8px 0",
+          marginTop: 24,
+        }}
+      >
+        <p style={{
+          fontFamily: "'Space Grotesk',sans-serif",
+          fontWeight: 700,
+          fontSize: 13,
+          color: "#0f172a",
+          margin: 0,
+        }}>
+          Histórico {historicoAberto ? "▲" : "▼"}
+        </p>
+      </div>
+
+      {historicoAberto && (
+        <div style={{
+          background: "#fff",
+          borderRadius: 12,
+          padding: "16px 20px",
+          border: "1px solid #e2e8f0",
+          marginTop: 8,
+        }}>
+          {historicoLoading && (
+            <p style={{ textAlign: "center", fontSize: 13, color: "#94a3b8", padding: "16px 0" }}>
+              Carregando histórico...
+            </p>
+          )}
+
+          {!historicoLoading && historico.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 0", color: "#94a3b8" }}>
+              <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Sem histórico disponível</p>
+              <p style={{ fontSize: 13 }}>Este contrato não possui eventos registrados.</p>
+            </div>
+          )}
+
+          {!historicoLoading && historico.length > 0 && (
+            <div style={{ position: "relative", paddingLeft: 32 }}>
+              <div style={{
+                position: "absolute",
+                left: 16,
+                top: 8,
+                bottom: 8,
+                width: 2,
+                background: "#e2e8f0",
+              }} />
+
+              {historico.map((evento, idx) => {
+                const isCriacao = evento.tipo_evento === "criacao";
+                const isLast    = idx === historico.length - 1;
+                const snap = evento.snapshot_campos || {};
+
+                const diffEntries = !isCriacao
+                  ? Object.entries(snap).map(([campo, val]) => ({
+                      campo,
+                      antes:  String(val?.antes  ?? ""),
+                      depois: String(val?.depois ?? ""),
+                    }))
+                  : [];
+
+                return (
+                  <div
+                    key={evento.id}
+                    style={{ position: "relative", paddingBottom: isLast ? 0 : 20 }}
+                  >
+                    <div style={{
+                      position: "absolute",
+                      left: -19,
+                      top: 3,
+                      width: 12,
+                      height: 12,
+                      borderRadius: "50%",
+                      background: isCriacao ? "#0f172a" : "#4f46e5",
+                      border: "2px solid #4f46e5",
+                      zIndex: 1,
+                    }} />
+
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
+                        {isCriacao ? "Contrato criado" : "Edição salva"}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                        {fmtData(evento.created_at)}
+                      </span>
+                    </div>
+
+                    {isCriacao && (
+                      <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.7 }}>
+                        {snap.credor_id && (
+                          <>Credor: {
+                            credores?.find(c => String(c.id) === String(snap.credor_id))?.nome
+                            || snap.credor_id
+                          }<br /></>
+                        )}
+                        {snap.devedor_id && (
+                          <>Devedor: {
+                            devedores?.find(d => String(d.id) === String(snap.devedor_id))?.nome
+                            || snap.devedor_id
+                          }<br /></>
+                        )}
+                        {snap.referencia && <>Referência: {snap.referencia}<br /></>}
+                      </div>
+                    )}
+
+                    {!isCriacao && diffEntries.length > 0 && (
+                      <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
+                        {diffEntries.map(({ campo, antes, depois }) => (
+                          <div key={campo}>
+                            <span style={{ color: "#64748b" }}>{FIELD_LABELS[campo] ?? campo}:</span>{" "}
+                            <span style={{ color: "#0f172a" }}>{truncate(antes, 40)}</span>{" "}
+                            <span style={{ color: "#94a3b8" }}>→</span>{" "}
+                            <span style={{ color: "#0f172a" }}>{truncate(depois, 40)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
     </div>
