@@ -42,6 +42,15 @@ const FIELD_LABELS = {
   data_inicio_atualizacao: "Data Início Atualização",
 };
 
+const TIPO_EVENTO_LABELS = {
+  criacao:               "Contrato criado",
+  cessao_credito:        "Cessão de crédito",
+  assuncao_divida:       "Assunção de dívida",
+  alteracao_encargos:    "Alteração de encargos",
+  alteracao_referencia:  "Alteração de referência",
+  outros:                "Edição salva",
+};
+
 function initEditForm(c) {
   return {
     referencia: c.referencia || "",
@@ -568,7 +577,7 @@ export default function DetalheContrato({
 
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
-                        {isCriacao ? "Contrato criado" : "Edição salva"}
+                        {TIPO_EVENTO_LABELS[evento.tipo_evento] ?? "Edição salva"}
                       </span>
                       <span style={{ fontSize: 11, color: "#94a3b8" }}>
                         {fmtData(evento.created_at)}
@@ -595,14 +604,22 @@ export default function DetalheContrato({
 
                     {!isCriacao && diffEntries.length > 0 && (
                       <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
-                        {diffEntries.map(({ campo, antes, depois }) => (
-                          <div key={campo}>
-                            <span style={{ color: "#64748b" }}>{FIELD_LABELS[campo] ?? campo}:</span>{" "}
-                            <span style={{ color: "#0f172a" }}>{truncate(antes, 40)}</span>{" "}
-                            <span style={{ color: "#94a3b8" }}>→</span>{" "}
-                            <span style={{ color: "#0f172a" }}>{truncate(depois, 40)}</span>
-                          </div>
-                        ))}
+                        {diffEntries.map(({ campo, antes, depois }) => {
+                          const resolveVal = (val) => {
+                            if (val === "") return "—";
+                            if (campo === "credor_id")  return credores?.find(c => String(c.id) === val)?.nome ?? val;
+                            if (campo === "devedor_id") return devedores?.find(d => String(d.id) === val)?.nome ?? val;
+                            return val;
+                          };
+                          return (
+                            <div key={campo}>
+                              <span style={{ color: "#64748b" }}>{FIELD_LABELS[campo] ?? campo}:</span>{" "}
+                              <span style={{ color: "#0f172a" }}>{truncate(resolveVal(antes), 40)}</span>{" "}
+                              <span style={{ color: "#94a3b8" }}>→</span>{" "}
+                              <span style={{ color: "#0f172a" }}>{truncate(resolveVal(depois), 40)}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
