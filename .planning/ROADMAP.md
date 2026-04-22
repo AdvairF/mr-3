@@ -25,7 +25,7 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 ### 🔜 v1.2 — Contratos Redesenhados
 
-- [ ] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Dívida agregada → Múltiplas NFs/documentos → Cada NF com suas próprias parcelas/duplicatas. Ver `.planning/phases/05-contratos-com-parcelas/05-PAUSED.md` para contexto completo e pontos reutilizáveis.
+- [ ] **Phase 5 (redesenho): Contratos com modelo 3 níveis** — Escopo corrigido após UAT: Contrato (guarda-chuva) → Documentos (NF/boleto/etc.) → Parcelas (dividas reais). Ver `.planning/phases/05-contratos-com-parcelas/05-CONTEXT.md` para decisões D-01..D-09.
 - [ ] **04-06 backlog: persistir saldo_atual no banco** — PAG-10, deferred desde v1.1
 
 ## Phase Details
@@ -53,25 +53,26 @@ Plans:
 - [~] 04-06-PLAN.md — CR-05 backlog v1.2: persistir saldo_atual no banco (PAG-10) — DEFERRED
 **UI hint**: yes
 
-### Phase 5: Contratos com Parcelas
-**Goal**: Advogado pode modelar uma relação contratual (NF/Duplicata, Compra e Venda, Empréstimo) como um contrato que gera automaticamente N parcelas como dívidas reais — e navegar do contrato ao detalhe de cada parcela com saldo individual vivo
+### Phase 5: Contratos com Parcelas (Redesenho 3 Níveis — v1.2)
+**Goal**: Advogado pode criar um Contrato (relação comercial), adicionar Documentos (NF, boleto, C&V, etc.) a ele, e cada Documento gera automaticamente N Parcelas como dívidas reais — navegando do contrato ao detalhe de cada parcela com saldo individual vivo via Art. 354 CC
 **Depends on**: Phase 4 (mecanismo de pagamentos por dívida necessário para saldo por parcela em DetalheContrato)
 **Requirements**: CON-01, CON-02, CON-03, CON-04, CON-05
+**Model**: Contrato → Documento → Parcela (3 níveis). Decisions D-01..D-09 in 05-CONTEXT.md.
 **Success Criteria** (what must be TRUE):
-  1. Advogado preenche um formulário de novo contrato (tipo, credor, devedor, valor total, data, nº parcelas) e o sistema gera N parcelas automaticamente — cada parcela aparece como uma linha real na tabela de dívidas
-  2. Advogado vê a lista global de contratos com tipo, partes envolvidas, valor total, número de parcelas e quantas estão em atraso
-  3. Advogado abre o detalhe de um contrato e vê o header com os dados do contrato mais uma tabela de parcelas onde cada parcela exibe seu saldo individual calculado via Art. 354 CC sobre os pagamentos registrados para aquela parcela
-  4. Parcelas de contratos aparecem na tabela global de dívidas (ModuloDividas) com uma indicação visual de que pertencem a um contrato — advogado consegue distinguir dívidas avulsas de parcelas contratuais sem abrir o detalhe
+  1. Advogado cria um Contrato (header: credor, devedor, referência, encargos padrão) e o sistema abre DetalheContrato com lista de documentos vazia
+  2. Advogado adiciona um Documento ao Contrato (tipo, número, valor, data emissão, nº parcelas, encargos) e o sistema gera N Parcelas automaticamente como rows reais na tabela dividas
+  3. Advogado vê a lista global de contratos com colunas: Credor, Devedor, Docs, Parcelas, Valor Total, Em Atraso
+  4. Advogado abre DetalheContrato e vê documentos colapsáveis — expandindo um documento mostra tabela de parcelas com saldo individual calculado via Art. 354 CC
+  5. Parcelas de contratos aparecem na tabela global de dívidas (ModuloDividas) com badge [NF]/[C&V]/[Empr.] no campo Credor
 **Plans**: 5 plans
 Plans:
-- [x] 05-01-PLAN.md — DB migration (contratos_dividas table + dividas.contrato_id FK) + contratos.js service (criarContratoComParcelas, gerarPayloadParcelas)
-- [x] 05-02-PLAN.md — NovoContrato.jsx (form com devedor typeahead + parcelas preview) + TabelaContratos.jsx (lista global 6 colunas)
-- [x] 05-03-PLAN.md — ModuloContratos.jsx (4-view state machine) + DetalheContrato.jsx (header + financial summary green + parcelas table com saldo lazy)
-- [x] 05-04-PLAN.md — TabelaDividas.jsx badge [NF]/[C&V]/[Empr.] + DetalheDivida.jsx "← Ver contrato" link
-- [x] 05-05-PLAN.md — App.jsx integration: I.contratos, NAV entry, allContratos state, carregarTudo + _contrato_tipo enrichment, renderPage case + human verify
-- [~] 05-06-PLAN.md — CR-06 parcial: Tasks 2-5 commitadas (DiretrizesContrato, DividaForm, NovoContrato, contratos.js). T6 (DetalheContrato) descartada. **DRAFT — reaproveitar no v1.2**
+- [ ] 05-01-PLAN.md — DB migration (documentos_contrato table + ALTER contratos_dividas + dividas.documento_id FK) + contratos.js service (3-level: criarContrato, adicionarDocumento, gerarPayloadParcelasDocumento, recalcularTotaisContrato)
+- [ ] 05-02-PLAN.md — NovoContrato.jsx (header only: credor + devedor + referência + encargos via DiretrizesContrato) + TabelaContratos.jsx (6 colunas: Credor, Devedor, Docs, Parcelas, Valor Total, Em Atraso)
+- [ ] 05-03-PLAN.md — AdicionarDocumento.jsx (novo: tipo + numero_doc + valor + data_emissao + num_parcelas + encargos herdados editáveis)
+- [ ] 05-04-PLAN.md — DetalheContrato.jsx (header + financial summary green + documentos colapsáveis + inline AdicionarDocumento) + DetalheDivida.jsx (breadcrumb duplo ← Ver documento + ← Ver contrato) + TabelaDividas.jsx (badge [NF]/[C&V]/[Empr.])
+- [ ] 05-05-PLAN.md — ModuloContratos.jsx (4-view state machine: lista/novo/detalhe/parcela-detalhe) + App.jsx (allContratos + allDocumentos state, documentosMap enrichment, NAV, renderPage) + human verify
 **UI hint**: yes
-**Status**: PAUSED — scope revision needed. Ver 05-PAUSED.md.
+**Status**: Replanned 2026-04-21 — 3-level model. Ready to execute.
 
 ## Progress
 
@@ -81,4 +82,4 @@ Plans:
 | 2. Módulo Dívidas no Sidebar | v1.0 | 4/4 | Complete | 2026-04-20 |
 | 3. Nova Dívida com Co-devedores | v1.0 | 5/5 | Complete | 2026-04-20 |
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
-| 5. Contratos com Parcelas | v1.2 | —/— | **Paused — scope revision** | — |
+| 5. Contratos com Parcelas | v1.2 | 0/5 | **Replanned — ready** | — |
