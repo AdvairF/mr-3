@@ -78,6 +78,24 @@ Plans:
 **UI hint**: yes
 **Status**: Complete 2026-04-22 — 3-level model. All 5 plans verified E2E.
 
+### Phase 6: Edição de Contrato + Histórico (v1.3)
+**Goal**: Advogado pode editar um contrato existente (credor, devedor, referência, encargos padrão) com cascade automático de credor/devedor para todos os documentos e parcelas, e visualizar o histórico cronológico de eventos do contrato
+**Depends on**: Phase 5 (DetalheContrato existente como ponto de entrada, contratos.js como service base)
+**Requirements**: EDT-01, EDT-02, EDT-03, EDT-04, HIS-01, HIS-02, HIS-03, HIS-04
+**Decisions**: D-01..D-09 in 06-CONTEXT.md
+**Success Criteria** (what must be TRUE):
+  1. Advogado clica "Editar Contrato" no DetalheContrato e vê form inline com todos os campos (referência, credor, devedor, encargos) pré-preenchidos
+  2. Advogado salva edição de referência/encargos sem cascade — toast "Contrato atualizado." aparece e header reflete novos valores
+  3. Advogado altera credor ou devedor — sistema exibe window.confirm com N parcelas afetadas antes de salvar
+  4. Após confirmação do cascade, credor/devedor propagado para todos os documentos e parcelas (incluindo quitadas)
+  5. Ao criar um contrato novo, evento 'criacao' registrado automaticamente em contratos_historico
+  6. Advogado abre seção "Histórico" colapsável e vê timeline vertical com eventos criacao e edicao em ordem cronológica
+**Plans**: 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — DB migration (contratos_historico) + contratos.js service (editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico) + criarContrato modificado para HIS-01
+- [ ] 06-02-PLAN.md — DetalheContrato.jsx edit mode: form unificado (referência + credor + devedor + DiretrizesContrato), cascade confirm, save/cancel handlers, spinner, HIS-02
+- [ ] 06-03-PLAN.md — DetalheContrato.jsx Histórico section: toggle colapsável, lazy load, empty state, timeline vertical (criacao + edicao events)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
