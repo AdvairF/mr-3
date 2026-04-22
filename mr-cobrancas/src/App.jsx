@@ -8324,11 +8324,12 @@ export default function App() {
   const [allPagamentos, setAllPagamentos] = useState([]);
   const [allDividas, setAllDividas] = useState([]);
   const [allContratos, setAllContratos] = useState([]);
+  const [allDocumentos, setAllDocumentos] = useState([]);
 
   const carregarTudo = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos, documentos] = await Promise.all([
         dbGet("devedores"),
         dbGet("credores"),
         dbGet("processos"),
@@ -8338,14 +8339,16 @@ export default function App() {
         dbGet("pagamentos_parciais"),
         dbGet("dividas"),
         dbGet("contratos_dividas", "order=created_at.desc"),
+        dbGet("documentos_contrato", "order=created_at.asc"),  // novo — nível 2
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
       setAllDividas(Array.isArray(divs) ? divs : []);
       setAllContratos(Array.isArray(contratos) ? contratos : []);
+      setAllDocumentos(Array.isArray(documentos) ? documentos : []);
       // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
       const parseJ = v => { if (!v) return []; if (Array.isArray(v)) return v; try { const r = JSON.parse(v); return Array.isArray(r) ? r : []; } catch { return []; } };
-      const contratosMap = new Map((contratos || []).map(c => [c.id, c.tipo]));
+      const documentosMap = new Map((documentos || []).map(d => [String(d.id), d.tipo]));
       const dividasMap = new Map();
       (divs || []).forEach(div => {
         const k = String(div.devedor_id);
@@ -8359,7 +8362,7 @@ export default function App() {
           juros_am: div.juros_am_percentual,
           multa_pct: div.multa_percentual,
           honorarios_pct: div.honorarios_percentual,
-          _contrato_tipo: div.contrato_id ? (contratosMap.get(div.contrato_id) ?? null) : null,
+          _contrato_tipo: div.documento_id ? (documentosMap.get(String(div.documento_id)) ?? null) : null,
         });
       });
       const parse = (v, fb = "[]") => { try { return typeof v === "string" ? JSON.parse(v || fb) : (v || JSON.parse(fb)); } catch (e) { return JSON.parse(fb); } };
