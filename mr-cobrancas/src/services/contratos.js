@@ -123,9 +123,9 @@ export async function editarContrato(contratoId, payload) {
 }
 
 /**
- * Propaga credor_id e/ou devedor_id para todos os documentos e parcelas do contrato.
+ * Propaga credor_id e/ou devedor_id para todas as parcelas (dividas) do contrato.
  * EDT-03: inclui parcelas com saldo_quitado = true.
- * Operação sequencial (sem batch PATCH disponível via dbUpdate).
+ * documentos_contrato não tem credor_id/devedor_id — são colunas de nível 1 e 3 apenas.
  */
 export async function cascatearCredorDevedor(contratoId, { credor_id, devedor_id }) {
   const updatePatch = {};
@@ -133,20 +133,11 @@ export async function cascatearCredorDevedor(contratoId, { credor_id, devedor_id
   if (devedor_id !== undefined) updatePatch.devedor_id = devedor_id;
   if (!Object.keys(updatePatch).length) return;
 
-  // Step 1: update documentos_contrato
-  const docs = await listarDocumentosPorContrato(contratoId);
-  const docsArr = Array.isArray(docs) ? docs : [];
-  for (const doc of docsArr) {
-    await dbUpdate("documentos_contrato", doc.id, updatePatch);
-  }
-
-  // Step 2: update dividas (parcelas) for each documento
-  for (const doc of docsArr) {
-    const parcelas = await dbGet("dividas", `documento_id=eq.${encodeURIComponent(doc.id)}`);
-    const parcelasArr = Array.isArray(parcelas) ? parcelas : [];
-    for (const p of parcelasArr) {
-      await dbUpdate("dividas", p.id, updatePatch);
-    }
+  // Atualiza dividas diretamente por contrato_id — sem passar por documentos_contrato
+  const parcelas = await dbGet("dividas", `contrato_id=eq.${encodeURIComponent(contratoId)}`);
+  const parcelasArr = Array.isArray(parcelas) ? parcelas : [];
+  for (const p of parcelasArr) {
+    await dbUpdate("dividas", p.id, updatePatch);
   }
 }
 
