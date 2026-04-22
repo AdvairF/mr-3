@@ -118,7 +118,12 @@ UAT fixes (3 commits pós-plans):
   4. Advogado vê seção colapsável "Pagamentos Recebidos" no DetalheContrato com lista cronológica mostrando data, valor total, parcelas amortizadas e observação de cada lançamento
   5. Advogado edita ou exclui um pagamento registrado — a amortização das parcelas afetadas é revertida atomicamente e evento `pagamento_revertido` é registrado em contratos_historico
   6. Cada pagamento registrado gera automaticamente evento `pagamento_recebido` em contratos_historico com snapshot do valor e parcelas afetadas; timeline do Histórico exibe esses eventos com labels PT-BR
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 07-01-PLAN.md — DB migrations (ALTER CHECK + pagamentos_contrato table + SPs registrar/reverter)
+- [ ] 07-02-PLAN.md — contratos.js service layer (registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato)
+- [ ] 07-03-PLAN.md — DetalheContrato.jsx: form Registrar Pagamento + validação PAGCON-05 + TIPO_EVENTO_LABELS
+- [ ] 07-04-PLAN.md — DetalheContrato.jsx: seção Pagamentos Recebidos colapsável + exclusão com reversão
 **UI hint**: yes
 
 ### Phase 8: PDF Demonstrativo (v1.4)
