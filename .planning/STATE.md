@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Pagamentos e Contratos
-current_plan: 05-06
-status: paused
-last_updated: "2026-04-21T22:00:00Z"
-last_activity: "2026-04-21 — UAT Fase 5 revelou escopo incorreto: modelo real do usuário é 3 níveis (Dívida agregada → Múltiplas NFs/documentos → Cada NF com suas próprias parcelas/duplicatas), não 2 níveis (Contrato → Parcelas). Fase 5 pausada. v1.1 fecha apenas com Fase 4. Fase 5 redesenhada no v1.2."
+current_plan: 05-discuss
+status: context-ready
+last_updated: "2026-04-21T23:00:00Z"
+last_activity: "2026-04-21 — Contexto Phase 5 reescrito para modelo 3 níveis (Contrato→Documento→Parcela). Pronto para planning."
 progress:
   total_phases: 2
   completed_phases: 1
