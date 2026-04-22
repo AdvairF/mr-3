@@ -96,6 +96,14 @@
 | CON-01..05 | Phase 5 | Complete |
 | EDT-01..04 | Phase 6 | Complete |
 | HIS-01..04 | Phase 6 | Complete |
-| PAGCON-01..06 | Phase 7 | Planned |
-| HIS-05 | Phase 7 | Planned |
-| PDF-01..04 | Phase 8 | Planned |
+| PAGCON-01 | Phase 7 | Pending |
+| PAGCON-02 | Phase 7 | Pending |
+| PAGCON-03 | Phase 7 | Pending |
+| PAGCON-04 | Phase 7 | Pending |
+| PAGCON-05 | Phase 7 | Pending |
+| PAGCON-06 | Phase 7 | Pending |
+| HIS-05 | Phase 7 | Pending |
+| PDF-01 | Phase 8 | Pending |
+| PDF-02 | Phase 8 | Pending |
+| PDF-03 | Phase 8 | Pending |
+| PDF-04 | Phase 8 | Pending |

@@ -6,6 +6,7 @@
 - ✅ **v1.1 Pagamentos** — Phase 4 only (shipped 2026-04-21)
 - ✅ **v1.2 Contratos Redesenhados** — Phase 5 (redesenho 3 níveis) (shipped 2026-04-22)
 - ✅ **v1.3 Edição de Contrato + Histórico** — Phase 6 (UAT verified 2026-04-22) — **ready to ship**
+- 🔄 **v1.4 Pagamentos por Contrato + PDF Demonstrativo** — Phases 7–8 (in progress)
 
 ## Phases
 
@@ -32,6 +33,11 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 ### ✅ v1.3 — Edição de Contrato + Histórico (UAT verified 2026-04-22 — ready to ship)
 
 - [x] **Phase 6: Edição de Contrato + Histórico** — Advogado edita credor/devedor/referência/encargos com cascade automático e visualiza histórico cronológico de eventos do contrato
+
+### 🔄 v1.4 — Pagamentos por Contrato + PDF Demonstrativo
+
+- [ ] **Phase 7: Pagamentos por Contrato** — Advogado registra pagamentos no nível do contrato com amortização automática por parcela mais antiga (Art. 354 CC), vê seção colapsável de pagamentos recebidos e pode editar ou excluir pagamentos com reversão completa
+- [ ] **Phase 8: PDF Demonstrativo** — Advogado gera PDF demonstrativo do contrato com tabela de parcelas, pagamentos recebidos, totais e rodapé jurídico
 
 ## Phase Details
 
@@ -101,6 +107,32 @@ UAT fixes (3 commits pós-plans):
 - cascade restrito a `dividas` (removido PATCH incorreto em `documentos_contrato`)
 - TIPO_EVENTO_LABELS (6 labels PT-BR) + resolve credor/devedor ID → nome na timeline
 
+### Phase 7: Pagamentos por Contrato (v1.4)
+**Goal**: Advogado pode registrar pagamentos no nível do contrato com amortização automática por parcela mais antiga (Art. 354 CC), ver o histórico colapsável de pagamentos recebidos e corrigir lançamentos via edição ou exclusão com reversão completa e rastreamento no histórico do contrato
+**Depends on**: Phase 6 (DetalheContrato, contratos.js, contratos_historico)
+**Requirements**: PAGCON-01, PAGCON-02, PAGCON-03, PAGCON-04, PAGCON-05, PAGCON-06, HIS-05
+**Success Criteria** (what must be TRUE):
+  1. Advogado abre DetalheContrato, preenche o form "Registrar Pagamento" (data, valor, observação) e salva — toast exibe quantas parcelas foram amortizadas e a seção de saldo do contrato atualiza imediatamente
+  2. Ao registrar o pagamento, parcelas em aberto são amortizadas pela mais antiga via stored procedure PL/pgSQL — o banco reflete o novo `saldo_quitado` em cada parcela afetada de forma atômica
+  3. Form bloqueia envio quando valor ≤ 0, valor excede o saldo devedor total do contrato ou data é futura — toast de erro específico aparece em cada caso
+  4. Advogado vê seção colapsável "Pagamentos Recebidos" no DetalheContrato com lista cronológica mostrando data, valor total, parcelas amortizadas e observação de cada lançamento
+  5. Advogado edita ou exclui um pagamento registrado — a amortização das parcelas afetadas é revertida atomicamente e evento `pagamento_revertido` é registrado em contratos_historico
+  6. Cada pagamento registrado gera automaticamente evento `pagamento_recebido` em contratos_historico com snapshot do valor e parcelas afetadas; timeline do Histórico exibe esses eventos com labels PT-BR
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 8: PDF Demonstrativo (v1.4)
+**Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
+**Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
+**Requirements**: PDF-01, PDF-02, PDF-03, PDF-04
+**Success Criteria** (what must be TRUE):
+  1. Advogado clica "Gerar PDF" no DetalheContrato e o navegador baixa um arquivo PDF sem recarregar a página
+  2. PDF contém tabela de parcelas com colunas: # | Vencimento | Valor Original | Valor Atualizado | Pago | Saldo — onde Valor Atualizado reflete encargos do contrato até a data de emissão
+  3. PDF contém seção de pagamentos recebidos com data, valor e parcelas amortizadas de cada lançamento
+  4. PDF contém cabeçalho com dados do escritório (hardcoded), linha de totais (Valor Total Atualizado + Total Pago + Saldo Devedor) e rodapé jurídico
+**Plans**: TBD
+**UI hint**: yes
+
 ## Deploy Notes — SQL Migrations (v1.3)
 
 As migrations abaixo foram executadas manualmente no Supabase SQL Editor durante o desenvolvimento/UAT.
@@ -141,6 +173,30 @@ ALTER TABLE public.contratos_dividas
 > a tabela `credores`, fazer mapeamento UUID → BIGINT antes de executar. Em ambiente de dev/staging
 > todos os valores eram NULL ou inválidos — truncate seguro.
 
+## Deploy Notes — SQL Migrations (v1.4)
+
+Migrations a executar no Supabase SQL Editor antes do deploy de v1.4.
+
+### Migration 3 — ALTER CHECK constraint em contratos_historico (Phase 7, plan 7-1)
+
+```sql
+-- Adicionar 'pagamento_recebido' e 'pagamento_revertido' ao CHECK constraint existente.
+-- Executar ANTES de qualquer código de service da Phase 7.
+ALTER TABLE public.contratos_historico
+  DROP CONSTRAINT IF EXISTS contratos_historico_tipo_evento_check;
+ALTER TABLE public.contratos_historico
+  ADD CONSTRAINT contratos_historico_tipo_evento_check
+  CHECK (tipo_evento IN (
+    'criacao', 'alteracao_encargos', 'cessao_credito',
+    'assuncao_divida', 'alteracao_referencia', 'outros',
+    'pagamento_recebido', 'pagamento_revertido'
+  ));
+```
+
+### Migration 4 — Stored procedures (Phase 7, plan 7-1)
+
+Stored procedures `registrar_pagamento_contrato` e `reverter_pagamento_contrato` serão definidas em 07-01-PLAN.md com PL/pgSQL completo.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -151,3 +207,5 @@ ALTER TABLE public.contratos_dividas
 | 4. Pagamentos por Dívida | v1.1 | 5/5 (+1 backlog) | **Complete** | 2026-04-21 |
 | 5. Contratos com Parcelas | v1.2 | 5/5 | **Complete** | 2026-04-22 |
 | 6. Edição de Contrato + Histórico | v1.3 | 3/3 (+3 UAT fixes) | **Complete** | 2026-04-22 |
+| 7. Pagamentos por Contrato | v1.4 | 0/4 | Not started | - |
+| 8. PDF Demonstrativo | v1.4 | 0/2 | Not started | - |

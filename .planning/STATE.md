@@ -3,22 +3,22 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: Pagamentos por Contrato + PDF Demonstrativo
 current_plan: —
-status: Defining requirements
+status: Roadmap defined — ready to plan Phase 7
 last_updated: "2026-04-22T00:00:00Z"
-last_activity: "2026-04-22 — Milestone v1.4 started"
+last_activity: "2026-04-22 — Roadmap v1.4 created: Phases 7–8 defined"
 stopped_at: —
 resume_file: —
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-22 — Milestone v1.4 iniciado: Pagamentos por Contrato + PDF Demonstrativo. Requirements and roadmap being defined.
+Last activity: 2026-04-22 — Roadmap v1.4 criado. Phase 7 (Pagamentos por Contrato) e Phase 8 (PDF Demonstrativo) definidas. Pronto para `/gsd-plan-phase 7`.
 
 ## Project Reference
 
@@ -27,27 +27,63 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 **Valor central:** O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.
 **Foco atual:** Milestone v1.4 — Pagamentos no nível do Contrato + PDF Demonstrativo.
 
+## Current Position
+
+```
+Milestone v1.4 ████░░░░░░ 0% (0/2 phases)
+
+Phase 7: Pagamentos por Contrato     [ NOT STARTED ]
+Phase 8: PDF Demonstrativo           [ NOT STARTED ]
+```
+
 ## Status
 
-**Active Phase:** — (não iniciada)
+**Active Phase:** — (Phase 7 pronta para iniciar)
 **Current Plan:** —
-**Blockers/Concerns:** Nenhum.
+**Blockers/Concerns:** Nenhum. DB migration (ALTER CHECK + stored procedures) é primeiro passo da Phase 7.
 
-## Commits 05-06 — draft, NÃO descartar, reaproveitar no v1.2
+## Roadmap v1.4
+
+| Phase | Goal | Plans | Status |
+|-------|------|-------|--------|
+| 7. Pagamentos por Contrato | Registrar pagamentos com amortização Art. 354 CC, seção colapsável, edit/delete com reversão | 4 | Not started |
+| 8. PDF Demonstrativo | Gerar PDF demonstrativo com parcelas, pagamentos e totais | 2 | Not started |
+
+## Architecture Decisions (v1.4)
+
+| Decisão | Resolução |
+|---------|-----------|
+| Atomicidade da amortização | Stored procedure PL/pgSQL (`registrar_pagamento_contrato`) — evita amortização parcial em caso de falha |
+| Reversão de pagamento | Stored procedure PL/pgSQL separada (`reverter_pagamento_contrato`) — estorno + re-aplicação |
+| CHECK constraint primeiro | ALTER contratos_historico CHECK antes de qualquer código de service — unblocks todo código F1 |
+| Service file novo | `src/services/pagamentos_contrato.js` importa de `pagamentos.js` + `contratos.js` |
+| normalizarDivida obrigatório | Todo fetch de parcela no novo service deve passar por `normalizarDivida()` (bypass do alias injection do carregarTudo) |
+| PDF library | jsPDF + jspdf-autotable + NotoSans font — instalar só na Phase 8, plano 8-1 |
+| PDF utility | `src/utils/pdfDemonstrativo.js` — isolado de DetalheContrato |
+| TIPO_EVENTO_LABELS | DetalheContrato.jsx precisa de entradas para `pagamento_recebido` e `pagamento_revertido` — feito no plan 7-3 |
+
+## Build Order (v1.4)
+
+**Phase 7:**
+- 7-1: DB migration (ALTER CHECK) + stored procedures `registrar_pagamento_contrato` + `reverter_pagamento_contrato`
+- 7-2: `pagamentos_contrato.js` service (wraps stored procedures + `listarPagamentosContrato`)
+- 7-3: DetalheContrato payment form (PAGCON-01, PAGCON-03, PAGCON-05) + TIPO_EVENTO_LABELS fix (HIS-05 partial)
+- 7-4: Seção "Pagamentos Recebidos" (PAGCON-04) + edit/delete (PAGCON-06)
+
+**Phase 8:**
+- 8-1: npm install jspdf + jspdf-autotable + NotoSans + `pdfDemonstrativo.js` utility (PDF-01..04)
+- 8-2: DetalheContrato PDF button + `handleGerarPDF` integration
+
+## Previous Milestone Context
+
+### Commits v1.3 disponíveis (reutilizáveis)
 
 | Commit | Arquivo | Nota |
 |--------|---------|------|
-| `962198e` | DiretrizesContrato.jsx (criado) | Reutilizável no v1.2 sem alteração |
+| `962198e` | DiretrizesContrato.jsx (criado) | Reutilizável sem alteração |
 | `c1e5c03` | DividaForm.jsx (refatorado) | Melhoria legítima, manter |
-| `7efb16f` | NovoContrato.jsx (encargos) | Form válido — adaptar no v1.2 para novo modelo |
-| `ec60b1c` | contratos.js (propagação) | Lógica de propagação reutilizável no v1.2 |
-
-## Roadmap v1.1
-
-| Phase | Goal | Status |
-|-------|------|--------|
-| 4. Pagamentos por Dívida | Fechar ciclo financeiro da dívida individual — registrar, consultar e corrigir pagamentos com Art. 354 CC | **COMPLETE** — 2026-04-21 |
-| 5. Contratos com Parcelas | Modelar contratos com N parcelas como dívidas reais, lista global e detalhe com saldo por parcela | In progress (2/5 plans) |
+| `7efb16f` | NovoContrato.jsx (encargos) | Form válido — adaptar para novo modelo |
+| `ec60b1c` | contratos.js (propagação) | Lógica de propagação reutilizável |
 
 ## Pendências para próximo milestone
 
