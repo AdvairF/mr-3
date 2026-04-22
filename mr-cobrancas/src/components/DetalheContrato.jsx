@@ -3,11 +3,62 @@ import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
 import AtrasoCell from "./AtrasoCell.jsx";
 import AdicionarDocumento from "./AdicionarDocumento.jsx";
-import { listarDocumentosPorContrato } from "../services/contratos.js";
+import DiretrizesContrato from "./DiretrizesContrato.jsx";
+import { Inp } from "./ui/Inp.jsx";
+import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtData(iso) { if (!iso) return "—"; const d = iso.slice(0, 10).split("-"); return `${d[2]}/${d[1]}/${d[0]}`; }
+
+function Spinner() {
+  return (
+    <>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      <span style={{
+        display: "inline-block",
+        width: 12,
+        height: 12,
+        border: "2px solid rgba(255,255,255,.3)",
+        borderTop: "2px solid #fff",
+        borderRadius: "50%",
+        animation: "spin .7s linear infinite",
+      }} />
+    </>
+  );
+}
+
+const FIELD_LABELS = {
+  credor_id:             "Credor",
+  devedor_id:            "Devedor",
+  referencia:            "Referência",
+  indice_correcao:       "Índice de Correção",
+  multa_percentual:      "Multa (%)",
+  juros_tipo:            "Taxa de Juros",
+  juros_am_percentual:   "Juros (% a.m.)",
+  honorarios_percentual: "Honorários (%)",
+  despesas:              "Despesas (R$)",
+  art523_opcao:          "Art. 523",
+  data_inicio_atualizacao: "Data Início Atualização",
+};
+
+function initEditForm(c) {
+  return {
+    referencia: c.referencia || "",
+    credor_id:  String(c.credor_id  || ""),
+    devedor_id: String(c.devedor_id || ""),
+    encargos: {
+      indexador:               c.indice_correcao       ?? "igpm",
+      data_inicio_atualizacao: c.data_inicio_atualizacao ?? "",
+      multa_pct:               String(c.multa_percentual    ?? "2"),
+      juros_tipo:              c.juros_tipo            ?? "fixo_1",
+      juros_am:                String(c.juros_am_percentual ?? "1"),
+      honorarios_pct:          String(c.honorarios_percentual ?? "10"),
+      despesas:                String(c.despesas        ?? "0"),
+      art523_opcao:            c.art523_opcao          ?? "nao_aplicar",
+    },
+  };
+}
 
 const CONTRATO_BADGE_META = {
   "NF/Duplicata":   { label: "[NF]",    bg: "#dbeafe", cor: "#1d4ed8" },
@@ -45,6 +96,9 @@ export default function DetalheContrato({
   const [saldosMap, setSaldosMap] = useState({});
   const [saldosLoading, setSaldosLoading] = useState(false);
   const [adicionandoDocumento, setAdicionandoDocumento] = useState(false);
+  const [editando,  setEditando]  = useState(false);
+  const [salvando,  setSalvando]  = useState(false);
+  const [editForm,  setEditForm]  = useState(() => initEditForm(contrato));
 
   useEffect(() => {
     setLoadingDocumentos(true);
@@ -74,6 +128,111 @@ export default function DetalheContrato({
     });
   }, [expandedDoc, hoje]);
 
+  useEffect(() => {
+    setEditForm(initEditForm(contrato));
+    setEditando(false);
+  }, [contrato.id]);
+
+  function handleEncargos(field, val) {
+    setEditForm(f => ({ ...f, encargos: { ...f.encargos, [field]: val } }));
+  }
+
+  function handleCancelar() {
+    setEditForm(initEditForm(contrato));
+    setEditando(false);
+  }
+
+  async function handleSalvar() {
+    const payload = {
+      referencia:            editForm.referencia.trim() || null,
+      credor_id:             editForm.credor_id  || null,
+      devedor_id:            editForm.devedor_id || null,
+      indice_correcao:       editForm.encargos.indexador               || null,
+      data_inicio_atualizacao: editForm.encargos.data_inicio_atualizacao || null,
+      multa_percentual:      parseFloat(editForm.encargos.multa_pct)    || 0,
+      juros_tipo:            editForm.encargos.juros_tipo              || null,
+      juros_am_percentual:   parseFloat(editForm.encargos.juros_am)    || 0,
+      honorarios_percentual: parseFloat(editForm.encargos.honorarios_pct) || 0,
+      despesas:              parseFloat(editForm.encargos.despesas)     || 0,
+      art523_opcao:          editForm.encargos.art523_opcao            || "nao_aplicar",
+    };
+
+    const credorAlterado  = String(payload.credor_id  || "") !== String(contrato.credor_id  || "");
+    const devedorAlterado = String(payload.devedor_id || "") !== String(contrato.devedor_id || "");
+    const temCascade = credorAlterado || devedorAlterado;
+
+    if (temCascade) {
+      const parcelas = (dividas || []).filter(d =>
+        documentos.some(doc => String(doc.id) === String(d.documento_id))
+      );
+      const N = parcelas.length;
+      const campos = [
+        credorAlterado  && "credor",
+        devedorAlterado && "devedor",
+      ].filter(Boolean).join(" e ");
+      const msg = `Alterar ${campos} vai atualizar ${N} parcelas (incluindo quitadas). Confirmar?`;
+      if (!window.confirm(msg)) return;
+    }
+
+    setSalvando(true);
+    try {
+      if (temCascade) {
+        await cascatearCredorDevedor(contrato.id, {
+          ...(credorAlterado  ? { credor_id:  payload.credor_id  } : {}),
+          ...(devedorAlterado ? { devedor_id: payload.devedor_id } : {}),
+        });
+      }
+
+      await editarContrato(contrato.id, payload);
+
+      const campos_db = {
+        referencia:            contrato.referencia            ?? null,
+        credor_id:             contrato.credor_id             ?? null,
+        devedor_id:            contrato.devedor_id            ?? null,
+        indice_correcao:       contrato.indice_correcao       ?? null,
+        data_inicio_atualizacao: contrato.data_inicio_atualizacao ?? null,
+        multa_percentual:      contrato.multa_percentual      ?? null,
+        juros_tipo:            contrato.juros_tipo            ?? null,
+        juros_am_percentual:   contrato.juros_am_percentual   ?? null,
+        honorarios_percentual: contrato.honorarios_percentual ?? null,
+        despesas:              contrato.despesas              ?? null,
+        art523_opcao:          contrato.art523_opcao          ?? null,
+      };
+      const diff = {};
+      for (const k of Object.keys(campos_db)) {
+        const antes  = String(campos_db[k] ?? "");
+        const depois = String(payload[k]   ?? "");
+        if (antes !== depois) diff[k] = { antes, depois };
+      }
+      if (Object.keys(diff).length > 0) {
+        const diffKeys = Object.keys(diff);
+        const ENCARGOS = new Set(["indice_correcao","data_inicio_atualizacao","multa_percentual",
+          "juros_tipo","juros_am_percentual","honorarios_percentual","despesas","art523_opcao"]);
+        let tipoEvento;
+        if (credorAlterado && devedorAlterado)              tipoEvento = "outros";
+        else if (credorAlterado)                            tipoEvento = "cessao_credito";
+        else if (devedorAlterado)                           tipoEvento = "assuncao_divida";
+        else if (diffKeys.every(k => k === "referencia"))   tipoEvento = "alteracao_referencia";
+        else if (diffKeys.some(k => ENCARGOS.has(k)) && !diffKeys.includes("referencia"))
+                                                            tipoEvento = "alteracao_encargos";
+        else                                                tipoEvento = "outros";
+        await registrarEvento(contrato.id, tipoEvento, diff).catch(() => {});
+      }
+
+      toast.success(temCascade ? "Contrato e parcelas atualizados." : "Contrato atualizado.");
+      setEditando(false);
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(
+        temCascade
+          ? "Erro ao propagar alteração: " + e.message
+          : "Erro ao salvar contrato: " + e.message
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   async function handleDocumentoAdicionado() {
     setAdicionandoDocumento(false);
     await onCarregarTudo();
@@ -85,6 +244,8 @@ export default function DetalheContrato({
   const credor  = credores?.find(c => String(c.id) === String(contrato.credor_id));
   const totalQuitado = (dividas || []).filter(d => d.saldo_quitado).reduce((s, d) => s + (d.valor_total || 0), 0);
   const emAberto = (contrato.valor_total || 0) - totalQuitado;
+  const credoresOptions = (credores || []).map(c => ({ v: String(c.id), l: c.nome }));
+  const devedoresOptions = (devedores || []).map(d => ({ v: String(d.id), l: d.nome }));
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 0 32px 0" }}>
@@ -94,18 +255,62 @@ export default function DetalheContrato({
         ← Contratos
       </button>
 
-      {/* 2. Header card */}
-      <div style={{ background: "#fff", borderRadius: 16, padding: "24px 24px", marginBottom: 16, border: "1px solid #e8f0f7" }}>
-        <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 22, color: contrato.referencia ? "#0f172a" : "#94a3b8", marginBottom: 6 }}>
-          {contrato.referencia || "Contrato"}
-        </p>
-        <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-          Credor: {credor?.nome || "— sem credor"}  ·  Devedor: {devedor?.nome || "—"}
-        </p>
-        <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-          {contrato.num_documentos || 0} documento(s) · {contrato.num_parcelas_total || 0} parcelas · {fmtBRL(contrato.valor_total)}
-        </p>
-      </div>
+      {/* 2. Header card — read mode */}
+      {!editando && (
+        <div style={{ background: "#fff", borderRadius: 16, padding: "24px 24px", marginBottom: 16, border: "1px solid #e8f0f7" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 22, color: contrato.referencia ? "#0f172a" : "#94a3b8", marginBottom: 6 }}>
+                {contrato.referencia || "Contrato"}
+              </p>
+              <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+                Credor: {credor?.nome || "— sem credor"}  ·  Devedor: {devedor?.nome || "—"}
+              </p>
+              <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+                {contrato.num_documentos || 0} documento(s) · {contrato.num_parcelas_total || 0} parcelas · {fmtBRL(contrato.valor_total)}
+              </p>
+            </div>
+            <Btn color="#4f46e5" sm onClick={() => setEditando(true)}>Editar Contrato</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Header card — edit mode */}
+      {editando && (
+        <div style={{ background: "#fff", borderRadius: 16, padding: "24px 24px", marginBottom: 16, border: "1px solid #c7d2fe" }}>
+          <div style={{ marginBottom: 12 }}>
+            <Inp
+              label="Referência"
+              value={editForm.referencia}
+              onChange={v => setEditForm(f => ({ ...f, referencia: v }))}
+              span
+            />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <Inp
+              label="Credor"
+              value={editForm.credor_id}
+              onChange={v => setEditForm(f => ({ ...f, credor_id: v }))}
+              options={credoresOptions}
+            />
+            <Inp
+              label="Devedor"
+              value={editForm.devedor_id}
+              onChange={v => setEditForm(f => ({ ...f, devedor_id: v }))}
+              options={devedoresOptions}
+            />
+          </div>
+          <DiretrizesContrato value={editForm.encargos} onChange={handleEncargos} />
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+            <Btn outline color="#64748b" sm onClick={handleCancelar} disabled={salvando}>
+              Cancelar
+            </Btn>
+            <Btn color="#4f46e5" sm disabled={salvando} onClick={handleSalvar}>
+              {salvando ? <Spinner /> : "Salvar"}
+            </Btn>
+          </div>
+        </div>
+      )}
 
       {/* 3. Financial summary card */}
       <div style={{ background: "linear-gradient(135deg,#f0fdf4 0%,#fff 100%)", borderRadius: 16, padding: "16px 24px", border: "1px solid #bbf7d0", marginBottom: 16 }}>
