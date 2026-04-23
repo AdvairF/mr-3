@@ -181,6 +181,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         {/* Campo 6: Tabela editável de parcelas (Phase 7.5 D-03 — substitui Vencimento 1ª Parcela) */}
         {parcelasIniciais && (
           <TabelaParcelasEditaveis
+            key={numParcelas}
             valorTotal={parseFloat(valor) || 0}
             parcelasIniciais={parcelasIniciais}
             modoEdicao="create"
