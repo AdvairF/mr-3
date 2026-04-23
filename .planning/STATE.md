@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: — Pagamentos
+milestone: v1.4
+milestone_name: "Pagamentos por Contrato + PDF Demonstrativo"
 current_plan: COMPLETE
 status: Phase 7.1 complete — 07.1-01 executed (Bug A + Bug B fixed, 9/9 regressão verde)
 last_updated: "2026-04-23T01:27:34Z"
