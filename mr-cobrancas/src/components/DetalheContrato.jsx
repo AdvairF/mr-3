@@ -170,7 +170,7 @@ export default function DetalheContrato({
       toast.error("Erro ao calcular saldos: " + e.message);
       setSaldosLoading(false);
     });
-  }, [expandedDoc, hoje]);
+  }, [expandedDoc, hoje, dividas]);
 
   useEffect(() => {
     setEditForm(initEditForm(contrato));
