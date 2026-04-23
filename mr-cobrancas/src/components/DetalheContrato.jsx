@@ -5,7 +5,8 @@ import AtrasoCell from "./AtrasoCell.jsx";
 import AdicionarDocumento from "./AdicionarDocumento.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import { Inp } from "./ui/Inp.jsx";
-import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico } from "../services/contratos.js";
+import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
+         registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -49,6 +50,8 @@ const TIPO_EVENTO_LABELS = {
   alteracao_encargos:    "Alteração de encargos",
   alteracao_referencia:  "Alteração de referência",
   outros:                "Edição salva",
+  pagamento_recebido:    "Pagamento recebido",
+  pagamento_revertido:   "Pagamento revertido",
 };
 
 function initEditForm(c) {
@@ -117,6 +120,15 @@ export default function DetalheContrato({
   const [historico,          setHistorico]           = useState([]);
   const [historicoLoading,   setHistoricoLoading]    = useState(false);
   const [historicoCarregado, setHistoricoCarregado]  = useState(false);
+  const [registrandoPagamento,  setRegistrandoPagamento]  = useState(false);
+  const [salvandoPagamento,     setSalvandoPagamento]     = useState(false);
+  const [pagamentosContrato,    setPagamentosContrato]    = useState([]);
+  const [pagamentosAberto,      setPagamentosAberto]      = useState(false);
+  const [pagamentosLoading,     setPagamentosLoading]     = useState(false);
+  const [pagamentosCarregado,   setPagamentosCarregado]   = useState(false);
+  const [excluindoPagamentoId,  setExcluindoPagamentoId]  = useState(null);
+  const [formPagamento,         setFormPagamento]         = useState({ data: "", valor: "", observacao: "" });
+  const [saldoCalculado,        setSaldoCalculado]        = useState(0);
 
   useEffect(() => {
     setLoadingDocumentos(true);
@@ -152,6 +164,11 @@ export default function DetalheContrato({
     setHistoricoAberto(false);
     setHistorico([]);
     setHistoricoCarregado(false);
+    setRegistrandoPagamento(false);
+    setPagamentosAberto(false);
+    setPagamentosContrato([]);
+    setPagamentosCarregado(false);
+    setSaldoCalculado(0);
   }, [contrato.id]);
 
   useEffect(() => {
@@ -270,6 +287,59 @@ export default function DetalheContrato({
     }
   }
 
+  async function handleAbrirFormPagamento() {
+    const hoje_str = typeof hoje === "string" ? hoje : hoje.toISOString().slice(0, 10);
+    const parcelasAbertas = (dividas || []).filter(d => !d.saldo_quitado);
+    let total = 0;
+    for (const p of parcelasAbertas) {
+      const pgtos = await listarPagamentos(p.id);
+      total += calcularSaldoPorDividaIndividual(p, pgtos, hoje_str);
+    }
+    setSaldoCalculado(total);
+    setRegistrandoPagamento(true);
+  }
+
+  async function handleRegistrarPagamento() {
+    const valor = parseFloat(formPagamento.valor);
+    const data  = formPagamento.data;
+    const hoje_str = typeof hoje === "string" ? hoje : hoje.toISOString().slice(0, 10);
+
+    if (!valor || valor <= 0) {
+      toast.error("Informe um valor maior que zero.");
+      return;
+    }
+    if (data > hoje_str) {
+      toast.error("Data não pode ser futura.");
+      return;
+    }
+    if (valor > saldoCalculado) {
+      toast.error(`Valor superior ao saldo devedor (${fmtBRL(saldoCalculado)}).`);
+      return;
+    }
+
+    setSalvandoPagamento(true);
+    try {
+      const result = await registrarPagamentoContrato(contrato.id, {
+        data_pagamento: data,
+        valor,
+        observacao: formPagamento.observacao || null,
+      });
+      const n = result?.parcelas_amortizadas ?? 0;
+      toast.success(`Pagamento registrado. ${n} parcela(s) amortizada(s).`);
+      setFormPagamento({ data: "", valor: "", observacao: "" });
+      setRegistrandoPagamento(false);
+      setSaldoCalculado(0);
+      const rows = await listarPagamentosContrato(contrato.id);
+      setPagamentosContrato(Array.isArray(rows) ? rows : []);
+      setPagamentosCarregado(true);
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(e.message || "Erro ao registrar pagamento.");
+    } finally {
+      setSalvandoPagamento(false);
+    }
+  }
+
   async function handleDocumentoAdicionado() {
     setAdicionandoDocumento(false);
     await onCarregarTudo();
@@ -366,6 +436,53 @@ export default function DetalheContrato({
         </div>
         <p style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", marginTop: 8, marginBottom: 0 }}>(amortização sequencial conforme Art. 354 CC)</p>
       </div>
+
+      {/* 3b. Registrar Pagamento — botão e form inline */}
+      {!registrandoPagamento && (
+        <div style={{ marginTop: 0, marginBottom: 16 }}>
+          <Btn color="#0d9488" sm onClick={handleAbrirFormPagamento}>Registrar Pagamento</Btn>
+        </div>
+      )}
+
+      {registrandoPagamento && (
+        <div style={{ background: "#fff", borderRadius: 16, padding: "16px 24px", marginBottom: 16, border: "1px solid #c7d2fe" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <Inp
+              label="Data"
+              type="date"
+              value={formPagamento.data}
+              onChange={v => setFormPagamento(f => ({ ...f, data: v }))}
+              max={typeof hoje === "string" ? hoje : hoje.toISOString().slice(0, 10)}
+            />
+            <Inp
+              label="Valor (R$)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formPagamento.valor}
+              onChange={v => setFormPagamento(f => ({ ...f, valor: v }))}
+            />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <Inp
+              label="Observação"
+              value={formPagamento.observacao}
+              onChange={v => setFormPagamento(f => ({ ...f, observacao: v }))}
+              span
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+            <Btn outline color="#64748b" sm
+              onClick={() => { setRegistrandoPagamento(false); setFormPagamento({ data: "", valor: "", observacao: "" }); setSaldoCalculado(0); }}
+              disabled={salvandoPagamento}>
+              Cancelar
+            </Btn>
+            <Btn color="#0d9488" sm disabled={salvandoPagamento} onClick={handleRegistrarPagamento}>
+              {salvandoPagamento ? <Spinner /> : "Salvar"}
+            </Btn>
+          </div>
+        </div>
+      )}
 
       {/* 4. Documentos section */}
       <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 8 }}>Documentos</p>
