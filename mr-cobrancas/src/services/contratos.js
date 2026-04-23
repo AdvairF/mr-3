@@ -262,3 +262,68 @@ export async function excluirPagamentoContrato(pagamentoId) {
 export async function listarPagamentosContrato(contratoId) {
   return dbGet(PAG_TABLE, `contrato_id=eq.${encodeURIComponent(contratoId)}&order=data_pagamento.asc`);
 }
+
+// ─── EXCLUIR CONTRATO (Phase 7.2) ────────────────────────────────────────────
+
+/**
+ * Exclui um contrato com hard delete em cascata manual.
+ *
+ * Pré-checagem (D-02):
+ *  - rejeita se existir alguma linha em pagamentos_contrato (contrato_id = :id)
+ *  - rejeita se existir alguma linha em pagamentos_divida (divida_id IN (parcelas do contrato))
+ *
+ * Sequência dos DELETEs (D-01, ordem obrigatória por causa de FKs sem CASCADE):
+ *  1. DELETE FROM dividas WHERE contrato_id = :id
+ *  2. DELETE FROM documentos_contrato WHERE contrato_id = :id
+ *  3. DELETE FROM contratos_dividas WHERE id = :id
+ *     → contratos_historico e pagamentos_contrato caem via CASCADE (mas a pré-checagem garante
+ *       que pagamentos_contrato já estava vazio)
+ *
+ * D-04: sem stored procedure. Se cair entre passos, estado é reexecutável.
+ *
+ * @param {string} contratoId  UUID do contrato
+ * @returns {Promise<{ ok: true } | { ok: false, motivo: string }>}
+ */
+export async function excluirContrato(contratoId) {
+  // Pré-check 1: pagamentos no nível do contrato
+  const pagsContrato = await dbGet(
+    "pagamentos_contrato",
+    `contrato_id=eq.${encodeURIComponent(contratoId)}&select=id&limit=1`
+  );
+  if (Array.isArray(pagsContrato) && pagsContrato.length > 0) {
+    return {
+      ok: false,
+      motivo: "Este contrato possui pagamentos registrados — não pode ser excluído. Exclua os pagamentos primeiro."
+    };
+  }
+
+  // Pré-check 2: pagamentos no nível das parcelas (pagamentos_divida)
+  const parcelas = await dbGet(
+    "dividas",
+    `contrato_id=eq.${encodeURIComponent(contratoId)}&select=id`
+  );
+  const parcelaIds = Array.isArray(parcelas) ? parcelas.map(p => p.id) : [];
+  if (parcelaIds.length > 0) {
+    const inList = parcelaIds.map(encodeURIComponent).join(",");
+    const pagsDivida = await dbGet(
+      "pagamentos_divida",
+      `divida_id=in.(${inList})&select=id&limit=1`
+    );
+    if (Array.isArray(pagsDivida) && pagsDivida.length > 0) {
+      return {
+        ok: false,
+        motivo: "Este contrato possui pagamentos registrados — não pode ser excluído. Exclua os pagamentos primeiro."
+      };
+    }
+  }
+
+  // Cascata manual (D-01)
+  // Passo 1: dividas (parcelas) — retorna [] se o contrato é header-only
+  await sb("dividas", "DELETE", null, `?contrato_id=eq.${encodeURIComponent(contratoId)}`);
+  // Passo 2: documentos_contrato — retorna [] se o contrato é header-only
+  await sb("documentos_contrato", "DELETE", null, `?contrato_id=eq.${encodeURIComponent(contratoId)}`);
+  // Passo 3: o contrato em si — contratos_historico + pagamentos_contrato caem via CASCADE
+  await dbDelete(TABLE, contratoId);
+
+  return { ok: true };
+}

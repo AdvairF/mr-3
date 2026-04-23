@@ -6,7 +6,7 @@ import AdicionarDocumento from "./AdicionarDocumento.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import { Inp } from "./ui/Inp.jsx";
 import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
-         registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato } from "../services/contratos.js";
+         registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -135,6 +135,7 @@ export default function DetalheContrato({
   const [pagamentosLoading,     setPagamentosLoading]     = useState(false);
   const [pagamentosCarregado,   setPagamentosCarregado]   = useState(false);
   const [excluindoPagamentoId,  setExcluindoPagamentoId]  = useState(null);
+  const [excluindoContrato,     setExcluindoContrato]     = useState(false);
   const [formPagamento,         setFormPagamento]         = useState({ data: "", valor: "", observacao: "" });
   const [saldoCalculado,        setSaldoCalculado]        = useState(0);
 
@@ -376,6 +377,25 @@ export default function DetalheContrato({
     }
   }
 
+  async function handleExcluirContrato() {
+    if (!window.confirm("Tem certeza? Esta ação não pode ser desfeita.")) return;
+    setExcluindoContrato(true);
+    try {
+      const result = await excluirContrato(contrato.id);
+      if (!result.ok) {
+        toast.error(result.motivo);
+        return;
+      }
+      toast.success("Contrato excluído com sucesso");
+      await onCarregarTudo();
+      onVoltar();
+    } catch (e) {
+      toast.error("Erro ao excluir contrato. Tente novamente.");
+    } finally {
+      setExcluindoContrato(false);
+    }
+  }
+
   async function handleDocumentoAdicionado() {
     setAdicionandoDocumento(false);
     await onCarregarTudo();
@@ -430,7 +450,12 @@ export default function DetalheContrato({
                 {contrato.num_documentos || 0} documento(s) · {contrato.num_parcelas_total || 0} parcelas · {fmtBRL(contrato.valor_total)}
               </p>
             </div>
-            <Btn color="#4f46e5" sm onClick={() => setEditando(true)}>Editar Contrato</Btn>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn color="#4f46e5" sm onClick={() => setEditando(true)}>Editar Contrato</Btn>
+              <Btn color="#dc2626" sm outline onClick={handleExcluirContrato} disabled={excluindoContrato}>
+                {excluindoContrato ? "Excluindo…" : "Excluir Contrato"}
+              </Btn>
+            </div>
           </div>
         </div>
       )}
