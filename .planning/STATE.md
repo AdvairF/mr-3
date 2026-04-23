@@ -54,7 +54,22 @@ Phase 8: PDF Demonstrativo           [ NOT STARTED ]
 | Phase | Goal | Plans | Status |
 |-------|------|-------|--------|
 | 7. Pagamentos por Contrato | Registrar pagamentos com amortização Art. 354 CC, seção colapsável, edit/delete com reversão | 4 | Not started |
+| 7.2. Excluir Contrato (INSERTED) | Botão UI excluir contrato — 3 DELETEs ordenados + pré-check bloqueia pagamentos reais | 1 | **Shipped** (2026-04-23) |
+| 7.3. Fix Pagamentos Parciais Resumo e Listagem (INSERTED) | Helper nominal + Resumo Financeiro + coluna Saldo na listagem — motor Art.354 intocado | 1 | **Shipped** (2026-04-23) |
+| 7.4. Cache Headers Vercel (INSERTED) | Cache-Control no vercel.json do submodule — fix F5 servindo versão antiga pós-deploy | 1 | **Shipped** (2026-04-23) |
+| 7.5. Parcelas com Datas e Valores Customizados (INSERTED) | Tabela editável de parcelas (criação + edição) com componente isolado TabelaParcelasEditaveis + readonly em parcelas pagas | TBD | Not planned |
 | 8. PDF Demonstrativo | Gerar PDF demonstrativo com parcelas, pagamentos e totais | 2 | Not started |
+
+## Roadmap Evolution
+
+- Phase 7.2 inserted after Phase 7.1: Excluir Contrato (URGENT — descoberto 2026-04-22 durante limpeza manual de 2 contratos fantasma via SQL direto no Supabase; discuss/scan executado 2026-04-23)
+- Phase 7.2 shipped 2026-04-23 — feat 07.2-01 (a063e77 submodule main / 559764e pai master) + tag v1.4-phase7.2; UAT SC-3 e SC-5 validados; bug de import dbDelete descoberto no UAT, fixado no mesmo ciclo
+- Phase 7.3 inserted after Phase 7.2: Fix Pagamentos Parciais (descoberto 2026-04-22; discuss executado 2026-04-23 após ship da 7.2; refutou hipótese inicial de bug no motor — root cause está nos componentes que ignoram pagamentos_divida)
+- Phase 7.3 shipped 2026-04-23 — feat 07.3-01 (97f06d4 submodule main / 4b8df14 pai master) + fix 07.3-01 (0c7fef4 submodule / 94f4fb1 pai) + tag v1.4-phase7.3; bug de fonte errada (pagamentos_parciais vs pagamentos_divida) descoberto no UAT e fixado no mesmo ciclo
+- Phase 7.4 inserted after Phase 7.3: Cache Headers Vercel (descoberto em uso real de produção — F5 pós-deploy serve versão antiga; fix via Cache-Control no vercel.json do submodule, corrigida a suposição inicial de que vercel.json ficaria no pai)
+- Phase 7.4 shipped 2026-04-23 — feat 07.4-01 (5a96c9b submodule main / 713c5d1 pai master) + tag v1.4-phase7.4; UAT SC-5/SC-6/SC-7 validados via curl + F5 manual; nenhum bug descoberto — primeiro ciclo sem bug pós-commit
+- Phase 7.5 inserted after Phase 7.4: Parcelas com Datas e Valores Customizados (acordos extrajudiciais com datas irregulares + valores por parcela customizados — tabela editável compartilhada; split: 7.5 edição UI / 7.6 futura Custas Judiciais motor / 7.7 futura ajuste de valor contratual; evento parcelas_editadas deferido pra 7.5.1 futura)
+- Phase 7.6 inserted after Phase 7.5.1 (2026-04-23, URGENT): Parcelas N grande (até 999) com virtualização — descoberto em uso real pelo advogado, domínio forense tem empréstimos até 420 parcelas (imobiliário 35 anos) e max atual é 360. Inserção MANUAL (CLI gsd-tools phase insert bugado: regex de extractCurrentMilestone casa "(v1.4)" em títulos de phase e trunca extração). Backlog original reservava 7.9 para esta phase, mas numeração foi canonicalizada para 7.6 (próximo decimal sem gap). Custas Judiciais vira 7.7, Tech debt pagamentos_parciais vira 7.8, etc.
 
 ## Architecture Decisions (v1.4)
 

@@ -283,6 +283,15 @@ Plans:
 **UI hint**: yes (afeta input de valor e coluna Saldo no DetalheContrato — mudanças visuais mínimas, apenas consertam cached state)
 **Status**: Awaiting /gsd-plan-phase 7.5.1
 
+### Phase 7.6: Parcelas N grande (até 999) com virtualização (INSERTED)
+**Goal**: Advogado consegue cadastrar contratos reais de empréstimo com N até 999 parcelas (imobiliário 30–35 anos = 360/420x, consignado = 96x) — remove limite cosmético `max="360"` atual em `AdicionarDocumento.jsx` e adiciona virtualização de scroll via `@tanstack/react-virtual` na `TabelaParcelasEditaveis.jsx`, mantendo performance e consistência visual em N grande e preservando 100% das validações existentes (soma, datas crescentes, readonly em parcelas pagas, indicador Soma/Total/Δ em tempo real).
+**Depends on**: Phase 7.5 (componente `TabelaParcelasEditaveis.jsx` existe — esta phase modifica suas internals)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto em uso real pelo advogado: empréstimos reais do domínio forense vão até 420 parcelas)
+**Decisions**: ver `.planning/phases/07.6-parcelas-n-grande/07.6-CONTEXT.md` (discuss locked 2026-04-23)
+**Plans**: TBD (3 plans atômicos previstos: 7.6-01 bump limite input, 7.6-02 virtualização, 7.6-03 UAT + bump submodule)
+**UI hint**: yes (refactor do `TabelaParcelasEditaveis` + input de parcelas em `AdicionarDocumento`)
+**Status**: Planned 2026-04-23 — awaiting /gsd-plan-phase 7.6
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
