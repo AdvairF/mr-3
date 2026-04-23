@@ -38,6 +38,11 @@ See full archive: `.planning/milestones/v1.0-ROADMAP.md`
 
 - [ ] **Phase 7: Pagamentos por Contrato** — Advogado registra pagamentos no nível do contrato com amortização automática por parcela mais antiga (Art. 354 CC), vê seção colapsável de pagamentos recebidos e pode editar ou excluir pagamentos com reversão completa
 - [ ] **Phase 7.1: Fix Histórico Pagamentos** — Gap closure: corrigir 2 bugs visuais confirmados no UAT da Phase 7 (renderização pagamento_recebido/revertido + timezone created_at)
+- [ ] **Phase 7.2: Excluir Contrato** (INSERTED) — Urgente: advogado exclui contrato via UI (hoje só via SQL). Hard delete com 3 DELETEs ordenados e pré-check bloqueando contratos com pagamentos reais
+- [ ] **Phase 7.3: Fix Pagamentos Parciais Resumo e Listagem** (INSERTED) — Gap closure: Resumo Financeiro do DetalheContrato e coluna "Valor Total" da TabelaContratos ignoram pagamentos parciais em pagamentos_divida. Fix sem tocar no motor Art.354
+- [ ] **Phase 7.4: Cache Headers Vercel** (INSERTED) — UX: após deploy, navegador precisa de Ctrl+F5 pra ver versão nova. Fix via Cache-Control no vercel.json (no-cache pro catch-all, immutable pros assets hasheados do Vite)
+- [ ] **Phase 7.5: Parcelas com Datas e Valores Customizados** (INSERTED) — UX forense: acordos extrajudiciais exigem datas e valores não-regulares por parcela. Tabela editável na criação + edição, com readonly em parcelas já pagas. Componente isolado reusável pra Phase 7.6/7.7 futuras
+- [ ] **Phase 7.5.1: Sincronização saldosMap + UX input valor** (INSERTED) — Gap closure: 3 bugs descobertos no UAT da Phase 7.5 (R$ 39,90 fantasma + Saldo não recalcula após edição + input valor não apaga zero). Todos cirúrgicos, motor Art.354 intocado
 - [ ] **Phase 8: PDF Demonstrativo** — Advogado gera PDF demonstrativo do contrato com tabela de parcelas, pagamentos recebidos, totais e rodapé jurídico
 
 ## Phase Details
@@ -139,6 +144,145 @@ Plans:
 Plans:
 - [x] 07.1-01-PLAN.md — DetalheContrato.jsx: isPagamento guard + diffEntries fix + JSX branch + fmtDataHora timezone fix
 
+### Phase 7.2: Excluir Contrato (v1.4 — INSERTED)
+**Goal**: Advogado exclui contrato do banco via botão na UI do DetalheContrato, sem precisar acionar o banco diretamente. Hard delete em cascata manual (3 DELETEs ordenados), bloqueado quando existem pagamentos reais registrados.
+**Depends on**: Phase 7 (DetalheContrato.jsx como ponto de entrada, contratos.js como service base)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto no UAT pós-v1.4)
+**Decisions locked (from discuss session 2026-04-23):**
+- **D-01:** 3 DELETEs REST sequenciais em ordem: `dividas WHERE contrato_id` → `documentos_contrato WHERE contrato_id` → `contratos_dividas WHERE id`. Sem stored procedure. `contratos_historico` e `pagamentos_contrato` cascateiam via FK.
+- **D-02:** Blocklist da pré-checagem: rejeita se existe `pagamentos_contrato` com `contrato_id = :id` OU `pagamentos_divida` com `divida_id IN (parcelas do contrato)`. **NÃO** bloqueia por `contratos_historico` (cascata automática) nem por `documentos_contrato` (deletado no passo 2).
+- **D-03:** Mensagem de rejeição: "Este contrato possui pagamentos registrados — não pode ser excluído. Exclua os pagamentos primeiro."
+- **D-04:** Atomicidade: REST sequencial aceito. Se falhar no meio, contrato pode ficar com docs órfãos (reexecutável). SP fica como Phase 7.2.1 futura se virar problema.
+- **D-05:** Botão "Excluir Contrato" vermelho (`color="#dc2626"`) ao lado do "Editar Contrato" em DetalheContrato.jsx header read mode. Usa mesmo Btn component.
+- **D-06:** window.confirm com texto "Tem certeza? Esta ação não pode ser desfeita." Em sucesso, navega de volta pra lista de contratos e refresca state (padrão Phase 5/6 de refresh após create/edit).
+- **D-07:** Fora do escopo: botão na TabelaContratos (listagem), cascata forçada sobre pagamentos, exclusão em massa, soft delete.
+**Success Criteria** (what must be TRUE):
+  1. Botão "Excluir Contrato" vermelho aparece ao lado de "Editar Contrato" no header do DetalheContrato
+  2. Clicar no botão abre window.confirm — se cancelar, nada acontece
+  3. Contrato sem dívidas e sem documentos (header-only) é excluído com sucesso pelos 3 DELETEs (2 primeiros retornam 0 rows, 3º retorna 1)
+  4. Contrato com parcelas sem pagamentos é excluído com sucesso; histórico cascata automaticamente
+  5. Contrato com ≥1 linha em pagamentos_contrato OU pagamentos_divida é rejeitado com a mensagem de D-03 — nenhum DELETE é executado
+  6. Após exclusão bem-sucedida, UI navega de volta pra lista e o contrato deletado não aparece mais (state refrescado)
+  7. Suite de regressão `npm run test:regressao` continua 9/9 verde (motor Art.354 não tocado)
+**Plans**: TBD
+**UI hint**: yes
+**Status**: Inserted 2026-04-23 — awaiting /gsd-plan-phase 7.2
+
+### Phase 7.3: Fix Pagamentos Parciais Resumo e Listagem (v1.4 — INSERTED)
+**Goal**: Resumo Financeiro do DetalheContrato e listagem global de Contratos passam a refletir pagamentos parciais. Advogado vê "quanto já foi pago e quanto ainda falta" corretamente, sem precisar abrir cada contrato individualmente. Motor Art.354 NÃO é tocado — a correção está nos componentes que leem pagamentos_divida como fonte de verdade em vez de usar só o flag saldo_quitado.
+**Depends on**: Phase 7 (pagamentos_divida existe e é alimentada pela SP registrar_pagamento_contrato + pela Phase 4 manual), Phase 7.2 (ModuloContratos + TabelaContratos + DetalheContrato estáveis)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto no UAT pós-ship da v1.4)
+**Decisions locked (from discuss session 2026-04-23):**
+- **D-01:** Motor Art.354 (`calcularSaldosPorDivida` em `utils/devedorCalc.js`, `calcularSaldoPorDividaIndividual` em `services/pagamentos.js`) **NÃO é modificado**. Os 9 testes de regressão Art.354 preservados por invariante estrutural — se o motor não é editado, os testes não regredem.
+- **D-02:** Fonte de verdade dos valores pagos = `pagamentos_divida.valor`. Essa tabela é alimentada por 2 caminhos (SP `registrar_pagamento_contrato` Phase 7 — confirmado em 07-01-PLAN.md:211; e `criarPagamento` manual Phase 4). Somar `pagamentos_divida` cobre ambos.
+- **D-03:** Resumo é NOMINAL — `saldo_restante = valor_total_contrato - Σ pagamentos`. Não reflete juros/correção/multa Art.354 (isso já existe em DetalheDivida por parcela, fora do escopo). Advogado usa Resumo para "status do acordo"; motor Art.354 para execução.
+- **D-04:** Helper puro `calcularTotaisContratoNominal(dividasDoContrato, allPagamentos)` retorna `{ valor_total, total_pago, saldo_restante, quitado_total }`. Sem fetch — dados já carregados em `allPagamentos` (prop existente em DetalheContrato e App.jsx). Co-localizado em `src/services/contratos.js` (ou extraído para `src/utils/totaisContrato.js` — discretion do planner). Arredondamento inline `Math.round(x*100)/100` (padrão do projeto; sem util compartilhado).
+- **D-05:** Tolerância de quitação: `quitado_total = saldo_restante <= 0.005` (meio centavo absorve ruído de float). Clip de over-payment via `Math.max(0, saldo)`.
+- **D-06:** Label do Resumo Financeiro no DetalheContrato: **"Total Quitado" → "Total Pago"** (semanticamente correto — quitado sugere 100%, pago inclui parcial). Aplicar renomeação consistentemente se aparecer em outros lugares.
+- **D-07:** Listagem TabelaContratos — **remover coluna "Valor Total"** e substituir por coluna única "Saldo" com 2 valores empilhados: `{pago} pago` como subtexto e `{em aberto}` como valor principal em destaque (vermelho se > 0, verde "Quitado" se ≤ 0). Sem tooltip de hover. Total colunas permanece 6: Credor · Devedor · Docs · Parcelas · **Saldo** · Em Atraso.
+- **D-08:** Performance — `TabelaContratos` não recebe `allPagamentos` hoje. Solução: `ModuloContratos` (ou App.jsx se ele já processa) pré-computa `Map<contratoId, { pago, emAberto }>` análogo ao `parcelasPorContrato` existente. TabelaContratos consulta o Map em O(1) por linha em vez de filtrar `allPagamentos` a cada render.
+- **D-09:** Refresh pós-pagamento — `handleRegistrarPagamento` (DetalheContrato.jsx:356) e `handleExcluirPagamento` (DetalheContrato.jsx:372) **já chamam `onCarregarTudo()`**. Resumo recalcula automaticamente após mutação. **Zero trabalho extra** — não há Task 4 de refresh.
+- **D-10:** Fora do escopo: mudanças em motor Art.354, SP, migration, schema; Phase 8 PDF; housekeeping docs GSD; outros call sites que possam ter pattern similar (se descobertos, abrir Phase 7.4).
+**Success Criteria** (what must be TRUE):
+  1. Helper `calcularTotaisContratoNominal` (ou nome escolhido pelo planner) existe e retorna `{ valor_total, total_pago, saldo_restante, quitado_total }` — função pura, sem efeitos colaterais
+  2. No caso do usuário (contrato R$ 900, pagamentos R$ 300 + R$ 1): `total_pago === 301`, `saldo_restante === 599`
+  3. Resumo Financeiro do DetalheContrato mostra "Total Pago R$ 301" e "Em Aberto R$ 599" (labels "Total Quitado" substituído por "Total Pago")
+  4. Listagem TabelaContratos tem coluna "Saldo" com `{pago} pago` em cima e `{em aberto}` embaixo (vermelho se > 0, "Quitado" verde se ≤ 0); coluna "Valor Total" removida
+  5. Refresh automático funciona após registrar/excluir pagamento (já é o comportamento, validar não-regressão)
+  6. `npm run test:regressao` continua 9/9 verde (motor Art.354 não tocado — invariante estrutural)
+  7. Build limpo (`npm run build`) sem erros
+**Plans**: 1 plan
+Plans:
+- [ ] 07.3-01-PLAN.md — Helper calcularTotaisContratoNominal + integração UI (DetalheContrato Resumo + ModuloContratos Map + TabelaContratos coluna Saldo) + duplo checkpoint commit (SEM PUSH)
+**UI hint**: yes
+**Status**: Planned 2026-04-23 — awaiting /gsd-execute-phase 7.3
+
+### Phase 7.4: Cache Headers Vercel (v1.4 — INSERTED)
+**Goal**: Após deploy da Vercel, o navegador do usuário serve automaticamente a versão nova sem precisar de Ctrl+F5 / recarregar forçado. Sintoma atual: navegador serve index.html cacheado que aponta pros nomes hash antigos dos assets, então JS novos nunca são baixados até cache expirar ou usuário forçar.
+**Depends on**: Phase 7.3 (shipped) — garante que não há alteração em JS/UI concorrente enquanto mexemos no deploy config.
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto em uso real de produção)
+**Decisions locked (from discuss session 2026-04-23):**
+- **D-01:** vercel.json está em `src/mr-3/mr-cobrancas/vercel.json` (submodule), NÃO no pai. Evidência: rewrites SPA atuais estão funcionando em produção — se não estivessem, F5 em /dashboard daria 404. Vercel lê do submodule via Root Directory configurado no dashboard da Vercel.
+- **D-02:** Preservar `rewrites` atuais (`/(.*)` → `/index.html`). Sem eles, SPA quebra com F5 → 404 (que é Phase 7.5 futura — router). Nada de tocar nessa parte.
+- **D-03:** Adicionar bloco `headers` com 2 regras (ordem importa — Vercel aplica todos os matches e última regra ganha em conflito de chave):
+  1. Catch-all `/(.*)`: `Cache-Control: no-cache, no-store, must-revalidate` — força revalidação em todo request (index.html, favicon, rotas SPA).
+  2. `/assets/(.*)`: `Cache-Control: public, max-age=31536000, immutable` — Vite hasheia nome dos assets; cache "pra sempre" sem risco de staleness.
+- **D-04:** Ordem das regras em vercel.json: catch-all PRIMEIRO, assets-override DEPOIS — pra assets ganhar sobre catch-all por regra de última-precedência.
+- **D-05:** `public/` contém apenas `public/index.html` (274 bytes, placeholder legado). Zero fonts/imagens/PDFs. Catch-all `no-cache` aplica sem problema — custo trivial de re-baixar placeholder sub-1KB é desprezível.
+- **D-06:** UAT simplificado — o próprio deploy da Phase 7.4 é a primeira versão com headers novos E a primeira versão nova pós-deploy desde 7.3. Se F5 simples no mrcobrancas.com.br mostrar a versão nova (vercel.json com headers), validou. Não precisa push trivial extra.
+- **D-07:** Fluxo de commit mesmo padrão da 7.2/7.3: commit no submodule main + bump no pai master + push com autorização. Ambos os PAUSAs aplicam.
+- **D-08:** Fora do escopo: router / Phase 7.5 (rotas SPA), banner "nova versão disponível", Service Worker / PWA, mudança em Vite bundler ou em dependências, CDN cache (s-maxage) — Vercel já invalida automaticamente seu CDN a cada deploy.
+**Success Criteria** (what must be TRUE):
+  1. `src/mr-3/mr-cobrancas/vercel.json` contém `rewrites` preservado + `headers` com 2 entradas (catch-all + assets) na ordem correta
+  2. JSON válido (sem vírgula sobrando, colchetes balanceados) — `node -e "JSON.parse(require('fs').readFileSync(...))"` passa sem throw
+  3. `npm run build` continua exit 0 (zero impacto em bundler; só config de deploy)
+  4. `npm run test:regressao` continua 9/9 verde (motor não tocado)
+  5. Após deploy em mrcobrancas.com.br, `curl -I https://mrcobrancas.com.br/` retorna `Cache-Control: no-cache, no-store, must-revalidate`
+  6. `curl -I https://mrcobrancas.com.br/assets/<hash>.js` retorna `Cache-Control: public, max-age=31536000, immutable` (onde `<hash>` é um asset real do deploy)
+  7. F5 simples em aba pré-aberta do mrcobrancas.com.br após deploy mostra a versão nova do app (não precisa Ctrl+F5)
+**Plans**: 1 plan
+Plans:
+- [ ] 07.4-01-PLAN.md — vercel.json: preservar rewrites SPA + adicionar headers (catch-all no-cache + assets immutable) + duplo checkpoint commit (SEM PUSH)
+**UI hint**: no (deploy config, zero código de UI)
+**Status**: Planned 2026-04-23 — awaiting /gsd-execute-phase 7.4
+
+### Phase 7.5: Parcelas com Datas e Valores Customizados (v1.4 — INSERTED)
+**Goal**: Advogado consegue criar documentos com parcelas de valores e datas customizadas (fluxo de acordos extrajudiciais) via tabela editável, E editar parcelas de documentos existentes com proteção de integridade contábil: valores de parcelas com pagamento registrado ficam readonly; datas ainda podem ser reagendadas se a parcela estiver sem pagamento. Componente reusável para Phase 7.6 (Custas) e 7.7 (Ajuste de valor contratual) futuras.
+**Depends on**: Phase 7.3 (prop `allPagamentosDivida` disponível em ModuloContratos e DetalheContrato — usada para pré-computar Set de parcelas com pagamento)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto em uso real de produção pelo advogado)
+**Decisions locked (from discuss session 2026-04-23):**
+- **D-01:** Motor Art.354 (`calcularSaldosPorDivida` em `utils/devedorCalc.js`, `calcularSaldoPorDividaIndividual` em `services/pagamentos.js`) **NÃO é tocado**. 9 testes regressão preservados por invariante estrutural.
+- **D-02:** Novo componente `src/components/TabelaParcelasEditaveis.jsx` **100% isolado**, zero acoplamento a ModuloContratos/DetalheContrato/AdicionarDocumento. Props: `{ valorTotal, parcelasIniciais, modoEdicao: "create"|"edit", dividasComPagamentoIds: Set<string>, onChange, onSubmit, onCancel }`. Base reusável pra Phase 7.6 e 7.7 futuras.
+- **D-03:** Fluxo de criação — `AdicionarDocumento.jsx` substitui `num_parcelas + primeira_parcela_na_data_base` pela tabela em modo create. `gerarPayloadParcelasDocumento` em `contratos.js:157` fica como default (outros fluxos), mas o novo caminho bypass ela.
+- **D-04:** Fluxo de edição — botão "Editar parcelas" por documento no DetalheContrato, abre a tabela em modo edit com parcelas atuais preenchidas. Parcelas com `saldo_quitado=true` OU com ≥1 row em `pagamentos_divida` ficam com valor **E** data readonly (simplicidade > flexibilidade).
+- **D-05:** "Sugerir datas" — Opção A: usuário preenche data da parcela 1 manual, botão oferece Mensal/Quinzenal/Semanal/Personalizado e preenche da 2 em diante mantendo os valores já editados.
+- **D-06:** Valor default por parcela = `Math.floor((valorTotal/N)*100)/100` com última recebendo o resto — mantém padrão de `gerarPayloadParcelasDocumento`.
+- **D-07:** Validações antes de salvar: (a) soma das parcelas === documento.valor (tolerância R$ 0,01); (b) todas as datas preenchidas; (c) ordem **não-decrescente** (permite 2 parcelas no mesmo dia — motor ordena por data+id, seguro).
+- **D-08:** Soma das parcelas === `documentos_contrato.valor` é **INVARIANTE** nesta phase. Não permite ajustar valor total via tela de edição. Se quiser mudar valor total (desconto/novação), é Phase 7.7 futura.
+- **D-09:** Edit mode NÃO permite adicionar/remover linhas. `documentos_contrato.num_parcelas` é **imutável pós-criação**. Mudar N requer criar documento novo.
+- **D-10:** Service layer — novo `atualizarParcelasCustom(documentoId, parcelasEditadas)` (localização: `contratos.js` ou `dividas.js`, discretion do planner). Valida soma + ordem + readonly de parcelas pagas. Itera PATCHes em `dividas` via `atualizarDivida` existente. Atomicidade aceita como reexecutável (mesmo trade-off da Phase 7.2 D-04).
+- **D-11:** Evento `parcelas_editadas` em `contratos_historico` **DEFERIDO pra Phase 7.5.1 futura** (rastreabilidade forense de edição de datas). Não adiciona agora.
+- **D-12:** Fora do escopo: tipo novo "Custas Judiciais" (Phase 7.6), ajuste de valor contratual/novação (Phase 7.7), mudança no motor Art.354, migration de schema.
+**Success Criteria** (what must be TRUE):
+  1. `TabelaParcelasEditaveis.jsx` criado, puro (props-only, sem import de ModuloContratos/DetalheContrato/AdicionarDocumento); recebe props conforme D-02
+  2. Validação soma === valorTotal (tolerância R$ 0,01) bloqueia save com toast claro quando falha
+  3. Validação ordem não-decrescente bloqueia save com toast claro quando falha
+  4. Fluxo de criação: `AdicionarDocumento` usa o componente em modo create; salvar envia parcelas customizadas para o service e gera N parcelas conforme digitadas
+  5. Fluxo de edição: `DetalheContrato` tem botão "Editar parcelas" por documento; abrir mostra parcelas atuais; parcelas com pagamento têm valor+data readonly; salvar atualiza só o que mudou
+  6. Readonly detection: `dividasComPagamentoIds` pré-computado como `Set<string>` usando `allPagamentosDivida.filter(p => !!p.valor).map(p => String(p.divida_id))` + OR `saldo_quitado=true`
+  7. `npm run test:regressao` continua 9/9 verde (motor Art.354 intocado por invariante estrutural)
+**Plans**: 1 plan
+Plans:
+- [ ] 07.5-01-PLAN.md — Service atualizarParcelasCustom + adicionarDocumento 4º param + TabelaParcelasEditaveis (novo componente 100% isolado) + integrações AdicionarDocumento (create) e DetalheContrato (edit com Set readonly via useMemo) + duplo checkpoint commit (SEM PUSH)
+**UI hint**: yes
+**Status**: Planned 2026-04-23 — awaiting /gsd-execute-phase 7.5
+
+### Phase 7.5.1: Sincronização saldosMap + UX input valor (v1.4 — INSERTED)
+**Goal**: Corrigir 3 bugs descobertos no UAT da Phase 7.5, todos cirúrgicos e sem tocar no motor Art.354: (a) saldo fantasma R$ 39,90 após reagendar parcela para data futura; (b) coluna Saldo não recalcula após editar valor da parcela sem F5; (c) input de valor na TabelaParcelasEditaveis não permite apagar o zero e concatena keystrokes ao "0" preexistente. Root cause unificado dos bugs A+B: `useEffect` que calcula `saldosMap` em `DetalheContrato.jsx:173` tem deps incompletas — falta `dividas`. Bug C: state local Number em vez de string no componente isolado da 7.5.
+**Depends on**: Phase 7.5 (componente `TabelaParcelasEditaveis.jsx` e integração de edição em `DetalheContrato` foram introduzidos na 7.5; os 3 bugs só são visíveis após a feature de editar datas/valores existir)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto em UAT localhost da Phase 7.5 em 2026-04-23)
+**Decisions locked (from discuss session 2026-04-23):**
+- **D-01:** Motor Art.354 (`calcularSaldosPorDivida` em `utils/devedorCalc.js`, `calcularSaldoPorDividaIndividual` em `services/pagamentos.js`) **NÃO é tocado**. 9 testes regressão TJGO preservados por invariante estrutural. Nenhum teste novo é adicionado.
+- **D-02:** Bug A (R$ 39,90 fantasma) + Bug B (Saldo não recalcula após edição) têm **mesma raiz**: `useEffect` em `src/mr-3/mr-cobrancas/src/components/DetalheContrato.jsx:173` com deps `[expandedDoc, hoje]` faltando `dividas`. Fix: adicionar `dividas` às deps. `saldosMap` stale porque `setSaldosMap(prev => ({...prev, ...new}))` faz merge e IDs existentes nunca são sobrescritos até um novo expand.
+- **D-03:** Deps simples `[expandedDoc, hoje, dividas]` sem hash signature otimizado nesta phase. Se UAT futuro detectar lentidão em contratos grandes (50+ parcelas), Phase 7.5.2 otimiza.
+- **D-04:** Bug C (input valor não apaga zero) isolado em `src/mr-3/mr-cobrancas/src/components/TabelaParcelasEditaveis.jsx`. Fix correto: state local de string em vez de Number puro — permite campo vazio durante edição. NÃO é workaround visual.
+- **D-05:** Classificação dos 3 bugs: todos CIRÚRGICOS. Zero bugs de risco médio ou alto. Commit split segue padrão 7.x (feat/fix no submodule + bump no pai).
+- **D-06:** Commit messages: `fix(07.5.1-01): input valor aceita limpar em TabelaParcelasEditaveis` (Task 1, Bug C) + `fix(07.5.1-02): saldosMap não invalida após edição de parcelas (bugs A + B)` (Task 2, Bugs A+B consolidados) + `chore(07.5.1): bump submodule mr-3 — saldosMap sync + input UX (07.5.1)` (Task 3, bump pai).
+- **D-07:** UAT em localhost segue padrão que pegou os bugs nas fases anteriores. 3 cenários: (a) Bug C — apagar tudo no input com backspace, digitar "50", verificar ausência de zero à esquerda; (b) Bug B — editar parcela 300→500, salvar, verificar Saldo recalcula sem F5; (c) Bug A — editar parcela pra data futura, salvar, verificar Saldo puro sem penalidade fantasma. Prod vira smoke test final.
+- **D-08:** Fluxo de commit mesmo padrão da 7.2/7.3/7.4/7.5: commit(s) no submodule main + bump no pai master + push só com autorização explícita. Ambos os PAUSAs (#1 diff review, #2 bump review) aplicam.
+- **D-09:** Fora do escopo: otimização via hash signature (só se regressão UX surgir — Phase 7.5.2), refactor de `saldosMap` para usar Map/WeakMap, mudanças no motor Art.354, evento `parcelas_editadas` em `contratos_historico` (ainda deferido à futura forense), qualquer alteração na tabela `dividas` ou `pagamentos_divida`.
+**Success Criteria** (what must be TRUE):
+  1. `src/mr-3/mr-cobrancas/src/components/DetalheContrato.jsx` linha do useEffect de `saldosMap` tem deps `[expandedDoc, hoje, dividas]` (verificável via grep)
+  2. `src/mr-3/mr-cobrancas/src/components/TabelaParcelasEditaveis.jsx` usa state local de string para o input valor (verificável via leitura do componente — não Number puro no state do input)
+  3. `git diff HEAD~N -- src/mr-3/mr-cobrancas/src/utils/devedorCalc.js src/mr-3/mr-cobrancas/src/services/pagamentos.js` vazio (invariante motor Art.354)
+  4. `npm run test:regressao` continua 9/9 verde (motor intocado)
+  5. `npm run build` exit 0
+  6. UAT localhost confirma os 3 cenários de D-07 passam sem F5
+  7. Zero push executado sem autorização explícita do usuário
+**Plans**: TBD (3 tasks previstas em 1 wave sequencial — Bug C, Bugs A+B, Checkpoint)
+**UI hint**: yes (afeta input de valor e coluna Saldo no DetalheContrato — mudanças visuais mínimas, apenas consertam cached state)
+**Status**: Awaiting /gsd-plan-phase 7.5.1
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
@@ -227,4 +371,8 @@ Stored procedures `registrar_pagamento_contrato` e `reverter_pagamento_contrato`
 | 6. Edição de Contrato + Histórico | v1.3 | 3/3 (+3 UAT fixes) | **Complete** | 2026-04-22 |
 | 7. Pagamentos por Contrato | v1.4 | 0/4 | Not started | - |
 | 7.1. Fix Histórico Pagamentos | v1.4 gap | 1/1 | **Complete** | 2026-04-23 |
+| 7.2. Excluir Contrato (INSERTED) | v1.4 gap | 1/1 | **Complete** (shipped) | 2026-04-23 |
+| 7.3. Fix Pagamentos Parciais Resumo e Listagem (INSERTED) | v1.4 gap | 1/1 | **Complete** (shipped) | 2026-04-23 |
+| 7.4. Cache Headers Vercel (INSERTED) | v1.4 gap | 1/1 | **Complete** (shipped) | 2026-04-23 |
+| 7.5. Parcelas com Datas e Valores Customizados (INSERTED) | v1.4 gap | 0/1 | Planned | - |
 | 8. PDF Demonstrativo | v1.4 | 0/2 | Not started | - |
