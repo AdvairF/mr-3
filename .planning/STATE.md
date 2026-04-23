@@ -1,24 +1,22 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Pagamentos por Contrato + PDF Demonstrativo
-current_plan: —
-status: Phase 7 planned — ready to execute (4 plans, 4 waves)
-last_updated: "2026-04-22T00:00:00Z"
-last_activity: "2026-04-22 — Phase 7 planning complete (4 plans verified, 7/7 req IDs covered)"
-stopped_at: Phase 7 planning complete
-resume_file: .planning/phases/07-pagamentos-por-contrato/07-01-PLAN.md
+milestone: v1.1
+milestone_name: — Pagamentos
+current_plan: COMPLETE
+status: Phase 7.1 complete — 07.1-01 executed (Bug A + Bug B fixed, 9/9 regressão verde)
+last_updated: "2026-04-23T01:27:34Z"
+last_activity: 2026-04-23 — Phase 7.1 plan 07.1-01 executado. Bug A (isPagamento render branch) e Bug B (fmtDataHora timezone) corrigidos em DetalheContrato.jsx. Submodule mr-3 commitado (5a0fc40), bump no pai (c4f6b9f). 9/9 testes passando. Nenhum push executado.
 progress:
-  total_phases: 2
-  completed_phases: 0
-  total_plans: 8
-  completed_plans: 0
-  percent: 0
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 6
+  completed_plans: 6
+  percent: 100
 ---
 
 # Mr. Cobranças — Project State
 
-Last activity: 2026-04-22 — Roadmap v1.4 criado. Phase 7 (Pagamentos por Contrato) e Phase 8 (PDF Demonstrativo) definidas. Pronto para `/gsd-plan-phase 7`.
+Last activity: 2026-04-23 — Phase 7.1 plan 07.1-01 executado. Bug A (isPagamento render branch) e Bug B (fmtDataHora timezone) corrigidos em DetalheContrato.jsx. Submodule mr-3 commitado (5a0fc40), bump no pai (c4f6b9f). 9/9 testes passando. Nenhum push executado.
 
 ## Project Reference
 
@@ -30,17 +28,26 @@ See: .planning/PROJECT.md (updated 2026-04-22)
 ## Current Position
 
 ```
-Milestone v1.4 ████░░░░░░ 0% (0/2 phases)
+Phase 7.1: Fix Histórico Pagamentos  [COMPLETE] (1/1 plans)
 
-Phase 7: Pagamentos por Contrato     [ NOT STARTED ]
+Phase 7: Pagamentos por Contrato     [ COMPLETE ]
 Phase 8: PDF Demonstrativo           [ NOT STARTED ]
 ```
 
 ## Status
 
-**Active Phase:** — (Phase 7 pronta para iniciar)
-**Current Plan:** —
-**Blockers/Concerns:** Nenhum. DB migration (ALTER CHECK + stored procedures) é primeiro passo da Phase 7.
+**Active Phase:** — (Phase 7.1 completa; próximo: Phase 8 ou novo UAT)
+**Current Plan:** COMPLETE (07.1-01)
+**Blockers/Concerns:** Nenhum. Aguardar UAT pós-fix para confirmar Bug A e Bug B corrigidos. Bug saldo residual: diagnóstico inconclusivo — validar com banco limpo.
+
+## Phase 7.1 Decisions
+
+| Decisão | Resolução |
+|---------|-----------|
+| fmtDataHora timezone | toLocaleDateString com timeZone America/Sao_Paulo — corrige offset UTC em TIMESTAMPTZ |
+| isPagamento guard em diffEntries | !isCriacao && !isPagamento evita cálculo desnecessário de diff entries para eventos de pagamento |
+| snap.data_pagamento usa fmtData | Coluna DATE — slice correto. evento.created_at usa fmtDataHora (TIMESTAMPTZ) |
+| Sem push | Commits apenas locais — aguardando autorização explícita do usuário |
 
 ## Roadmap v1.4
 
@@ -65,12 +72,14 @@ Phase 8: PDF Demonstrativo           [ NOT STARTED ]
 ## Build Order (v1.4)
 
 **Phase 7:**
+
 - 7-1: DB migration (ALTER CHECK) + stored procedures `registrar_pagamento_contrato` + `reverter_pagamento_contrato`
 - 7-2: `pagamentos_contrato.js` service (wraps stored procedures + `listarPagamentosContrato`)
 - 7-3: DetalheContrato payment form (PAGCON-01, PAGCON-03, PAGCON-05) + TIPO_EVENTO_LABELS fix (HIS-05 partial)
 - 7-4: Seção "Pagamentos Recebidos" (PAGCON-04) + edit/delete (PAGCON-06)
 
 **Phase 8:**
+
 - 8-1: npm install jspdf + jspdf-autotable + NotoSans + `pdfDemonstrativo.js` utility (PDF-01..04)
 - 8-2: DetalheContrato PDF button + `handleGerarPDF` integration
 

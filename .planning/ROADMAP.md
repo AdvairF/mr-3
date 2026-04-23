@@ -137,7 +137,7 @@ Plans:
   3. Regressão 9/9 continua verde após o fix
 **Plans**: 1 plan
 Plans:
-- [ ] 07.1-01-PLAN.md — DetalheContrato.jsx: isPagamento guard + diffEntries fix + JSX branch + fmtDataHora timezone fix
+- [x] 07.1-01-PLAN.md — DetalheContrato.jsx: isPagamento guard + diffEntries fix + JSX branch + fmtDataHora timezone fix
 
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
@@ -226,5 +226,5 @@ Stored procedures `registrar_pagamento_contrato` e `reverter_pagamento_contrato`
 | 5. Contratos com Parcelas | v1.2 | 5/5 | **Complete** | 2026-04-22 |
 | 6. Edição de Contrato + Histórico | v1.3 | 3/3 (+3 UAT fixes) | **Complete** | 2026-04-22 |
 | 7. Pagamentos por Contrato | v1.4 | 0/4 | Not started | - |
-| 7.1. Fix Histórico Pagamentos | v1.4 gap | 0/1 | Not started | - |
+| 7.1. Fix Histórico Pagamentos | v1.4 gap | 1/1 | **Complete** | 2026-04-23 |
 | 8. PDF Demonstrativo | v1.4 | 0/2 | Not started | - |
