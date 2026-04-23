@@ -53,6 +53,11 @@ export default function TabelaParcelasEditaveis({
       data_vencimento: p.data_vencimento || "",
     }))
   );
+  // Espelha parcelas — 1 string por linha. Única fonte de verdade do texto renderizado no input valor.
+  // Permite campo vazio durante edição (backspace apaga tudo sem forçar "0" residual).
+  const [valoresStr, setValoresStr] = useState(() =>
+    (parcelasIniciais || []).map(p => (p.valor_total != null ? String(p.valor_total) : "0"))
+  );
   const [salvando, setSalvando] = useState(false);
   const [sugerirAberto, setSugerirAberto] = useState(false);
 
@@ -65,6 +70,23 @@ export default function TabelaParcelasEditaveis({
   function atualizarLinha(i, campo, valor) {
     setParcelas(prev => {
       const next = prev.map((p, idx) => idx === i ? { ...p, [campo]: campo === "valor_total" ? Number(valor) : valor } : p);
+      if (typeof onChange === "function") onChange(next);
+      return next;
+    });
+  }
+
+  // Setter dedicado do input valor: mantém string renderizada em valoresStr[i] (permite "")
+  // e propaga Number normalizado para parcelas[i].valor_total (soma/validações continuam numéricas).
+  function atualizarValorStr(i, str) {
+    setValoresStr(prev => {
+      const next = [...prev];
+      next[i] = str;
+      return next;
+    });
+    const n = str === "" ? 0 : Number(str);
+    const valorNumerico = Number.isFinite(n) ? n : 0;
+    setParcelas(prev => {
+      const next = prev.map((p, idx) => idx === i ? { ...p, valor_total: valorNumerico } : p);
       if (typeof onChange === "function") onChange(next);
       return next;
     });
@@ -228,8 +250,8 @@ export default function TabelaParcelasEditaveis({
                       type="number"
                       min="0"
                       step="0.01"
-                      value={p.valor_total}
-                      onChange={e => atualizarLinha(i, "valor_total", e.target.value)}
+                      value={valoresStr[i] ?? ""}
+                      onChange={e => atualizarValorStr(i, e.target.value)}
                       disabled={ro}
                       title={tooltip}
                       style={ro ? cellInputDisabledStyle : cellInputStyle}
