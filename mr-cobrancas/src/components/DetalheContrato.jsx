@@ -185,6 +185,18 @@ export default function DetalheContrato({
       .finally(() => setHistoricoLoading(false));
   }, [historicoAberto, contrato.id]);
 
+  useEffect(() => {
+    if (!pagamentosAberto || pagamentosCarregado) return;
+    setPagamentosLoading(true);
+    listarPagamentosContrato(contrato.id)
+      .then(rows => {
+        setPagamentosContrato(Array.isArray(rows) ? rows : []);
+        setPagamentosCarregado(true);
+      })
+      .catch(e => toast.error("Erro ao carregar pagamentos: " + e.message))
+      .finally(() => setPagamentosLoading(false));
+  }, [pagamentosAberto, contrato.id]);
+
   function handleEncargos(field, val) {
     setEditForm(f => ({ ...f, encargos: { ...f.encargos, [field]: val } }));
   }
@@ -340,6 +352,22 @@ export default function DetalheContrato({
     }
   }
 
+  async function handleExcluirPagamento(pagamento) {
+    if (!window.confirm("Excluir este pagamento vai reverter a amortização das parcelas. Confirmar?")) return;
+    setExcluindoPagamentoId(pagamento.id);
+    try {
+      await excluirPagamentoContrato(pagamento.id);
+      toast.success("Pagamento excluído. Amortização revertida.");
+      const rows = await listarPagamentosContrato(contrato.id);
+      setPagamentosContrato(Array.isArray(rows) ? rows : []);
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(e.message || "Erro ao excluir pagamento.");
+    } finally {
+      setExcluindoPagamentoId(null);
+    }
+  }
+
   async function handleDocumentoAdicionado() {
     setAdicionandoDocumento(false);
     await onCarregarTudo();
@@ -353,6 +381,23 @@ export default function DetalheContrato({
   const emAberto = (contrato.valor_total || 0) - totalQuitado;
   const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
   const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
+
+  function buildParcelasText(parcelasIds, dividas) {
+    if (!parcelasIds || parcelasIds.length === 0) return "—";
+    const sorted = [...(dividas || [])].sort((a, b) =>
+      (a.data_vencimento || "").localeCompare(b.data_vencimento || "")
+    );
+    const total = sorted.length;
+    const nums = parcelasIds
+      .map(uid => {
+        const idx = sorted.findIndex(d => String(d.id) === String(uid));
+        return idx >= 0 ? idx + 1 : null;
+      })
+      .filter(n => n !== null)
+      .sort((a, b) => a - b);
+    if (nums.length === 0) return "—";
+    return nums.map(n => `Parc. ${n}/${total}`).join(", ");
+  }
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 0 32px 0" }}>
@@ -481,6 +526,101 @@ export default function DetalheContrato({
               {salvandoPagamento ? <Spinner /> : "Salvar"}
             </Btn>
           </div>
+        </div>
+      )}
+
+      {/* 3c. Pagamentos Recebidos — seção colapsável */}
+      <div
+        onClick={() => setPagamentosAberto(p => !p)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          padding: "8px 0",
+          marginTop: 0,
+        }}
+      >
+        <p style={{
+          fontFamily: "'Space Grotesk',sans-serif",
+          fontWeight: 700,
+          fontSize: 13,
+          color: "#0f172a",
+          margin: 0,
+        }}>
+          Pagamentos Recebidos {pagamentosAberto ? "▲" : "▼"}
+        </p>
+      </div>
+
+      {pagamentosAberto && (
+        <div style={{
+          background: "#fff",
+          borderRadius: 12,
+          padding: "16px 20px",
+          border: "1px solid #e2e8f0",
+          marginTop: 8,
+          marginBottom: 16,
+        }}>
+          {pagamentosLoading && (
+            <p style={{ textAlign: "center", fontSize: 13, color: "#94a3b8", padding: "16px 0" }}>
+              Carregando pagamentos...
+            </p>
+          )}
+
+          {!pagamentosLoading && pagamentosContrato.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 0", color: "#94a3b8" }}>
+              <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Nenhum pagamento registrado.</p>
+            </div>
+          )}
+
+          {!pagamentosLoading && pagamentosContrato.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc" }}>
+                    <th style={th}>DATA</th>
+                    <th style={th}>VALOR</th>
+                    <th style={th}>PARCELAS AMORTIZADAS</th>
+                    <th style={th}>OBSERVAÇÃO</th>
+                    <th style={{ ...th, width: 40 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagamentosContrato.map(pagamento => (
+                    <tr key={pagamento.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      <td style={td}>{fmtData(pagamento.data_pagamento)}</td>
+                      <td style={td}>{fmtBRL(pagamento.valor)}</td>
+                      <td style={{ ...td, fontSize: 12, color: "#374151" }}>
+                        {buildParcelasText(pagamento.parcelas_ids, dividas)}
+                      </td>
+                      <td style={td}>{truncate(pagamento.observacao || "—", 60)}</td>
+                      <td style={{ ...td, textAlign: "center" }}>
+                        {excluindoPagamentoId === pagamento.id ? (
+                          <Spinner />
+                        ) : (
+                          <button
+                            onClick={() => handleExcluirPagamento(pagamento)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: 13,
+                              color: "#dc2626",
+                              fontWeight: 700,
+                              padding: "0 4px",
+                            }}
+                            title="Excluir pagamento"
+                          >
+                            [X]
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
