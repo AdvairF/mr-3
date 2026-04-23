@@ -12,6 +12,7 @@ export default function ModuloContratos({
   devedores,
   credores,
   allPagamentos,
+  allPagamentosDivida,
   hoje,
   onCarregarTudo,
   setTab,
@@ -37,11 +38,11 @@ export default function ModuloContratos({
     (allContratos || []).forEach(c => {
       const k = String(c.id);
       const parcelas = parcelasPorContrato.get(k) || [];
-      const { total_pago, saldo_restante } = calcularTotaisContratoNominal(parcelas, allPagamentos);
+      const { total_pago, saldo_restante } = calcularTotaisContratoNominal(parcelas, allPagamentosDivida);
       m.set(k, { pago: total_pago, emAberto: saldo_restante });
     });
     return m;
-  }, [allContratos, parcelasPorContrato, allPagamentos]);
+  }, [allContratos, parcelasPorContrato, allPagamentosDivida]);
 
   const contratosAtivos = (allContratos || []).filter(c =>
     (parcelasPorContrato.get(String(c.id)) || []).some(d => !d.saldo_quitado)
@@ -104,6 +105,7 @@ export default function ModuloContratos({
           devedores={devedores}
           credores={credores}
           allPagamentos={allPagamentos}
+          allPagamentosDivida={allPagamentosDivida}
           hoje={hoje}
           onVoltar={handleVoltar}
           onVerDetalhe={handleVerParcela}

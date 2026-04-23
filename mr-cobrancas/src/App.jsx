@@ -8322,6 +8322,7 @@ export default function App() {
   const [regua, setRegua] = useState([]);
   const [lembretesList, setLembretesList] = useState([]);
   const [allPagamentos, setAllPagamentos] = useState([]);
+  const [allPagamentosDivida, setAllPagamentosDivida] = useState([]);  // Phase 7.3: fonte correta (pagamentos_divida, não pagamentos_parciais legado)
   const [allDividas, setAllDividas] = useState([]);
   const [allContratos, setAllContratos] = useState([]);
   const [allDocumentos, setAllDocumentos] = useState([]);
@@ -8329,7 +8330,7 @@ export default function App() {
   const carregarTudo = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos, documentos] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos, documentos, pgtosDivida] = await Promise.all([
         dbGet("devedores"),
         dbGet("credores"),
         dbGet("processos"),
@@ -8340,9 +8341,11 @@ export default function App() {
         dbGet("dividas"),
         dbGet("contratos_dividas", "order=created_at.desc"),
         dbGet("documentos_contrato", "order=created_at.asc"),  // novo — nível 2
+        dbGet("pagamentos_divida"),                             // Phase 7.3 — fonte correta de pagamentos (Phase 4 + Phase 7 SP)
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
+      setAllPagamentosDivida(Array.isArray(pgtosDivida) ? pgtosDivida : []);
       setAllContratos(Array.isArray(contratos) ? contratos : []);
       setAllDocumentos(Array.isArray(documentos) ? documentos : []);
       // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
@@ -8495,6 +8498,7 @@ export default function App() {
           devedores={devedores}
           credores={credores}
           allPagamentos={allPagamentos}
+          allPagamentosDivida={allPagamentosDivida}
           hoje={hoje_app}
           onCarregarTudo={carregarTudo}
           setTab={setTab}

@@ -111,6 +111,7 @@ export default function DetalheContrato({
   devedores,
   credores,
   allPagamentos,
+  allPagamentosDivida,
   hoje,
   onVoltar,
   onVerDetalhe,
@@ -406,7 +407,7 @@ export default function DetalheContrato({
 
   const devedor = devedores.find(d => String(d.id) === String(contrato.devedor_id));
   const credor  = credores?.find(c => String(c.id) === String(contrato.credor_id));
-  const { total_pago, saldo_restante } = calcularTotaisContratoNominal(dividas || [], allPagamentos);
+  const { total_pago, saldo_restante } = calcularTotaisContratoNominal(dividas || [], allPagamentosDivida);
   const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
   const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
 
