@@ -14,7 +14,7 @@ Sistema de cobrança jurídica para pequenos escritórios de advocacia (2–10 a
 
 **O advogado vê, num único painel, em que etapa está cada cobrança — e gera a petição certa com um clique.**
 
-## Estado Atual (após Phase 5 — v1.2)
+## Estado Atual (após Phase 7.1 — v1.4 gap closure)
 
 - Banco relacional real: tabela `dividas` (UUID PK) + `devedores_dividas` (FK) — sem JSONB embutido
 - Módulo Dívidas no sidebar: tabela global com 4 filtros + tela de detalhe + gerenciamento de pessoas vinculadas
@@ -24,6 +24,7 @@ Sistema de cobrança jurídica para pequenos escritórios de advocacia (2–10 a
 - **Contratos 3 níveis (v1.2):** Contrato → Documento → Parcela; tabelas `contratos_dividas` + `documentos_contrato`; ModuloContratos 4-view; badges [NF]/[C&V]/[Empr.] em TabelaDividas
 - Suite de regressão Vitest (7 casos TJGO) como prebuild gate
 - App.jsx ainda monolítico (~8.400 linhas) — extração progressiva em andamento
+- **Phase 7.1 gap closure (v1.4):** `fmtDataHora` com timezone America/Sao_Paulo para `created_at` TIMESTAMPTZ; ramo JSX `isPagamento` exibe Valor/Data/Parcelas para eventos `pagamento_recebido` / `pagamento_revertido` — 9/9 regressão verde
 
 ## Contexto
 
@@ -161,4 +162,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Última atualização: 2026-04-22 — Milestone v1.4 iniciado: Pagamentos por Contrato + PDF Demonstrativo*
+*Última atualização: 2026-04-23 — Phase 7.1 completa: bugs do histórico de pagamentos corrigidos (isPagamento + fmtDataHora)*
