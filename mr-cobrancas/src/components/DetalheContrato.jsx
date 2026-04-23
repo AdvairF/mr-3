@@ -11,6 +11,14 @@ import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtData(iso) { if (!iso) return "—"; const d = iso.slice(0, 10).split("-"); return `${d[2]}/${d[1]}/${d[0]}`; }
+function fmtDataHora(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  } catch { return "—"; }
+}
 
 function Spinner() {
   return (
@@ -804,10 +812,11 @@ export default function DetalheContrato({
 
               {historico.map((evento, idx) => {
                 const isCriacao = evento.tipo_evento === "criacao";
+                const isPagamento = ['pagamento_recebido', 'pagamento_revertido'].includes(evento.tipo_evento);
                 const isLast    = idx === historico.length - 1;
                 const snap = evento.snapshot_campos || {};
 
-                const diffEntries = !isCriacao
+                const diffEntries = !isCriacao && !isPagamento
                   ? Object.entries(snap).map(([campo, val]) => ({
                       campo,
                       antes:  String(val?.antes  ?? ""),
@@ -837,7 +846,7 @@ export default function DetalheContrato({
                         {TIPO_EVENTO_LABELS[evento.tipo_evento] ?? "Edição salva"}
                       </span>
                       <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                        {fmtData(evento.created_at)}
+                        {fmtDataHora(evento.created_at)}
                       </span>
                     </div>
 
@@ -856,6 +865,17 @@ export default function DetalheContrato({
                           }<br /></>
                         )}
                         {snap.referencia && <>Referência: {snap.referencia}<br /></>}
+                      </div>
+                    )}
+
+                    {isPagamento && (
+                      <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
+                        <div>Valor: {fmtBRL(snap.valor)}</div>
+                        <div>Data: {fmtData(snap.data_pagamento)}</div>
+                        <div>
+                          Parcelas: {buildParcelasText(snap.parcelas_ids, dividas)}
+                          {" "}({snap.parcelas_amortizadas ?? snap.parcelas_ids?.length ?? 0} amortizada(s))
+                        </div>
                       </div>
                     )}
 
