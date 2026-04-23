@@ -61,10 +61,11 @@
  *   ADD COLUMN IF NOT EXISTS documento_id UUID REFERENCES public.documentos_contrato(id);
  */
 
-import { dbGet, dbInsert, dbUpdate } from "../config/supabase.js";
+import { dbGet, dbInsert, dbUpdate, sb } from "../config/supabase.js";
 
 const TABLE = "contratos_dividas";
 const HIST_TABLE = "contratos_historico";
+const PAG_TABLE = "pagamentos_contrato";
 
 export function listarContratos() {
   return dbGet(TABLE, "order=created_at.desc");
@@ -239,4 +240,25 @@ export async function adicionarDocumento(contratoId, documentoPayload, contrato)
   }
   await recalcularTotaisContrato(contratoId);
   return { documento, parcelas: rows };
+}
+
+// ─── PAGAMENTOS POR CONTRATO (Phase 7) ───────────────────────────────────────
+
+export async function registrarPagamentoContrato(contratoId, { data_pagamento, valor, observacao }) {
+  return sb("rpc/registrar_pagamento_contrato", "POST", {
+    p_contrato_id:    contratoId,
+    p_data_pagamento: data_pagamento,
+    p_valor:          valor,
+    p_observacao:     observacao ?? null,
+  });
+}
+
+export async function excluirPagamentoContrato(pagamentoId) {
+  return sb("rpc/reverter_pagamento_contrato", "POST", {
+    p_pagamento_id: pagamentoId,
+  });
+}
+
+export async function listarPagamentosContrato(contratoId) {
+  return dbGet(PAG_TABLE, `contrato_id=eq.${encodeURIComponent(contratoId)}&order=data_pagamento.asc`);
 }
