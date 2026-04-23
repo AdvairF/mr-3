@@ -2,6 +2,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
+import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
 import { adicionarDocumento } from "../services/contratos.js";
 
 function fmtBRL(v) {
@@ -18,7 +19,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
   const [valor, setValor] = useState("");
   const [dataEmissao, setDataEmissao] = useState("");
   const [numParcelas, setNumParcelas] = useState("");
-  const [primeiraParcela, setPrimeiraParcela] = useState(true);
+  const [parcelasCustom, setParcelasCustom] = useState(null); // Phase 7.5 D-03 — null até valor+N preenchidos; Array<{numero,valor_total,data_vencimento}> depois
   const [salvando, setSalvando] = useState(false);
 
   const [encargos, setEncargos] = useState({
@@ -36,25 +37,50 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
     !!tipo &&
     !!valor && parseFloat(valor) > 0 &&
     !!dataEmissao &&
-    !!numParcelas && parseInt(numParcelas) >= 1;
+    !!numParcelas && parseInt(numParcelas) >= 1 &&
+    Array.isArray(parcelasCustom) && parcelasCustom.length === parseInt(numParcelas);
 
   function handleEncargos(field, val) {
     setEncargos(e => ({ ...e, [field]: val }));
   }
 
-  const preview = (() => {
+  // Phase 7.5 D-03: gera parcelas iniciais quando valor + N preenchidos.
+  // Mantém o padrão de gerarPayloadParcelasDocumento (últ. parcela recebe o resto, D-06).
+  const parcelasIniciais = (() => {
     const vt = parseFloat(valor) || 0;
     const n = parseInt(numParcelas) || 0;
     if (vt <= 0 || n < 1) return null;
     const base = Math.floor((vt / n) * 100) / 100;
     const ultima = parseFloat((vt - base * (n - 1)).toFixed(2));
-    return { n, base, ultima };
+    return Array.from({ length: n }, (_, i) => ({
+      numero: i + 1,
+      valor_total: i < n - 1 ? base : ultima,
+      data_vencimento: "",
+    }));
   })();
 
   async function handleSalvar() {
     if (!valor || parseFloat(valor) <= 0) { toast("Informe o valor do documento.", { icon: "⚠️" }); return; }
     if (!dataEmissao) { toast("Informe a data de emissão.", { icon: "⚠️" }); return; }
     if (!numParcelas || parseInt(numParcelas) < 1) { toast("Informe o número de parcelas.", { icon: "⚠️" }); return; }
+
+    // Validação parcelas (Phase 7.5 D-07 — redundância; tabela também valida via onChange)
+    if (!Array.isArray(parcelasCustom) || parcelasCustom.length !== parseInt(numParcelas)) {
+      toast("Preencha a tabela de parcelas.", { icon: "⚠️" });
+      return;
+    }
+    const somaParcelas = parcelasCustom.reduce((s, p) => s + Number(p.valor_total || 0), 0);
+    if (Math.abs(somaParcelas - parseFloat(valor)) > 0.01) {
+      toast.error(`Soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não bate com valor do documento (R$ ${parseFloat(valor).toFixed(2)}).`);
+      return;
+    }
+    for (const p of parcelasCustom) {
+      if (!p.data_vencimento) {
+        toast.error("Todas as parcelas devem ter data de vencimento preenchida.");
+        return;
+      }
+    }
+
     setSalvando(true);
     try {
       const documentoPayload = {
@@ -63,7 +89,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         valor: parseFloat(valor),
         data_emissao: dataEmissao,
         num_parcelas: parseInt(numParcelas),
-        primeira_parcela_na_data_base: primeiraParcela,
+        primeira_parcela_na_data_base: true,  // Phase 7.5: default schema; parcelasCustom domina data_vencimento real (D-03)
         indice_correcao:         encargos.indexador || null,
         juros_tipo:              encargos.juros_tipo || null,
         juros_am_percentual:     parseFloat(encargos.juros_am) || 0,
@@ -73,7 +99,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         art523_opcao:            encargos.art523_opcao || "nao_aplicar",
         data_inicio_atualizacao: encargos.data_inicio_atualizacao || null,
       };
-      const result = await adicionarDocumento(contrato.id, documentoPayload, contrato);
+      const result = await adicionarDocumento(contrato.id, documentoPayload, contrato, parcelasCustom);
       toast.success(`Documento adicionado com ${result.parcelas.length} parcelas`);
       onDocumentoAdicionado(result);
     } catch (e) {
@@ -137,7 +163,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
           />
         </div>
 
-        {/* Campo 5: Nº de Parcelas + preview */}
+        {/* Campo 5: Nº de Parcelas (Phase 7.5 D-03) */}
         <div>
           <label style={labelStyle}>Nº de Parcelas *</label>
           <input
@@ -146,28 +172,24 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
             max="360"
             placeholder="Ex.: 3"
             value={numParcelas}
-            onChange={e => setNumParcelas(e.target.value)}
+            onChange={e => { setNumParcelas(e.target.value); setParcelasCustom(null); }}
             style={inputStyle}
           />
-          {preview && (
-            <p style={{ fontSize: 11, color: "#64748b", fontStyle: "italic", marginTop: 4 }}>
-              {preview.n} parcelas de {fmtBRL(preview.base)} (última: {fmtBRL(preview.ultima)})
-            </p>
-          )}
         </div>
 
-        {/* Campo 6: Vencimento da 1ª Parcela */}
-        <div>
-          <label style={labelStyle}>Vencimento da 1ª Parcela</label>
-          <select
-            value={primeiraParcela ? "true" : "false"}
-            onChange={e => setPrimeiraParcela(e.target.value === "true")}
-            style={inputStyle}
-          >
-            <option value="true">Mesma data de emissão</option>
-            <option value="false">Um mês depois da emissão</option>
-          </select>
-        </div>
+        {/* Campo 6: Tabela editável de parcelas (Phase 7.5 D-03 — substitui Vencimento 1ª Parcela) */}
+        {parcelasIniciais && (
+          <TabelaParcelasEditaveis
+            valorTotal={parseFloat(valor) || 0}
+            parcelasIniciais={parcelasIniciais}
+            modoEdicao="create"
+            dividasComPagamentoIds={new Set()}
+            onChange={setParcelasCustom}
+            onSubmit={async () => {}}
+            onCancel={() => {}}
+            hideFooter
+          />
+        )}
 
         {/* Campo 7: Encargos do Documento (herdados do contrato — D-05) */}
         <div>

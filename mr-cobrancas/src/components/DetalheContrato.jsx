@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
 import AtrasoCell from "./AtrasoCell.jsx";
 import AdicionarDocumento from "./AdicionarDocumento.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
+import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
 import { Inp } from "./ui/Inp.jsx";
 import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
          registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato,
-         calcularTotaisContratoNominal } from "../services/contratos.js";
+         calcularTotaisContratoNominal, atualizarParcelasCustom } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -138,6 +139,8 @@ export default function DetalheContrato({
   const [pagamentosCarregado,   setPagamentosCarregado]   = useState(false);
   const [excluindoPagamentoId,  setExcluindoPagamentoId]  = useState(null);
   const [excluindoContrato,     setExcluindoContrato]     = useState(false);
+  const [editingDocId,          setEditingDocId]          = useState(null);   // Phase 7.5 D-04: UUID do documento em modo edição de parcelas
+  const [savingParcelas,        setSavingParcelas]        = useState(false);  // Phase 7.5: bloqueia double-click
   const [formPagamento,         setFormPagamento]         = useState({ data: "", valor: "", observacao: "" });
   const [saldoCalculado,        setSaldoCalculado]        = useState(0);
 
@@ -404,6 +407,48 @@ export default function DetalheContrato({
     listarDocumentosPorContrato(contrato.id)
       .then(docs => setDocumentos(Array.isArray(docs) ? docs : []));
   }
+
+  // Phase 7.5 D-04: handler do Salvar da TabelaParcelasEditaveis em modo edit
+  async function handleSalvarParcelasCustom(parcelasEditadas) {
+    if (!editingDocId) return;
+    setSavingParcelas(true);
+    try {
+      const result = await atualizarParcelasCustom(editingDocId, parcelasEditadas);
+      if (!result.ok) {
+        toast.error(result.motivo);
+        return;
+      }
+      toast.success(`Parcelas atualizadas (${result.updated}).`);
+      setEditingDocId(null);
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error("Erro ao atualizar parcelas: " + (e?.message || "desconhecido"));
+    } finally {
+      setSavingParcelas(false);
+    }
+  }
+
+  // Phase 7.5 D-06: Map<docId, Set<String(dividaId)>> de parcelas readonly
+  // (com saldo_quitado OR com ≥1 pagamento em pagamentos_divida).
+  // Pré-computado uma vez por render, lookup O(1) no componente filho.
+  const dividasComPagamentoIdsPorDoc = useMemo(() => {
+    const byDoc = new Map();
+    for (const d of (dividas || [])) {
+      if (!d.documento_id) continue;
+      const docKey = String(d.documento_id);
+      if (!byDoc.has(docKey)) byDoc.set(docKey, new Set());
+      if (d.saldo_quitado) byDoc.get(docKey).add(String(d.id));
+    }
+    for (const p of (allPagamentosDivida || [])) {
+      if (!p.divida_id || !p.valor) continue;
+      const divida = (dividas || []).find(d => String(d.id) === String(p.divida_id));
+      if (!divida || !divida.documento_id) continue;
+      const docKey = String(divida.documento_id);
+      if (!byDoc.has(docKey)) byDoc.set(docKey, new Set());
+      byDoc.get(docKey).add(String(p.divida_id));
+    }
+    return byDoc;
+  }, [dividas, allPagamentosDivida]);
 
   const devedor = devedores.find(d => String(d.id) === String(contrato.devedor_id));
   const credor  = credores?.find(c => String(c.id) === String(contrato.credor_id));
@@ -713,53 +758,83 @@ export default function DetalheContrato({
               </div>
             </div>
 
-            {/* Expanded: parcelas table */}
+            {/* Expanded: parcelas table + editar parcelas (Phase 7.5 D-04) */}
             {isExpanded && (
               <div style={{ marginTop: 12 }} onClick={e => e.stopPropagation()}>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: "#f8fafc" }}>
-                        <th style={th}>Nº</th>
-                        <th style={th}>Vencimento</th>
-                        <th style={th}>Valor</th>
-                        <th style={th}>Saldo</th>
-                        <th style={th}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {saldosLoading && parcelasDoc.length > 0 ? (
-                        <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: "#94a3b8" }}>Carregando parcelas...</td></tr>
-                      ) : (
-                        parcelasDoc.map((p, i) => (
-                          <tr
-                            key={p.id}
-                            onClick={() => onVerDetalhe(p)}
-                            style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
-                            onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                            onMouseLeave={e => e.currentTarget.style.background = ""}
-                          >
-                            <td style={td}>{i + 1}</td>
-                            <td style={td}>{fmtData(p.data_vencimento)}</td>
-                            <td style={td}>{fmtBRL(p.valor_total)}</td>
-                            <td style={td}>
-                              {saldosMap[String(p.id)] != null
-                                ? fmtBRL(saldosMap[String(p.id)])
-                                : (saldosLoading ? "..." : "—")
-                              }
-                            </td>
-                            <td style={td}>
-                              {p.saldo_quitado
-                                ? <span style={{ background: "#dcfce7", color: "#065f46", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>Quitado</span>
-                                : <AtrasoCell dataVencimento={p.data_vencimento} />
-                              }
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                {editingDocId !== doc.id && (
+                  <div style={{ marginBottom: 8, textAlign: "right" }}>
+                    <Btn
+                      color="#4f46e5"
+                      sm
+                      outline
+                      onClick={() => setEditingDocId(doc.id)}
+                      disabled={savingParcelas}
+                    >
+                      Editar parcelas
+                    </Btn>
+                  </div>
+                )}
+
+                {editingDocId === doc.id ? (
+                  <TabelaParcelasEditaveis
+                    valorTotal={Number(doc.valor)}
+                    parcelasIniciais={parcelasDoc.map((p, idx) => ({
+                      id: p.id,
+                      numero: idx + 1,
+                      valor_total: Number(p.valor_total || 0),
+                      data_vencimento: p.data_vencimento || "",
+                    }))}
+                    modoEdicao="edit"
+                    dividasComPagamentoIds={dividasComPagamentoIdsPorDoc.get(String(doc.id)) || new Set()}
+                    onSubmit={handleSalvarParcelasCustom}
+                    onCancel={() => setEditingDocId(null)}
+                  />
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: "#f8fafc" }}>
+                          <th style={th}>Nº</th>
+                          <th style={th}>Vencimento</th>
+                          <th style={th}>Valor</th>
+                          <th style={th}>Saldo</th>
+                          <th style={th}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {saldosLoading && parcelasDoc.length > 0 ? (
+                          <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: "#94a3b8" }}>Carregando parcelas...</td></tr>
+                        ) : (
+                          parcelasDoc.map((p, i) => (
+                            <tr
+                              key={p.id}
+                              onClick={() => onVerDetalhe(p)}
+                              style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
+                              onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                              onMouseLeave={e => e.currentTarget.style.background = ""}
+                            >
+                              <td style={td}>{i + 1}</td>
+                              <td style={td}>{fmtData(p.data_vencimento)}</td>
+                              <td style={td}>{fmtBRL(p.valor_total)}</td>
+                              <td style={td}>
+                                {saldosMap[String(p.id)] != null
+                                  ? fmtBRL(saldosMap[String(p.id)])
+                                  : (saldosLoading ? "..." : "—")
+                                }
+                              </td>
+                              <td style={td}>
+                                {p.saldo_quitado
+                                  ? <span style={{ background: "#dcfce7", color: "#065f46", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>Quitado</span>
+                                  : <AtrasoCell dataVencimento={p.data_vencimento} />
+                                }
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>

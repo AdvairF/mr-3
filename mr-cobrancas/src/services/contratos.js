@@ -62,6 +62,7 @@
  */
 
 import { dbGet, dbInsert, dbUpdate, dbDelete, sb } from "../config/supabase.js";
+import { atualizarDivida } from "./dividas.js";
 
 const TABLE = "contratos_dividas";
 const HIST_TABLE = "contratos_historico";
@@ -227,12 +228,53 @@ export async function recalcularTotaisContrato(contratoId) {
 /**
  * Adiciona um Documento a um Contrato e gera N parcelas como dívidas reais.
  * Operação atômica: doc insert → parcelas loop → recalcular totais do contrato.
+ *
+ * Phase 7.5 (D-03): 4º param opcional `parcelasCustom` permite fluxo de criação
+ * com datas/valores customizados. Shape: Array<{ numero, valor_total, data_vencimento }>.
+ * Se ausente, mantém comportamento legado via gerarPayloadParcelasDocumento (retrocompat).
+ * Se presente, gera as N parcelas usando diretamente `parcelasCustom`, mas ainda injeta
+ * os campos contábeis herdados do documento+contrato (devedor_id, credor_id, contrato_id,
+ * documento_id, observacoes, indice_correcao, juros_*, multa_*, honorarios_*, despesas,
+ * art523_opcao, data_inicio_atualizacao, status, data_origem, parcelas:[], custas:[]).
  */
-export async function adicionarDocumento(contratoId, documentoPayload, contrato) {
+export async function adicionarDocumento(contratoId, documentoPayload, contrato, parcelasCustom) {
   const docRes = await dbInsert("documentos_contrato", { ...documentoPayload, contrato_id: contratoId });
   const documento = Array.isArray(docRes) ? docRes[0] : docRes;
   if (!documento?.id) throw new Error("Supabase não retornou row do documento");
-  const parcelasPayload = gerarPayloadParcelasDocumento(documento, contrato);
+
+  let parcelasPayload;
+  if (Array.isArray(parcelasCustom) && parcelasCustom.length > 0) {
+    // Phase 7.5 — bypass gerarPayloadParcelasDocumento; herda campos contábeis do documento+contrato.
+    const prefix = documento.numero_doc ? documento.numero_doc : documento.tipo;
+    const N = parcelasCustom.length;
+    parcelasPayload = parcelasCustom.map((pc, i) => {
+      const n = (pc.numero != null ? pc.numero : i + 1);
+      return {
+        devedor_id: contrato.devedor_id,
+        credor_id: contrato.credor_id || null,
+        contrato_id: contrato.id,
+        documento_id: documento.id,
+        observacoes: `${prefix} — Parcela ${n}/${N}`,
+        valor_total: Number(pc.valor_total),
+        data_vencimento: pc.data_vencimento,
+        data_origem: documento.data_emissao,
+        data_inicio_atualizacao: documento.data_inicio_atualizacao || pc.data_vencimento,
+        status: "em cobrança",
+        indice_correcao:       documento.indice_correcao       ?? "igpm",
+        juros_tipo:            documento.juros_tipo            ?? "fixo_1",
+        juros_am_percentual:   documento.juros_am_percentual   ?? 0,
+        multa_percentual:      documento.multa_percentual      ?? 0,
+        honorarios_percentual: documento.honorarios_percentual ?? 0,
+        despesas:              documento.despesas              ?? 0,
+        art523_opcao:          documento.art523_opcao          ?? "nao_aplicar",
+        parcelas: [],
+        custas: [],
+      };
+    });
+  } else {
+    parcelasPayload = gerarPayloadParcelasDocumento(documento, contrato);
+  }
+
   const rows = [];
   for (const p of parcelasPayload) {
     const r = await dbInsert("dividas", p);
@@ -359,4 +401,66 @@ export function calcularTotaisContratoNominal(dividasDoContrato, allPagamentos) 
   const saldo_restante = Math.max(0, Math.round((valor_total - total_pago) * 100) / 100);
   const quitado_total = saldo_restante <= 0.005;
   return { valor_total, total_pago, saldo_restante, quitado_total };
+}
+
+// ─── ATUALIZAR PARCELAS CUSTOM (Phase 7.5) ───────────────────────────────────
+
+/**
+ * Atualiza parcelas de um documento com valores e datas customizadas (Phase 7.5).
+ *
+ * Validações server-side (D-07):
+ *   (a) todas as parcelas têm `data_vencimento` preenchida
+ *   (b) soma de `valor_total` === soma esperada (calculada do próprio array — `documentoValor`
+ *       é recomputado como Σ parcelas.valor_total; a validação contra documentos_contrato.valor
+ *       é feita client-side ANTES do submit, D-08)
+ *   (c) datas em ordem não-decrescente quando ordenadas por `numero`
+ *
+ * NÃO valida readonly de parcelas pagas (D-06): o cliente bloqueia edição via
+ * `dividasComPagamentoIds`; o service só patcha o que recebe. Se cliente for bypassado
+ * (dev tools), risco aceitável pro caso single-tenant atual (deferred — §deferred).
+ *
+ * Atomicidade (D-10): N PATCHes sequenciais via `atualizarDivida`. Se falhar no meio,
+ * estado é reexecutável — advogado clica Salvar de novo. Mesmo trade-off Phase 7.2 D-04.
+ *
+ * @param {string} documentoId           UUID do documento (usado apenas para log/audit; não consultado)
+ * @param {Array}  parcelasEditadas      [{ id, numero, valor_total, data_vencimento }, ...] — snapshot pós-edit client
+ * @returns {Promise<{ ok: true, updated: number } | { ok: false, motivo: string }>}
+ */
+export async function atualizarParcelasCustom(documentoId, parcelasEditadas) {
+  if (!Array.isArray(parcelasEditadas) || parcelasEditadas.length === 0) {
+    return { ok: false, motivo: "Nenhuma parcela recebida para atualização." };
+  }
+
+  // Validação (a): todas as datas preenchidas + IDs presentes
+  for (const p of parcelasEditadas) {
+    if (!p.data_vencimento) {
+      return { ok: false, motivo: "Todas as parcelas devem ter data de vencimento preenchida." };
+    }
+    if (!p.id) {
+      return { ok: false, motivo: "Parcela sem ID — edição requer parcelas existentes." };
+    }
+  }
+
+  // Validação (c): ordem não-decrescente quando ordenadas por `numero`
+  const ordenadas = [...parcelasEditadas].sort((a, b) => (a.numero || 0) - (b.numero || 0));
+  for (let i = 1; i < ordenadas.length; i++) {
+    if (ordenadas[i].data_vencimento < ordenadas[i - 1].data_vencimento) {
+      return {
+        ok: false,
+        motivo: `Datas devem estar em ordem crescente (parcela ${ordenadas[i - 1].numero} vence depois da ${ordenadas[i].numero}).`
+      };
+    }
+  }
+
+  // PATCHes sequenciais
+  let updated = 0;
+  for (const p of parcelasEditadas) {
+    await atualizarDivida(p.id, {
+      valor_total: Number(p.valor_total),
+      data_vencimento: p.data_vencimento,
+    });
+    updated++;
+  }
+
+  return { ok: true, updated };
 }
