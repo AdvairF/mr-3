@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
 
@@ -62,6 +63,15 @@ export default function TabelaParcelasEditaveis({
   const [sugerirAberto, setSugerirAberto] = useState(false);
 
   const readonlySet = dividasComPagamentoIds || new Set();
+
+  const parentRef = useRef(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: parcelas.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 44,     // altura média de linha em pixels — D-07 overscan absorve variação
+    overscan: 10,               // D-07 — mitiga perda de foco ao scrollar digitando
+  });
 
   function isReadonly(p) {
     return !!(p.id && readonlySet.has(String(p.id)));
@@ -218,60 +228,106 @@ export default function TabelaParcelasEditaveis({
         )}
       </div>
 
-      {/* Tabela */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: "#f8fafc" }}>
-              <th style={{ ...th, width: 40 }}>Nº</th>
-              <th style={th}>Valor</th>
-              <th style={th}>Data de vencimento</th>
-            </tr>
-          </thead>
-          <tbody>
-            {parcelas.map((p, i) => {
-              const ro = isReadonly(p);
-              const tooltip = ro ? "Parcela com pagamento registrado — estorne primeiro para editar (botão 'Excluir pagamento' na seção 'Pagamentos Recebidos')." : undefined;
-              return (
-                <tr
-                  key={p.id || `novo-${i}`}
-                  style={{
-                    borderBottom: "1px solid #f1f5f9",
-                    background: ro ? "#f1f5f9" : "transparent",
-                  }}
-                  title={tooltip}
-                >
-                  <td style={{ ...td, color: "#64748b", fontWeight: 700 }}>
-                    {ro && <span style={{ marginRight: 6 }} aria-label="parcela bloqueada">🔒</span>}
-                    {p.numero}
-                  </td>
-                  <td style={td}>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={valoresStr[i] ?? ""}
-                      onChange={e => atualizarValorStr(i, e.target.value)}
-                      disabled={ro}
-                      title={tooltip}
-                      style={ro ? cellInputDisabledStyle : cellInputStyle}
-                    />
-                  </td>
-                  <td style={td}>
-                    <input
-                      type="date"
-                      value={p.data_vencimento}
-                      onChange={e => atualizarLinha(i, "data_vencimento", e.target.value)}
-                      disabled={ro}
-                      title={tooltip}
-                      style={ro ? cellInputDisabledStyle : cellInputStyle}
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* Tabela virtualizada (Phase 7.6 — @tanstack/react-virtual v3, D-03/D-04/D-05/D-06/D-07) */}
+      <div
+        ref={parentRef}
+        role="table"
+        aria-rowcount={parcelas.length + 1}
+        style={{
+          maxHeight: 400,                             /* D-06 */
+          overflowY: "auto",                          /* D-06 */
+          overflowX: "auto",
+          border: "1px solid #f1f5f9",
+          borderRadius: 8,
+          fontSize: 13,
+        }}
+      >
+        {/* Header row (sticky) — CSS grid D-05 */}
+        <div
+          role="row"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "60px 1fr 180px",
+            gap: 8,
+            padding: "8px 10px",
+            background: "#f8fafc",
+            position: "sticky",
+            top: 0,
+            zIndex: 1,
+            borderBottom: "1px solid #e2e8f0",
+          }}
+        >
+          <div role="columnheader" style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px" }}>Nº</div>
+          <div role="columnheader" style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px" }}>Valor</div>
+          <div role="columnheader" style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: ".5px" }}>Data de vencimento</div>
+        </div>
+
+        {/* Inner wrapper: height=totalSize; linhas absolute com translateY */}
+        <div
+          style={{
+            height: rowVirtualizer.getTotalSize(),
+            position: "relative",
+            width: "100%",
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map(virtualItem => {
+            const i = virtualItem.index;
+            const p = parcelas[i];
+            const ro = isReadonly(p);
+            const tooltip = ro ? "Parcela com pagamento registrado — estorne primeiro para editar (botão 'Excluir pagamento' na seção 'Pagamentos Recebidos')." : undefined;
+            return (
+              <div
+                key={p.id || `novo-${i}`}
+                role="row"
+                aria-rowindex={i + 2}
+                title={tooltip}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: virtualItem.size,
+                  transform: `translateY(${virtualItem.start}px)`,
+                  display: "grid",
+                  gridTemplateColumns: "60px 1fr 180px",
+                  gap: 8,
+                  padding: "6px 10px",
+                  borderBottom: "1px solid #f1f5f9",
+                  background: ro ? "#f1f5f9" : "transparent",
+                  boxSizing: "border-box",
+                  alignItems: "center",
+                }}
+              >
+                <div role="cell" style={{ color: "#64748b", fontWeight: 700 }}>
+                  {ro && <span style={{ marginRight: 6 }} aria-label="parcela bloqueada">🔒</span>}
+                  {p.numero}
+                </div>
+                <div role="cell">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={valoresStr[i] ?? ""}
+                    onChange={e => atualizarValorStr(i, e.target.value)}
+                    disabled={ro}
+                    title={tooltip}
+                    style={ro ? cellInputDisabledStyle : cellInputStyle}
+                  />
+                </div>
+                <div role="cell">
+                  <input
+                    type="date"
+                    value={p.data_vencimento}
+                    onChange={e => atualizarLinha(i, "data_vencimento", e.target.value)}
+                    disabled={ro}
+                    title={tooltip}
+                    style={ro ? cellInputDisabledStyle : cellInputStyle}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {!hideFooter && (
