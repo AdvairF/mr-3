@@ -292,6 +292,15 @@ Plans:
 **UI hint**: yes (refactor do `TabelaParcelasEditaveis` + input de parcelas em `AdicionarDocumento`)
 **Status**: Planned 2026-04-23 — awaiting /gsd-plan-phase 7.6
 
+### Phase 7.7: Excluir Documento Individual (INSERTED)
+**Goal**: Advogado consegue excluir UM documento específico dentro de um contrato sem precisar apagar e recriar o contrato inteiro — fluxo para correção rápida de documentos cadastrados errado. Reaproveita padrão `excluirContrato` (Phase 7.2) com pre-check de pagamentos + cascata manual DELETE + `recalcularTotaisContrato` pós-delete. Botão vermelho outline no card expandido do documento em `DetalheContrato.jsx`, próximo ao "Editar parcelas" existente.
+**Depends on**: Phase 7.2 (padrão excluirContrato + handleExcluirContrato usado como template); Phase 7.5 (botão "Editar parcelas" adjacente no mesmo card)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto em uso real pelo advogado: não há como corrigir documento cadastrado errado sem apagar o contrato inteiro)
+**Decisions**: ver `.planning/phases/07.7-excluir-documento-individual/07.7-CONTEXT.md` (discuss locked 2026-04-23)
+**Plans**: TBD (3 plans com 5 pausas por modo cansado: 7.7-01 service `excluirDocumento` não-autonomous, 7.7-02 UI button+handler não-autonomous, 7.7-03 UAT 5 SCs + bump duplo checkpoint)
+**UI hint**: yes (novo botão em `DetalheContrato.jsx` card expandido)
+**Status**: Planned 2026-04-23 — awaiting /gsd-plan-phase 7.7
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
