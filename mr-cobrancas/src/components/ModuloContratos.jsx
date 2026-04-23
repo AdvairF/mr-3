@@ -4,6 +4,7 @@ import DetalheContrato from "./DetalheContrato.jsx";
 import NovoContrato from "./NovoContrato.jsx";
 import DetalheDivida from "./DetalheDivida.jsx";
 import Btn from "./ui/Btn.jsx";
+import { calcularTotaisContratoNominal } from "../services/contratos.js";
 
 export default function ModuloContratos({
   allContratos,
@@ -30,6 +31,17 @@ export default function ModuloContratos({
     });
     return m;
   }, [allDividas]);
+
+  const totaisPorContrato = useMemo(() => {
+    const m = new Map();
+    (allContratos || []).forEach(c => {
+      const k = String(c.id);
+      const parcelas = parcelasPorContrato.get(k) || [];
+      const { total_pago, saldo_restante } = calcularTotaisContratoNominal(parcelas, allPagamentos);
+      m.set(k, { pago: total_pago, emAberto: saldo_restante });
+    });
+    return m;
+  }, [allContratos, parcelasPorContrato, allPagamentos]);
 
   const contratosAtivos = (allContratos || []).filter(c =>
     (parcelasPorContrato.get(String(c.id)) || []).some(d => !d.saldo_quitado)
@@ -65,6 +77,7 @@ export default function ModuloContratos({
             devedores={devedores}
             credores={credores}
             parcelasPorContrato={parcelasPorContrato}
+            totaisPorContrato={totaisPorContrato}
             hoje={hoje}
             onVerDetalhe={handleVerDetalhe}
           />

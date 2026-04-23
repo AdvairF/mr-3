@@ -327,3 +327,36 @@ export async function excluirContrato(contratoId) {
 
   return { ok: true };
 }
+
+// ─── TOTAIS NOMINAIS DO CONTRATO (Phase 7.3) ─────────────────────────────────
+
+/**
+ * Calcula totais NOMINAIS de um contrato (Phase 7.3, D-03).
+ *
+ * NÃO reflete juros/correção/multa Art.354 — é "status do acordo" (pago vs em aberto),
+ * não "saldo devedor atualizado para execução". O cálculo Art.354 vive em
+ * `services/pagamentos.js::calcularSaldoPorDividaIndividual` (motor intocável, D-01)
+ * e é usado em DetalheDivida por parcela.
+ *
+ * Fonte de verdade (D-02): `pagamentos_divida.valor`. Essa tabela é alimentada por
+ * DOIS caminhos — SP `registrar_pagamento_contrato` (Phase 7) e `criarPagamento`
+ * manual (Phase 4). Somar `pagamentos_divida` cobre ambos, inclusive pagamentos
+ * parciais que NÃO quitam a parcela (saldo_quitado = false mas valor pago > 0).
+ *
+ * Função PURA: sem fetch, sem setState. Dados já em memória via prop `allPagamentos`.
+ *
+ * @param {Array} dividasDoContrato  Parcelas (dividas) do contrato. Deve já estar filtrada por contrato_id.
+ * @param {Array} allPagamentos      TODOS os pagamentos_divida globais (App.jsx state). Função filtra por divida_id dentro.
+ * @returns {{ valor_total: number, total_pago: number, saldo_restante: number, quitado_total: boolean }}
+ */
+export function calcularTotaisContratoNominal(dividasDoContrato, allPagamentos) {
+  const valor_total = dividasDoContrato.reduce((s, d) => s + Number(d.valor_total || 0), 0);
+  const total_pago_raw = dividasDoContrato.reduce((s, d) => {
+    const pagsDaParcela = (allPagamentos || []).filter(p => String(p.divida_id) === String(d.id));
+    return s + pagsDaParcela.reduce((ss, p) => ss + Number(p.valor || 0), 0);
+  }, 0);
+  const total_pago = Math.round(total_pago_raw * 100) / 100;
+  const saldo_restante = Math.max(0, Math.round((valor_total - total_pago) * 100) / 100);
+  const quitado_total = saldo_restante <= 0.005;
+  return { valor_total, total_pago, saldo_restante, quitado_total };
+}

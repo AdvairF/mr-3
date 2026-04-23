@@ -6,7 +6,8 @@ import AdicionarDocumento from "./AdicionarDocumento.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import { Inp } from "./ui/Inp.jsx";
 import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
-         registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato } from "../services/contratos.js";
+         registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato,
+         calcularTotaisContratoNominal } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -405,8 +406,7 @@ export default function DetalheContrato({
 
   const devedor = devedores.find(d => String(d.id) === String(contrato.devedor_id));
   const credor  = credores?.find(c => String(c.id) === String(contrato.credor_id));
-  const totalQuitado = (dividas || []).filter(d => d.saldo_quitado).reduce((s, d) => s + (d.valor_total || 0), 0);
-  const emAberto = (contrato.valor_total || 0) - totalQuitado;
+  const { total_pago, saldo_restante } = calcularTotaisContratoNominal(dividas || [], allPagamentos);
   const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
   const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
 
@@ -503,8 +503,8 @@ export default function DetalheContrato({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {[
             { label: "Valor Total",    value: fmtBRL(contrato.valor_total) },
-            { label: "Total Quitado",  value: fmtBRL(totalQuitado) },
-            { label: "Em Aberto",      value: fmtBRL(Math.max(0, emAberto)) },
+            { label: "Total Pago",     value: fmtBRL(total_pago) },
+            { label: "Em Aberto",      value: fmtBRL(saldo_restante) },
           ].map(({ label, value }) => (
             <div key={label} style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>{label}</p>

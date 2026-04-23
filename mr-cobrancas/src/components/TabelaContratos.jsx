@@ -10,7 +10,7 @@ const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#6
 const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
 const POR_PAG = 20;
 
-export default function TabelaContratos({ contratos, devedores, credores, parcelasPorContrato, hoje, onVerDetalhe }) {
+export default function TabelaContratos({ contratos, devedores, credores, parcelasPorContrato, totaisPorContrato, hoje, onVerDetalhe }) {
   const [pagina, setPagina] = useState(1);
   const [hoveredRow, setHoveredRow] = useState(null);
 
@@ -39,7 +39,7 @@ export default function TabelaContratos({ contratos, devedores, credores, parcel
               <th style={th}>Devedor</th>
               <th style={th}>Docs</th>
               <th style={th}>Parcelas</th>
-              <th style={th}>Valor Total</th>
+              <th style={th}>Saldo</th>
               <th style={th}>Em Atraso</th>
             </tr>
           </thead>
@@ -81,7 +81,27 @@ export default function TabelaContratos({ contratos, devedores, credores, parcel
                       : <span style={{ color: "#94a3b8" }}>—</span>
                     }
                   </td>
-                  <td style={td}>{fmtBRL(c.valor_total)}</td>
+                  {(() => {
+                    const t = totaisPorContrato?.get(String(c.id));
+                    if (!t) {
+                      return (
+                        <td style={td}>
+                          <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 2 }}>—</div>
+                          <div style={{ fontSize: 14, color: "#94a3b8" }}>—</div>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td style={td}>
+                        <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>
+                          {fmtBRL(t.pago)} pago
+                        </div>
+                        <div style={{ fontWeight: 700, color: t.emAberto > 0 ? "#dc2626" : "#16a34a" }}>
+                          {t.emAberto > 0 ? fmtBRL(t.emAberto) : "Quitado"}
+                        </div>
+                      </td>
+                    );
+                  })()}
                   <td style={td}>
                     {atrasadas > 0
                       ? <span style={{ color: "#dc2626", fontWeight: 700 }}>{atrasadas} parcelas</span>
