@@ -37,7 +37,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
     !!tipo &&
     !!valor && parseFloat(valor) > 0 &&
     !!dataEmissao &&
-    !!numParcelas && parseInt(numParcelas) >= 1 &&
+    !!numParcelas && parseInt(numParcelas) >= 1 && parseInt(numParcelas) <= 999 &&
     Array.isArray(parcelasCustom) && parcelasCustom.length === parseInt(numParcelas);
 
   function handleEncargos(field, val) {
@@ -63,6 +63,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
     if (!valor || parseFloat(valor) <= 0) { toast("Informe o valor do documento.", { icon: "⚠️" }); return; }
     if (!dataEmissao) { toast("Informe a data de emissão.", { icon: "⚠️" }); return; }
     if (!numParcelas || parseInt(numParcelas) < 1) { toast("Informe o número de parcelas.", { icon: "⚠️" }); return; }
+    if (parseInt(numParcelas) > 999) { toast.error("Número de parcelas máximo é 999 (limite prático para empréstimos imobiliários de até 35 anos)."); return; }
 
     // Validação parcelas (Phase 7.5 D-07 — redundância; tabela também valida via onChange)
     if (!Array.isArray(parcelasCustom) || parcelasCustom.length !== parseInt(numParcelas)) {
@@ -169,7 +170,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
           <input
             type="number"
             min="1"
-            max="360"
+            max="999"
             placeholder="Ex.: 3"
             value={numParcelas}
             onChange={e => { setNumParcelas(e.target.value); setParcelasCustom(null); }}
