@@ -61,7 +61,7 @@
  *   ADD COLUMN IF NOT EXISTS documento_id UUID REFERENCES public.documentos_contrato(id);
  */
 
-import { dbGet, dbInsert, dbUpdate, sb } from "../config/supabase.js";
+import { dbGet, dbInsert, dbUpdate, dbDelete, sb } from "../config/supabase.js";
 
 const TABLE = "contratos_dividas";
 const HIST_TABLE = "contratos_historico";
