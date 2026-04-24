@@ -11,6 +11,7 @@ import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, re
          calcularTotaisContratoNominal, atualizarParcelasCustom, excluirDocumento } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 import { calcularDetalheEncargosContrato } from "../utils/devedorCalc.js";
+import DecomposicaoSaldoModal from "./DecomposicaoSaldoModal.jsx";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtData(iso) { if (!iso) return "—"; const d = iso.slice(0, 10).split("-"); return `${d[2]}/${d[1]}/${d[0]}`; }
@@ -145,6 +146,8 @@ export default function DetalheContrato({
   const [savingParcelas,        setSavingParcelas]        = useState(false);  // Phase 7.5: bloqueia double-click
   const [formPagamento,         setFormPagamento]         = useState({ data: "", valor: "", observacao: "" });
   const [saldoCalculado,        setSaldoCalculado]        = useState(0);
+  // Phase 7.8 — estado de abertura do modal de composição do saldo atualizado (plan 07.8-03).
+  const [showDecomposicaoModal, setShowDecomposicaoModal] = useState(false);
 
   useEffect(() => {
     setLoadingDocumentos(true);
@@ -613,7 +616,7 @@ export default function DetalheContrato({
               {colunas.map(({ label, value, clickable }) => (
                 <div
                   key={label}
-                  onClick={clickable ? () => { /* Phase 7.8-03: abrir DecomposicaoSaldoModal */ } : undefined}
+                  onClick={clickable ? () => setShowDecomposicaoModal(true) : undefined}
                   style={{
                     background: "#fff",
                     borderRadius: 12,
@@ -1099,6 +1102,20 @@ export default function DetalheContrato({
             </div>
           )}
         </div>
+      )}
+
+      {/* Phase 7.8-03 — Modal de composição do saldo atualizado (Art.354 CC).
+          Abre ao clicar na 4ª coluna "Saldo Atualizado" do Resumo Financeiro. */}
+      {showDecomposicaoModal && (
+        <DecomposicaoSaldoModal
+          detalhe={detalheEncargosContrato}
+          contrato={contrato}
+          credor={credor}
+          devedor={devedor}
+          indexadorLabel={contrato?.indice_correcao ? String(contrato.indice_correcao).toUpperCase() : "—"}
+          dataCalculo={hoje}
+          onClose={() => setShowDecomposicaoModal(false)}
+        />
       )}
 
     </div>
