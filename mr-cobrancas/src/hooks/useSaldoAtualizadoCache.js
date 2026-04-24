@@ -48,8 +48,8 @@ function recomputeEntry(contratoId, dividasDoContrato, allPagamentosDivida, hoje
   const dividaIds = new Set((dividasDoContrato || []).map(d => d.id));
   const pagamentosFiltered = (allPagamentosDivida || []).filter(p => dividaIds.has(p.divida_id));
   const fp = contratoFingerprint(dividasDoContrato || [], pagamentosFiltered, hoje);
-  // Adapter recebe pagamentos GLOBAL (D-04 — filtra internamente) e Date real (não string).
-  const detalhe = calcularDetalheEncargosContrato(dividasDoContrato || [], allPagamentosDivida || [], new Date());
+  // Adapter recebe pagamentos GLOBAL (D-04 — filtra internamente) e hoje string "YYYY-MM-DD" (D-09).
+  const detalhe = calcularDetalheEncargosContrato(dividasDoContrato || [], allPagamentosDivida || [], hoje);
   cache.set(contratoId, {
     saldo: detalhe?.saldoAtualizado ?? 0,
     detalhe,
