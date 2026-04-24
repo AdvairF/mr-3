@@ -315,9 +315,11 @@ Plans:
 **Depends on**: Phase 7.8 (modal e adapter existem; consumo do `totalPago` já exposto)
 **Requirements**: (UX — descoberto durante UAT prod da 7.8 pelo usuário)
 **Decisions**: ver `.planning/phases/07.8.1-pagamento-parcial-modal-composicao/07.8.1-CONTEXT.md` (discuss locked 2026-04-24)
-**Plans**: TBD (2 plans com 3 pausas padrão: 7.8.1-01 implementação autonomous, 7.8.1-02 UAT + bump review)
+**Plans**: 2 plans
+  - [ ] 07.8.1-01-PLAN.md — Extract totalPago + push condicional Pagamento parcial + useMemo deps (autonomous: true)
+  - [ ] 07.8.1-02-PLAN.md — UAT SC-1..SC-3 + bump no pai + autorização de push (autonomous: false, 3 pausas)
 **UI hint**: yes (rendering only — label limpa + sinal negativo no valor via `fmtBRLSigned` existente; cor vermelha via `valueColor` existente)
-**Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.8.1
+**Status**: Planned 2026-04-24 — plans created, awaiting /gsd-execute-phase 7.8.1
 
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
