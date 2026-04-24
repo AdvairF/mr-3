@@ -213,4 +213,27 @@ describe("calcularDetalheEncargosContrato (adapter contrato-level, Phase 7.8)", 
     expect(Array.isArray(r.detalhePorDivida)).toBe(true);
     expect(r.detalhePorDivida).toHaveLength(0);
   });
+
+  // Phase 7.8.1 — shield do bugfix de regressão crítica em prod.
+  // Adapter sempre recebe pagamentos_divida GLOBAL (todos os contratos) do caller
+  // DetalheContrato.jsx (prop allPagamentosDivida). Tem que filtrar por divida_id
+  // das parcelas do contrato ANTES de passar pro motor. Evidência do bug:
+  // contrato "Mendes e Mendes" com 0 pagamentos exibindo pagamentos do TRADIO.
+  it("filtra pagamentos por divida_id do contrato (regressão 7.8 prod bug)", () => {
+    const dividas = [{
+      id: "div-a",
+      valor_total: 1000,
+      indexador: "nenhum",
+      juros_tipo: "sem_juros",
+      multa_pct: 0,
+      honorarios_pct: 0,
+      data_vencimento: "2026-04-24",
+    }];
+    const pagamentosAllContratos = [
+      { divida_id: "div-a",     valor: 100 },   // deste contrato
+      { divida_id: "div-outra", valor: 400 },   // de outro contrato — NÃO conta
+    ];
+    const r = calcularDetalheEncargosContrato(dividas, pagamentosAllContratos, "2026-04-24");
+    expect(r.totalPago).toBe(100);  // filtrado — não soma os 400 alheios
+  });
 });

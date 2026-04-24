@@ -822,7 +822,7 @@ export function calcularPlanilhaCompleta(devedor, pagamentos, hoje) {
   };
 }
 
-// ─── ADAPTER CONTRATO-LEVEL (Phase 7.8) ──────────────────────────────────────
+// ─── ADAPTER CONTRATO-LEVEL (Phase 7.8, filter fix Phase 7.8.1) ──────────────
 
 /**
  * Adapter thin para consumo em DetalheContrato.jsx.
@@ -832,12 +832,23 @@ export function calcularPlanilhaCompleta(devedor, pagamentos, hoje) {
  * contrato diretamente, em vez do objeto devedor agregado. Motor Art.354
  * INTOCADO (D-01) — zero duplicação de lógica; delegação pura.
  *
- * @param {Array}  dividasDoContrato  parcelas do contrato (mesmo shape de devedor.dividas)
- * @param {Array}  pagamentos_divida  pagamentos em pagamentos_divida para as parcelas
- * @param {string} hoje               "YYYY-MM-DD"
+ * Phase 7.8.1 (bugfix regressão crítica) — filtra `allPagamentosDivida` por
+ * `divida_id` das parcelas do contrato ANTES de passar pro motor. O motor
+ * sempre foi "pré-filtre antes de chamar" (design intencional pra callers
+ * devedor-level onde pagamentos já vêm scopados ao devedor). Caller
+ * DetalheContrato.jsx passa `allPagamentosDivida` global → sem filter aqui,
+ * pagamentos de OUTROS contratos contaminavam o saldo atualizado deste.
+ * Padrão espelha `calcularTotaisContratoNominal` em contratos.js:476-486
+ * (já em prod desde Phase 7.3).
+ *
+ * @param {Array}  dividasDoContrato    parcelas do contrato (mesmo shape de devedor.dividas)
+ * @param {Array}  allPagamentosDivida  pagamentos_divida globais (todos os contratos) — adapter filtra por divida_id
+ * @param {string} hoje                 "YYYY-MM-DD"
  * @returns {ReturnType<typeof calcularDetalheEncargos>} shape idêntico ao original
  */
-export function calcularDetalheEncargosContrato(dividasDoContrato, pagamentos_divida, hoje) {
+export function calcularDetalheEncargosContrato(dividasDoContrato, allPagamentosDivida, hoje) {
+  const dividaIds = new Set((dividasDoContrato || []).map(d => String(d.id)));
+  const pagamentosFiltrados = (allPagamentosDivida || []).filter(p => dividaIds.has(String(p.divida_id)));
   const pseudoDevedor = { dividas: dividasDoContrato || [] };
-  return calcularDetalheEncargos(pseudoDevedor, pagamentos_divida || [], hoje);
+  return calcularDetalheEncargos(pseudoDevedor, pagamentosFiltrados, hoje);
 }
