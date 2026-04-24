@@ -47,6 +47,7 @@ export default function DecomposicaoSaldoModal({
 }) {
   const d = detalhe || {};
   const valorOriginal    = Number(d.valorOriginal || 0);
+  const totalPago        = Number(d.totalPago || 0);
   const correcaoValor    = Number(d?.correcao?.valor || 0);
   const multaValor       = Number(d?.multa?.valor || 0);
   const jurosValor       = Number(d?.juros?.valor || 0);
@@ -84,6 +85,15 @@ export default function DecomposicaoSaldoModal({
     const rows = [];
     rows.push({ label: "Valor Original", value: valorOriginal, signed: false, bold: false, sempre: true });
 
+    if (totalPago > 0) {
+      rows.push({
+        label: "Pagamento parcial",
+        value: -totalPago,
+        signed: true,
+        bold: false,
+      });
+    }
+
     if (correcaoValor !== 0) {
       rows.push({
         label: `Correção monetária (${indexador})`,
@@ -116,7 +126,7 @@ export default function DecomposicaoSaldoModal({
 
     rows.push({ label: "Saldo Devedor Atualizado", value: saldoAtualizado, signed: false, bold: true, sempre: true });
     return rows;
-  }, [valorOriginal, correcaoValor, indexador, multaValor, jurosValor, honorariosValor, art523Total, art523Multa, art523Hon, custasAtualizado, saldoAtualizado]);
+  }, [valorOriginal, totalPago, correcaoValor, indexador, multaValor, jurosValor, honorariosValor, art523Total, art523Multa, art523Hon, custasAtualizado, saldoAtualizado]);
 
   // Texto formatado para clipboard (D-12).
   const textoFormatado = useMemo(() => {
