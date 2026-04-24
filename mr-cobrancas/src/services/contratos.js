@@ -370,6 +370,88 @@ export async function excluirContrato(contratoId) {
   return { ok: true };
 }
 
+// ─── EXCLUIR DOCUMENTO INDIVIDUAL (Phase 7.7) ────────────────────────────────
+
+/**
+ * Exclui UM documento de um contrato com hard delete em cascata manual.
+ *
+ * Phase 7.7 — espelho estrutural de excluirContrato (Phase 7.2, linhas 329-371
+ * deste arquivo) com 2 diferenças (D-02):
+ *   1. Filtro: documento_id=eq.* em vez de contrato_id=eq.* nos DELETEs.
+ *   2. Pós-delete OBRIGATÓRIO: recalcularTotaisContrato(contratoId) (D-05) —
+ *      senão contrato.valor_total, num_documentos, num_parcelas_total ficam
+ *      stale (mesmo helper que adicionarDocumento:283 usa).
+ *
+ * Pré-checagem (D-03, D-06):
+ *  - rejeita se existir alguma linha em pagamentos_divida apontando pra
+ *    qualquer parcela (divida_id) do documento.
+ *  - pagamentos_contrato NÃO é checado separadamente — SP-generated
+ *    amortizations via registrar_pagamento_contrato já escrevem em
+ *    pagamentos_divida, capturadas pelo pre-check único (D-06).
+ *
+ * Sequência dos DELETEs (D-04, ordem obrigatória por FK dividas.documento_id
+ * sem CASCADE):
+ *  1. DELETE FROM dividas WHERE documento_id = :id
+ *     → pagamentos_divida + devedores_dividas caem via CASCADE.
+ *  2. DELETE FROM documentos_contrato WHERE id = :id
+ *  3. recalcularTotaisContrato(contratoId) (D-05)
+ *
+ * Contrato vazio (num_documentos=0) pós-delete do último doc é estado válido
+ * (D-08) — sem tratamento especial.
+ *
+ * Sem try/catch interno: exceções técnicas (rede/RLS) propagam pro caller
+ * (padrão de excluirContrato).
+ *
+ * @param {string} documentoId  UUID do documento (documentos_contrato.id)
+ * @returns {Promise<{ ok: true } | { ok: false, motivo: string }>}
+ */
+export async function excluirDocumento(documentoId) {
+  // Lookup do contrato_id (necessário no final pra recalcularTotaisContrato).
+  // Também valida que o documento existe — se não existe, retornamos ok:false
+  // em vez de propagar erro opaco de banco.
+  const docs = await dbGet(
+    "documentos_contrato",
+    `id=eq.${encodeURIComponent(documentoId)}&select=id,contrato_id&limit=1`
+  );
+  if (!Array.isArray(docs) || docs.length === 0) {
+    return { ok: false, motivo: "Documento não encontrado." };
+  }
+  const contratoId = docs[0].contrato_id;
+
+  // Pre-check (D-03, D-06): pagamentos_divida apontando pra qualquer parcela do doc.
+  // Passo 1: listar parcelas (dividas) do documento.
+  const parcelas = await dbGet(
+    "dividas",
+    `documento_id=eq.${encodeURIComponent(documentoId)}&select=id`
+  );
+  const parcelaIds = Array.isArray(parcelas) ? parcelas.map(p => p.id) : [];
+  if (parcelaIds.length > 0) {
+    const inList = parcelaIds.map(encodeURIComponent).join(",");
+    const pagsDivida = await dbGet(
+      "pagamentos_divida",
+      `divida_id=in.(${inList})&select=id&limit=1`
+    );
+    if (Array.isArray(pagsDivida) && pagsDivida.length > 0) {
+      return {
+        ok: false,
+        motivo: "Este documento possui pagamentos registrados — não pode ser excluído. Exclua os pagamentos primeiro."
+      };
+    }
+  }
+
+  // Cascata manual (D-04) — ordem OBRIGATÓRIA:
+  // Passo 1: dividas WHERE documento_id — pagamentos_divida + devedores_dividas caem via CASCADE.
+  await sb("dividas", "DELETE", null, `?documento_id=eq.${encodeURIComponent(documentoId)}`);
+  // Passo 2: o documento em si.
+  await dbDelete("documentos_contrato", documentoId);
+
+  // Pós-delete OBRIGATÓRIO (D-05): recalcula totais do contrato pai.
+  // Sem isso, contrato.valor_total / num_documentos / num_parcelas_total ficam stale.
+  await recalcularTotaisContrato(contratoId);
+
+  return { ok: true };
+}
+
 // ─── TOTAIS NOMINAIS DO CONTRATO (Phase 7.3) ─────────────────────────────────
 
 /**
