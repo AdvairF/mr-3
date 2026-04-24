@@ -310,6 +310,15 @@ Plans:
 **UI hint**: yes (4ª coluna clickable + novo modal + pattern impressão isolado)
 **Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.8
 
+### Phase 7.8.1: Pagamento parcial no modal de composição (INSERTED)
+**Goal**: Adicionar linha "Pagamento parcial" (com valor negativo, cor vermelha) no `DecomposicaoSaldoModal.jsx` — entre "Valor Original" e "Correção" — pra advogado ver quanto já foi deduzido do principal antes dos encargos. Consumo puro de `detalhe.totalPago` já exposto pelo motor Art.354; zero mudança no motor, zero mudança no adapter. Sub-phase cirúrgica (~10-15 linhas) pós-smoke de 7.8; precedente estrutural = 7.5.1 (fix pós-ship do pai).
+**Depends on**: Phase 7.8 (modal e adapter existem; consumo do `totalPago` já exposto)
+**Requirements**: (UX — descoberto durante UAT prod da 7.8 pelo usuário)
+**Decisions**: ver `.planning/phases/07.8.1-pagamento-parcial-modal-composicao/07.8.1-CONTEXT.md` (discuss locked 2026-04-24)
+**Plans**: TBD (2 plans com 3 pausas padrão: 7.8.1-01 implementação autonomous, 7.8.1-02 UAT + bump review)
+**UI hint**: yes (rendering only — label limpa + sinal negativo no valor via `fmtBRLSigned` existente; cor vermelha via `valueColor` existente)
+**Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.8.1
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
