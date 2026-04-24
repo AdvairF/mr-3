@@ -10,7 +10,18 @@ const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#6
 const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
 const POR_PAG = 20;
 
-export default function TabelaContratos({ contratos, devedores, credores, parcelasPorContrato, totaisPorContrato, hoje, onVerDetalhe }) {
+export default function TabelaContratos({
+  contratos,
+  devedores,
+  credores,
+  parcelasPorContrato,
+  totaisPorContrato,
+  hoje,
+  onVerDetalhe,
+  // Phase 7.8.2a — coluna opcional "Saldo Atualizado" (cache SWR).
+  // Quando todas as 3 props abaixo são fornecidas, a coluna é renderizada.
+  saldoAtualizadoColuna,        // { header: string, Cell: React.Component, allPagamentosDivida: array }
+}) {
   const [pagina, setPagina] = useState(1);
   const [hoveredRow, setHoveredRow] = useState(null);
 
@@ -40,6 +51,7 @@ export default function TabelaContratos({ contratos, devedores, credores, parcel
               <th style={th}>Docs</th>
               <th style={th}>Parcelas</th>
               <th style={th}>Saldo</th>
+              {saldoAtualizadoColuna ? <th style={th}>{saldoAtualizadoColuna.header}</th> : null}
               <th style={th}>Em Atraso</th>
             </tr>
           </thead>
@@ -51,6 +63,7 @@ export default function TabelaContratos({ contratos, devedores, credores, parcel
               const atrasadas = parcelas.filter(d =>
                 !d.saldo_quitado && d.data_vencimento && d.data_vencimento < hoje
               ).length;
+              const SaldoCell = saldoAtualizadoColuna?.Cell;
 
               return (
                 <tr
@@ -102,6 +115,16 @@ export default function TabelaContratos({ contratos, devedores, credores, parcel
                       </td>
                     );
                   })()}
+                  {SaldoCell ? (
+                    <td style={td}>
+                      <SaldoCell
+                        contrato={c}
+                        dividasDoContrato={parcelas}
+                        allPagamentosDivida={saldoAtualizadoColuna.allPagamentosDivida}
+                        hoje={undefined /* hook usa default Goiânia */}
+                      />
+                    </td>
+                  ) : null}
                   <td style={td}>
                     {atrasadas > 0
                       ? <span style={{ color: "#dc2626", fontWeight: 700 }}>{atrasadas} parcelas</span>

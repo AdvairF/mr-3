@@ -22,7 +22,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:regressao": "vitest run src/services/__tests__/calculos.test.js",
+    "test:regressao": "vitest run src/services/__tests__/calculos.test.js src/services/__tests__/saldoAtualizadoCache.test.js",
     "prebuild": "npm run test:regressao"
   }
 }

@@ -4,6 +4,8 @@ import Btn from "./ui/Btn.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
 import { adicionarDocumento } from "../services/contratos.js";
+// Phase 7.8.2a — D-05 enforcement (caller #6 do cache SWR de listagem)
+import { invalidateContrato } from "../hooks/useSaldoAtualizadoCache.js";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -101,6 +103,7 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         data_inicio_atualizacao: encargos.data_inicio_atualizacao || null,
       };
       const result = await adicionarDocumento(contrato.id, documentoPayload, contrato, parcelasCustom);
+      invalidateContrato(contrato.id); // Phase 7.8.2a D-05 — antes do toast.success
       toast.success(`Documento adicionado com ${result.parcelas.length} parcelas`);
       onDocumentoAdicionado(result);
     } catch (e) {

@@ -12,6 +12,8 @@ import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, re
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 import { calcularDetalheEncargosContrato } from "../utils/devedorCalc.js";
 import DecomposicaoSaldoModal from "./DecomposicaoSaldoModal.jsx";
+// Phase 7.8.2a — D-05 enforcement (callers completude p/ cache SWR de listagem)
+import { invalidateContrato, removeContrato } from "../hooks/useSaldoAtualizadoCache.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtData(iso) { if (!iso) return "—"; const d = iso.slice(0, 10).split("-"); return `${d[2]}/${d[1]}/${d[0]}`; }
@@ -355,6 +357,7 @@ export default function DetalheContrato({
         valor,
         observacao: formPagamento.observacao || null,
       });
+      invalidateContrato(contrato.id); // Phase 7.8.2a D-05 — antes do toast.success
       const n = result?.parcelas_amortizadas ?? 0;
       toast.success(`Pagamento registrado. ${n} parcela(s) amortizada(s).`);
       setFormPagamento({ data: "", valor: "", observacao: "" });
@@ -376,6 +379,7 @@ export default function DetalheContrato({
     setExcluindoPagamentoId(pagamento.id);
     try {
       await excluirPagamentoContrato(pagamento.id);
+      invalidateContrato(contrato.id); // Phase 7.8.2a D-05 — antes do toast.success
       toast.success("Pagamento excluído. Amortização revertida.");
       const rows = await listarPagamentosContrato(contrato.id);
       setPagamentosContrato(Array.isArray(rows) ? rows : []);
@@ -396,6 +400,7 @@ export default function DetalheContrato({
         toast.error(result.motivo);
         return;
       }
+      removeContrato(contrato.id); // Phase 7.8.2a D-05 — contrato deixou de existir, antes do toast
       toast.success("Contrato excluído com sucesso");
       await onCarregarTudo();
       onVoltar();
@@ -425,6 +430,7 @@ export default function DetalheContrato({
         toast.error(result.motivo);
         return;
       }
+      invalidateContrato(contrato.id); // Phase 7.8.2a D-05 — antes do toast.success
       toast.success("Documento excluído com sucesso");
       // Refresh de estado: global (App.jsx) + local (this component).
       // Pattern literal de handleDocumentoAdicionado:404-408.
@@ -458,6 +464,7 @@ export default function DetalheContrato({
         toast.error(result.motivo);
         return;
       }
+      invalidateContrato(contrato.id); // Phase 7.8.2a D-05 — antes do toast.success
       toast.success(`Parcelas atualizadas (${result.updated}).`);
       setEditingDocId(null);
       await onCarregarTudo();

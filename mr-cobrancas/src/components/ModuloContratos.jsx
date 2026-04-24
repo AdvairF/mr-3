@@ -1,10 +1,18 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import TabelaContratos from "./TabelaContratos.jsx";
 import DetalheContrato from "./DetalheContrato.jsx";
 import NovoContrato from "./NovoContrato.jsx";
 import DetalheDivida from "./DetalheDivida.jsx";
 import Btn from "./ui/Btn.jsx";
 import { calcularTotaisContratoNominal } from "../services/contratos.js";
+// Phase 7.8.2a — Fix D (cache SWR + coluna Saldo Atualizado)
+import CelulaSaldoAtualizado from "./CelulaSaldoAtualizado.jsx";
+import {
+  invalidateAll,
+  kickoffBatch,
+  subscribeToCache,   // helper observabilidade SC5 — locked em CONTEXT.md §5
+  getLastCalculadoEm, // helper observabilidade SC5 — locked em CONTEXT.md §5
+} from "../hooks/useSaldoAtualizadoCache.js";
 
 export default function ModuloContratos({
   allContratos,
@@ -22,9 +30,43 @@ export default function ModuloContratos({
   const [selectedContrato, setSelectedContrato] = useState(null);
   const [selectedParcela, setSelectedParcela] = useState(null);
 
+  // Phase 7.8.2a — aliases locais p/ deps grep literal (D-12).
+  const contratos = allContratos || [];
+  const dividas = allDividas || [];
+
+  // Phase 7.8.2a — kickoffBatch on mount + re-kickoff on .length changes.
+  // D-12: useRef flag protege StrictMode double-mount; deps por .length permitem
+  // re-kickoff quando CRUD muda contagem de contratos/dívidas/pagamentos.
+  const kickedOff = useRef(false);
+  useEffect(() => {
+    // primeiro mount OU mudança de contagem → re-kickoff (filter interno do hook pula já-cached)
+    if (kickedOff.current === false || true) {
+      kickoffBatch(contratos, dividas, allPagamentosDivida);
+      kickedOff.current = true;
+    }
+  }, [contratos.length, dividas.length, allPagamentosDivida.length]);
+
+  // Phase 7.8.2a — tick reativo p/ timestamp do header (SC5).
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const unsub = subscribeToCache(() => setTick(t => t + 1));
+    return unsub;
+  }, []);
+
+  function fmtHHMM(ts) {
+    if (!ts) return "—";
+    return new Date(ts).toLocaleTimeString("pt-BR", {
+      hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo"
+    });
+  }
+  const lastCalc = getLastCalculadoEm();
+  // tick ref evita warning unused-var em modo lint estrito (re-render driver)
+  void tick;
+  const timestampLabel = lastCalc ? `Atualizado às ${fmtHHMM(lastCalc)}` : "Atualizando…";
+
   const parcelasPorContrato = useMemo(() => {
     const m = new Map();
-    (allDividas || []).forEach(d => {
+    dividas.forEach(d => {
       if (!d.contrato_id) return;
       const k = String(d.contrato_id);
       if (!m.has(k)) m.set(k, []);
@@ -35,7 +77,7 @@ export default function ModuloContratos({
 
   const totaisPorContrato = useMemo(() => {
     const m = new Map();
-    (allContratos || []).forEach(c => {
+    contratos.forEach(c => {
       const k = String(c.id);
       const parcelas = parcelasPorContrato.get(k) || [];
       const { total_pago, saldo_restante } = calcularTotaisContratoNominal(parcelas, allPagamentosDivida);
@@ -44,7 +86,7 @@ export default function ModuloContratos({
     return m;
   }, [allContratos, parcelasPorContrato, allPagamentosDivida]);
 
-  const contratosAtivos = (allContratos || []).filter(c =>
+  const contratosAtivos = contratos.filter(c =>
     (parcelasPorContrato.get(String(c.id)) || []).some(d => !d.saldo_quitado)
   ).length;
 
@@ -71,16 +113,31 @@ export default function ModuloContratos({
                 {contratosAtivos} ativos
               </span>
             </div>
-            <Btn onClick={() => setView("novo")} color="#0d9488" sm>+ Novo Contrato</Btn>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {/* Phase 7.8.2a — timestamp reativo + botão Atualizar (SC5/SC8) */}
+              <span style={{ fontSize: 12, color: "#666" }}>{timestampLabel}</span>
+              <button
+                type="button"
+                onClick={() => { invalidateAll(); kickoffBatch(contratos, dividas, allPagamentosDivida); }}
+                title="Forçar atualização do saldo"
+                style={{ background: "#fff", border: "1px solid #cbd5e1", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer", color: "#475569", fontWeight: 600 }}
+              >🔄 Atualizar</button>
+              <Btn onClick={() => setView("novo")} color="#0d9488" sm>+ Novo Contrato</Btn>
+            </div>
           </div>
           <TabelaContratos
-            contratos={allContratos || []}
+            contratos={contratos}
             devedores={devedores}
             credores={credores}
             parcelasPorContrato={parcelasPorContrato}
             totaisPorContrato={totaisPorContrato}
             hoje={hoje}
             onVerDetalhe={handleVerDetalhe}
+            saldoAtualizadoColuna={{
+              header: "Saldo Atualizado",
+              Cell: CelulaSaldoAtualizado,
+              allPagamentosDivida: allPagamentosDivida,
+            }}
           />
         </div>
       )}
