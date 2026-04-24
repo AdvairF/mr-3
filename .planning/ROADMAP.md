@@ -301,6 +301,15 @@ Plans:
 **UI hint**: yes (novo botão em `DetalheContrato.jsx` card expandido)
 **Status**: Planned 2026-04-23 — awaiting /gsd-plan-phase 7.7
 
+### Phase 7.8: Saldo Atualizado + Composição da Dívida com Impressão (INSERTED)
+**Goal**: Adicionar coluna "Saldo Atualizado" (Art. 354 CC) no Resumo Financeiro do contrato e modal de composição clicável que mostra decomposição (valor original + correção + multa + juros + honorários) com botões Copiar (clipboard → WhatsApp) e Imprimir (A4 via window.open isolado). Motor Art.354 **intocado por construção** — descoberta no discuss 2026-04-24 revelou que `calcularDetalheEncargos` já expõe decomposição; phase vira adapter thin + UI + reuso de Modal.jsx base + pattern de impressão do GerarPeticao.jsx.
+**Depends on**: Phase 7.3 (`allPagamentosDivida` prop disponível em DetalheContrato); Phase 7.7 (num_documentos=0 estado válido pós-delete — hide "Saldo Atualizado" quando vazio)
+**Requirements**: (gap closure — sem REQ-IDs formais; descoberto em demanda real: UI só mostra valores nominais, advogado precisa ver saldo Art.354 com decomposição pra apresentar ao cliente/devedor e imprimir)
+**Decisions**: ver `.planning/phases/07.8-saldo-atualizado-composicao/07.8-CONTEXT.md` (discuss locked 2026-04-24)
+**Plans**: TBD (4 plans com 5 pausas modo cansado: 7.8-01 adapter `calcularDetalheEncargosContrato` + teste shield, 7.8-02 4ª coluna Resumo Financeiro, 7.8-03 `DecomposicaoSaldoModal.jsx` + print window, 7.8-04 UAT + bump)
+**UI hint**: yes (4ª coluna clickable + novo modal + pattern impressão isolado)
+**Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.8
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
