@@ -10,6 +10,7 @@ import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, re
          registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato,
          calcularTotaisContratoNominal, atualizarParcelasCustom, excluirDocumento } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
+import { calcularDetalheEncargosContrato } from "../utils/devedorCalc.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtData(iso) { if (!iso) return "—"; const d = iso.slice(0, 10).split("-"); return `${d[2]}/${d[1]}/${d[0]}`; }
@@ -489,6 +490,16 @@ export default function DetalheContrato({
   const devedor = devedores.find(d => String(d.id) === String(contrato.devedor_id));
   const credor  = credores?.find(c => String(c.id) === String(contrato.credor_id));
   const { total_pago, saldo_restante } = calcularTotaisContratoNominal(dividas || [], allPagamentosDivida);
+
+  // Phase 7.8 — saldo atualizado Art.354 (correção + multa + juros + honorários).
+  // Adapter thin calcularDetalheEncargosContrato delega ao motor existente (plan 07.8-01).
+  // useMemo cacheia — recalcula só quando dividas/pagamentos/hoje mudam (D-18).
+  const detalheEncargosContrato = useMemo(
+    () => calcularDetalheEncargosContrato(dividas || [], allPagamentosDivida || [], hoje),
+    [dividas, allPagamentosDivida, hoje]
+  );
+  const saldoAtualizadoContrato = detalheEncargosContrato?.saldoAtualizado ?? 0;
+
   const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
   const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
 
@@ -579,21 +590,56 @@ export default function DetalheContrato({
         </div>
       )}
 
-      {/* 3. Financial summary card */}
+      {/* 3. Financial summary card — Phase 7.8: +4ª coluna Saldo Atualizado Art.354 quando num_documentos>0 (D-04, D-05) */}
       <div style={{ background: "linear-gradient(135deg,#f0fdf4 0%,#fff 100%)", borderRadius: 16, padding: "16px 24px", border: "1px solid #bbf7d0", marginBottom: 16 }}>
         <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>Resumo Financeiro</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {[
-            { label: "Valor Total",    value: fmtBRL(contrato.valor_total) },
-            { label: "Total Pago",     value: fmtBRL(total_pago) },
-            { label: "Em Aberto",      value: fmtBRL(saldo_restante) },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>{label}</p>
-              <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>{value}</p>
+        {(() => {
+          const temDocumentos = (contrato.num_documentos || 0) > 0;
+          const colunas = [
+            { label: "Valor Total",      value: fmtBRL(contrato.valor_total), clickable: false },
+            { label: "Total Pago",       value: fmtBRL(total_pago),           clickable: false },
+            { label: "Em Aberto",        value: fmtBRL(saldo_restante),       clickable: false },
+          ];
+          if (temDocumentos) {
+            colunas.push({
+              label: "Saldo Atualizado",
+              value: fmtBRL(saldoAtualizadoContrato),
+              clickable: true,
+            });
+          }
+          const nCols = colunas.length;
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${nCols}, 1fr)`, gap: 12 }}>
+              {colunas.map(({ label, value, clickable }) => (
+                <div
+                  key={label}
+                  onClick={clickable ? () => { /* Phase 7.8-03: abrir DecomposicaoSaldoModal */ } : undefined}
+                  style={{
+                    background: "#fff",
+                    borderRadius: 12,
+                    padding: "12px 16px",
+                    border: clickable ? "1px solid #86efac" : "1px solid #e2e8f0",
+                    textAlign: "center",
+                    cursor: clickable ? "pointer" : "default",
+                    transition: clickable ? "box-shadow .15s, border-color .15s" : undefined,
+                  }}
+                  onMouseEnter={clickable ? (e) => {
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(34,197,94,.2)";
+                    e.currentTarget.style.borderColor = "#22c55e";
+                  } : undefined}
+                  onMouseLeave={clickable ? (e) => {
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.borderColor = "#86efac";
+                  } : undefined}
+                  title={clickable ? "Clique para ver composição (Art. 354 CC)" : undefined}
+                >
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>{label}</p>
+                  <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>{value}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          );
+        })()}
         <p style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", marginTop: 8, marginBottom: 0 }}>(amortização sequencial conforme Art. 354 CC)</p>
       </div>
 
