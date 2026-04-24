@@ -321,6 +321,15 @@ Plans:
 **UI hint**: yes (rendering only — label limpa + sinal negativo no valor via `fmtBRLSigned` existente; cor vermelha via `valueColor` existente)
 **Status**: Planned 2026-04-24 — plans created, awaiting /gsd-execute-phase 7.8.1
 
+### Phase 7.8.2a: Saldo Atualizado na Listagem de Contratos (cache SWR) (INSERTED)
+**Goal**: Levar a coluna "Saldo Atualizado" (Art.354 CC) pra listagem de contratos (`ModuloContratos.jsx`) via cache SWR (stale-while-revalidate) caseiro — singleton Map + fingerprint deep (12 campos motor-relevantes) + pub/sub + 5 gatilhos de revalidação (mount vazio, mount preenchido, window.focus, evento pagamento/doc, virada dia Goiânia). Display-only na célula, row inteira segue navegando pro DetalheContrato. Novo D-05 (callers completude) blinda silent-stale — 6 handlers de mutação em DetalheContrato.jsx + AdicionarDocumento.jsx chamam `invalidateContrato`/`removeContrato` pós-sucesso. Shield grep obrigatório antes do push.
+**Depends on**: Phase 7.8 (adapter `calcularDetalheEncargosContrato` em devedorCalc.js:849); Phase 7.8.1 (adapter filtra `allPagamentosDivida` internamente — shield cross-entity D-04)
+**Requirements**: (UX — advogado com 200 contratos não consegue ver saldo atualizado na visão agregada sem clicar cada um; descoberto em uso real pós-ship 7.8.1)
+**Decisions**: ver `.planning/phases/07.8.2a-saldo-atualizado-listagem-cache-swr/07.8.2a-CONTEXT.md` (discuss locked 2026-04-24, D-01..D-16 + SC1..SC8)
+**Plans**: TBD (2 plans propostos: 07.8.2a-01 impl completa 7 arquivos + 07.8.2a-02 UAT SC1-SC8 + bump com 3 pausas humanas)
+**UI hint**: yes (nova coluna na tabela + botão "🔄 Atualizar" + timestamp header; display-only na célula, não clicável)
+**Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.8.2a
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
