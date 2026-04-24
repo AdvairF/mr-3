@@ -8,7 +8,7 @@ import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
 import { Inp } from "./ui/Inp.jsx";
 import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
          registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato,
-         calcularTotaisContratoNominal, atualizarParcelasCustom } from "../services/contratos.js";
+         calcularTotaisContratoNominal, atualizarParcelasCustom, excluirDocumento } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -139,6 +139,7 @@ export default function DetalheContrato({
   const [pagamentosCarregado,   setPagamentosCarregado]   = useState(false);
   const [excluindoPagamentoId,  setExcluindoPagamentoId]  = useState(null);
   const [excluindoContrato,     setExcluindoContrato]     = useState(false);
+  const [excluindoDocumentoId,  setExcluindoDocumentoId]  = useState(null);   // Phase 7.7: UUID do doc sendo excluído (mesmo pattern de excluindoPagamentoId linha 140)
   const [editingDocId,          setEditingDocId]          = useState(null);   // Phase 7.5 D-04: UUID do documento em modo edição de parcelas
   const [savingParcelas,        setSavingParcelas]        = useState(false);  // Phase 7.5: bloqueia double-click
   const [formPagamento,         setFormPagamento]         = useState({ data: "", valor: "", observacao: "" });
@@ -398,6 +399,41 @@ export default function DetalheContrato({
       toast.error("Erro ao excluir contrato. Tente novamente.");
     } finally {
       setExcluindoContrato(false);
+    }
+  }
+
+  // Phase 7.7 — exclui UM documento específico. Cleanup de UI state ANTES do service
+  // (D-07) previne render crash quando onCarregarTudo retorna lista sem o doc. Não
+  // navega (SC-4: contrato vazio pós-delete é estado válido, usuário fica no contrato).
+  async function handleExcluirDocumento(doc) {
+    if (!window.confirm("Tem certeza? Esta ação não pode ser desfeita.")) return;
+
+    // UI state cleanup ANTES do service call (D-07) — ordem OBRIGATÓRIA:
+    // se o doc sendo excluído é o que está sendo editado ou expandido, limpar
+    // antes do delete senão o próximo render aponta pra ID inexistente.
+    if (editingDocId === doc.id) setEditingDocId(null);
+    if (expandedDoc === doc.id) setExpandedDoc(null);
+
+    setExcluindoDocumentoId(doc.id);
+    try {
+      const result = await excluirDocumento(doc.id);
+      if (!result.ok) {
+        toast.error(result.motivo);
+        return;
+      }
+      toast.success("Documento excluído com sucesso");
+      // Refresh de estado: global (App.jsx) + local (this component).
+      // Pattern literal de handleDocumentoAdicionado:404-408.
+      await onCarregarTudo();
+      listarDocumentosPorContrato(contrato.id)
+        .then(docs => setDocumentos(Array.isArray(docs) ? docs : []));
+      // Intencionalmente NÃO navega de volta — diferença proposital vs handleExcluirContrato
+      // (D-08). Contrato vazio pós-delete é estado válido; usuário fica na tela do
+      // DetalheContrato para poder clicar "Adicionar documento" de novo.
+    } catch (e) {
+      toast.error("Erro ao excluir documento. Tente novamente.");
+    } finally {
+      setExcluindoDocumentoId(null);
     }
   }
 
@@ -763,6 +799,17 @@ export default function DetalheContrato({
               <div style={{ marginTop: 12 }} onClick={e => e.stopPropagation()}>
                 {editingDocId !== doc.id && (
                   <div style={{ marginBottom: 8, textAlign: "right" }}>
+                    <span style={{ marginRight: 8, display: "inline-block" }}>
+                      <Btn
+                        color="#dc2626"
+                        sm
+                        outline
+                        onClick={() => handleExcluirDocumento(doc)}
+                        disabled={excluindoDocumentoId === doc.id}
+                      >
+                        {excluindoDocumentoId === doc.id ? "Excluindo…" : "Excluir documento"}
+                      </Btn>
+                    </span>
                     <Btn
                       color="#4f46e5"
                       sm
