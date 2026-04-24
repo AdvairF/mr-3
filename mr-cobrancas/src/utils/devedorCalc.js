@@ -821,3 +821,23 @@ export function calcularPlanilhaCompleta(devedor, pagamentos, hoje) {
     _meta: { honorariosPct, multaPct: parseFloat((dividasCalc[0] || {}).multa_pct) || 0, indexador: (dividasCalc[0] || {}).indexador || 'nenhum', jurosAM: parseFloat((dividasCalc[0] || {}).juros_am) || 0 },
   };
 }
+
+// ─── ADAPTER CONTRATO-LEVEL (Phase 7.8) ──────────────────────────────────────
+
+/**
+ * Adapter thin para consumo em DetalheContrato.jsx.
+ *
+ * Phase 7.8 (D-02) — envolve `calcularDetalheEncargos` existente com uma
+ * assinatura contrato-level que recebe a lista de parcelas (`dividas`) do
+ * contrato diretamente, em vez do objeto devedor agregado. Motor Art.354
+ * INTOCADO (D-01) — zero duplicação de lógica; delegação pura.
+ *
+ * @param {Array}  dividasDoContrato  parcelas do contrato (mesmo shape de devedor.dividas)
+ * @param {Array}  pagamentos_divida  pagamentos em pagamentos_divida para as parcelas
+ * @param {string} hoje               "YYYY-MM-DD"
+ * @returns {ReturnType<typeof calcularDetalheEncargos>} shape idêntico ao original
+ */
+export function calcularDetalheEncargosContrato(dividasDoContrato, pagamentos_divida, hoje) {
+  const pseudoDevedor = { dividas: dividasDoContrato || [] };
+  return calcularDetalheEncargos(pseudoDevedor, pagamentos_divida || [], hoje);
+}

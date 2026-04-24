@@ -18,7 +18,7 @@ import {
   calcularJurosAcumulados,
   calcularArt523,
 } from "../../utils/correcao.js";
-import { calcularSaldoDevedorAtualizado, calcularPlanilhaCompleta } from "../../utils/devedorCalc.js";
+import { calcularSaldoDevedorAtualizado, calcularPlanilhaCompleta, calcularDetalheEncargosContrato } from "../../utils/devedorCalc.js";
 import casos from "./casos-tjgo.json";
 
 // ─── Helper: calcula caso completo a partir da entrada ───────────────────────
@@ -195,5 +195,22 @@ describe("Suite Regressão TJGO — Cálculos Oficiais", () => {
         expect(Math.abs(planilha.resumo.saldo_devedor_final - saldoRef)).toBeLessThanOrEqual(0.02);
       }
     });
+  });
+});
+
+// ─── SHIELD: adapter contrato-level (Phase 7.8, D-03) ────────────────────────
+// Valida APENAS o adapter (wrapping thin). Motor Art.354 já validado pelos 9
+// casos TJGO acima. Contrato mínimo: devedor vazio → shape válido com zeros.
+
+describe("calcularDetalheEncargosContrato (adapter contrato-level, Phase 7.8)", () => {
+  it("retorna shape válido com zeros para contrato vazio", () => {
+    const r = calcularDetalheEncargosContrato([], [], "2026-04-24");
+    expect(r).toBeTypeOf("object");
+    expect(r.valorOriginal).toBe(0);
+    expect(r.saldoAtualizado).toBe(0);
+    expect(r.totalEncargos).toBe(0);
+    expect(r.totalPago).toBe(0);
+    expect(Array.isArray(r.detalhePorDivida)).toBe(true);
+    expect(r.detalhePorDivida).toHaveLength(0);
   });
 });
