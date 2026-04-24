@@ -330,6 +330,15 @@ Plans:
 **UI hint**: yes (nova coluna na tabela + botão "🔄 Atualizar" + timestamp header; display-only na célula, não clicável)
 **Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.8.2a
 
+### Phase 7.9: Custas Judiciais CRUD (INSERTED)
+**Goal**: Reconstruir UI de CRUD de Custas Judiciais sobre infra existente (motor Art.354 + schema `_so_custas`/`custas: JSONB` + DecomposicaoSaldoModal JÁ suportam custas — descoberta pós-investigação 2026-04-24). Escopo: NovaCustaModal (form único com dropdown de vínculo opcional), 4 services (criarCusta/editarCusta/excluirCusta/togglePagoCusta) com validação cross-contract (SC10 — blindagem 7.8.1-02), amend D-06 fingerprint 12→14 campos (custas summary C + _so_custas flag S), DetalheContrato lista de custas + 4 handlers D-05, DecomposicaoSaldoModal 2 linhas (pagas + em aberto atualizadas). D-05 expande 6→10 handlers. **D-01 motor intocado (risco MÉDIO — reclassificado de ALTO no handoff original)**.
+**Depends on**: Phase 7.8 (motor Art.354 + schema `_so_custas`/`custas: JSONB` já suportam); Phase 7.8.2a (hook `useSaldoAtualizadoCache` + fingerprint D-06 amendado em commit `2ba8a9f` — custas summary C + `_so_custas` flag sequence S)
+**Requirements**: (UX — advogado precisa lançar custas judiciais nos contratos com correção monetária automática pelo mesmo indexador; UI de CRUD removida em refactor do App.jsx e precisa ser reconstruída)
+**Decisions**: ver `.planning/phases/07.9-custas-judiciais-crud/07.9-CONTEXT.md` (discuss locked 2026-04-24, D-01..D-16 herdadas + D-22..D-25 novas + SC1..SC10 + Shield 20 cross-contract isolation)
+**Plans**: TBD (2 plans propostos: 07.9-01 impl completa 5 modificados + 1 novo + 1 test + 07.9-02 UAT SC1-SC10 + bump com 3 pausas humanas)
+**UI hint**: yes (botão "Nova Custa" em DetalheContrato + NovaCustaModal form + lista de custas na seção do contrato + 2 linhas separadas no DecomposicaoSaldoModal — pagas e em aberto atualizadas)
+**Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.9
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
