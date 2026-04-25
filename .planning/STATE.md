@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: "Pagamentos por Contrato + PDF Demonstrativo"
 current_plan: COMPLETE
-status: Phase 7.1 complete — 07.1-01 executed (Bug A + Bug B fixed, 9/9 regressão verde)
-last_updated: "2026-04-23T01:27:34Z"
-last_activity: 2026-04-23 — Phase 7.1 plan 07.1-01 executado. Bug A (isPagamento render branch) e Bug B (fmtDataHora timezone) corrigidos em DetalheContrato.jsx. Submodule mr-3 commitado (5a0fc40), bump no pai (c4f6b9f). 9/9 testes passando. Nenhum push executado.
+status: Phase 7.9 SHIPPED — Custas Judiciais CRUD avulsas (tag v1.4-phase7.9 em 6a19c01 pai + d354daa submódulo). Smoke prod PASS.
+last_updated: "2026-04-25T16:00:00-03:00"
+last_activity: 2026-04-25 — Phase 7.9 SHIPPED. Submódulo 7 commits fix-forward (c60c38a feat → 0c040d4 devedor_id → fbbb5fc tabela certa → 504e83e correção avulsas + relabel → 3d8f80f Resumo+nascempagas → 66e5c14 correção sempre + UI 1 linha → d354daa saldo+cache+Shield18). Pai bump 6a19c01 + 2 docs prévios (1ff9025 + 2ba8a9f). Roundtrip Q1 reconsidered: original (c) ambos→(b) avulsas-only após c89a183 rollback antes do push. UAT humano pegou 4 bugs em série em ~30min (gates Plan 01 não validam DB integration nem semantic drift). Regressão 20/20 PASS, motor Art.354 100% intocado (D-01 estrito), 4 callsites do saldo alinhados (Resumo card + DecomposicaoSaldoModal + cache listagem + tabela custas). Smoke prod mrcobrancas.com.br PASS. 3 memory feedbacks novos: discuss walkthrough fluxo real, db integration gate missing, helper-first (consolidado em db integration). 13 memory entries totais.
 progress:
   total_phases: 1
   completed_phases: 1
