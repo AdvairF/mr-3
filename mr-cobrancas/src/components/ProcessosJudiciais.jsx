@@ -251,7 +251,9 @@ export default function ProcessosJudiciais({ devedores = [], credores = [], paga
     // Tab Dívidas - calcular saldo por devedor do polo passivo
     const dividasData = devedoresProcesso.map(row => {
       const fullDev = devedores.find(d => String(d.id) === String(row.devedor_id));
-      const pgtosDev = pagamentos.filter(p => String(p.devedor_id) === String(row.devedor_id));
+      // Phase 7.10a — fonte trocada pra pagamentos_divida (sem devedor_id direto). Filter via lookup divida_id ∈ dividas-do-devedor.
+      const dividaIdsDoDevedor = new Set((fullDev?.dividas || []).map(d => String(d.id)));
+      const pgtosDev = pagamentos.filter(p => dividaIdsDoDevedor.has(String(p.divida_id)));
       const saldo = fullDev ? calcularSaldoDevedorAtualizado(fullDev, pgtosDev, hj) : 0;
       const nDividas = (fullDev?.dividas || []).length;
       return { row, fullDev, saldo, nDividas };

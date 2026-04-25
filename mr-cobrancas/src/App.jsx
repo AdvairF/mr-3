@@ -8475,7 +8475,7 @@ export default function App() {
       case "processos": return <ProcessosJudiciais
         devedores={devedores}
         credores={credores}
-        pagamentos={allPagamentos}
+        pagamentos={allPagamentosDivida}
         hoje={hoje_app}
         onVerDevedor={(id) => { setTab("devedores"); setTimeout(() => { window.dispatchEvent(new CustomEvent("mr_abrir_devedor", { detail: id })); }, 100); }}
       />;
