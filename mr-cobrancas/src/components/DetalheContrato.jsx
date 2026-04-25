@@ -12,6 +12,7 @@ import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, re
          criarCusta, editarCusta, excluirCusta, togglePagoCusta } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 import { calcularDetalheEncargosContrato } from "../utils/devedorCalc.js";
+import { calcularFatorCorrecao } from "../utils/correcao.js";  // Phase 7.9 ISSUE 3 Fix A — per-custa correction client-side pra avulsas (motor agrega total mas não push em detalhePorDivida)
 import DecomposicaoSaldoModal from "./DecomposicaoSaldoModal.jsx";
 import NovaCustaModal from "./NovaCustaModal.jsx";                // Phase 7.9
 // Phase 7.8.2a — D-05 enforcement (callers completude p/ cache SWR de listagem)
@@ -584,6 +585,7 @@ export default function DetalheContrato({
   // com valor atualizado per-custa. ZERO coluna "Vínculo" (custas sempre avulsas — Q1 RECONSIDERED 2026-04-25).
   const custasUnificadas = useMemo(() => {
     const out = [];
+    const hoje_str = typeof hoje === "string" ? hoje : hoje.toISOString().slice(0, 10);
     const detalhePorDividaMap = new Map(
       (detalheEncargosContrato?.detalhePorDivida || [])
         .map((d, idx) => [String(idx), d])
@@ -591,17 +593,26 @@ export default function DetalheContrato({
     (dividas || []).forEach((d, dividaIdx) => {
       const custas = Array.isArray(d.custas) ? d.custas : [];
       if (custas.length === 0) return;
+      const isAvulsa = !!d._so_custas;
       const detDiv = detalhePorDividaMap.get(String(dividaIdx));
       // Heurística de valor atualizado por custa: se `detDiv.custas.atualizado` existe, dividir
       // proporcionalmente ao valor nominal de cada custa. Para custas pagas, exibir valor nominal
-      // (histórico D-24).
+      // (histórico D-24). Para avulsas (_so_custas:true), motor agrega no totalCustasAtualizado mas
+      // NÃO push em detalhePorDivida — calcula client-side per-custa via calcularFatorCorrecao
+      // (mesmo "inpc" hardcoded que motor L485 usa). ISSUE 3 Fix A — Phase 7.9.
       const somaNominalDiv = custas.reduce((s, c) => s + Number(c.valor || 0), 0);
       const atualizadoTotalDiv = Number(detDiv?.custas?.atualizado || somaNominalDiv);
       custas.forEach(c => {
         const nominal = Number(c.valor || 0);
-        const atualizado = c.pago
-          ? nominal
-          : (somaNominalDiv > 0 ? nominal * (atualizadoTotalDiv / somaNominalDiv) : nominal);
+        let atualizado;
+        if (c.pago) {
+          atualizado = nominal;
+        } else if (isAvulsa && c.data && c.data < hoje_str) {
+          const fatorC = calcularFatorCorrecao("inpc", c.data, hoje_str);
+          atualizado = nominal * fatorC;
+        } else {
+          atualizado = somaNominalDiv > 0 ? nominal * (atualizadoTotalDiv / somaNominalDiv) : nominal;
+        }
         out.push({
           id:             c.id,
           divida_id:      d.id,
@@ -615,7 +626,7 @@ export default function DetalheContrato({
       });
     });
     return out;
-  }, [dividas, detalheEncargosContrato]);
+  }, [dividas, detalheEncargosContrato, hoje]);
 
   const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
   const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
@@ -1073,7 +1084,7 @@ export default function DetalheContrato({
                     <th style={th}>Descrição</th>
                     <th style={th}>Valor original</th>
                     <th style={th}>Valor atualizado</th>
-                    <th style={th}>Data despesa</th>
+                    <th style={th}>Data pagamento</th>
                     <th style={th}>Pago</th>
                     <th style={th}>Ações</th>
                   </tr>

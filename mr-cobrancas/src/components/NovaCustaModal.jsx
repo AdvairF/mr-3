@@ -63,7 +63,7 @@ export default function NovaCustaModal({ contrato, custaInicial, onSalvar, onCan
           onChange={v => setForm(f => ({ ...f, valor: v }))}
         />
         <Inp
-          label="Data da despesa"
+          label="Data do pagamento"
           type="date"
           value={form.data}
           onChange={v => setForm(f => ({ ...f, data: v }))}
