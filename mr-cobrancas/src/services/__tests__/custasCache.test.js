@@ -91,11 +91,16 @@ describe("custasCache — shields 7.9 (custas judiciais avulsas)", () => {
     expect(fp3).not.toBe(fp2);
 
     // Gold test — cache.saldo === adapter direto (equivalência):
+    // Contrato: cache.saldo agrega motor.saldoAtualizado + motor.custas.atualizado.
+    // Mudança 7.9 P7: cache.saldo passou a INCLUIR custas pra alinhar 3 callsites
+    // (Resumo Financeiro card, DecomposicaoSaldoModal, listagem Contratos).
+    // Versão anterior assertava === motor.saldoAtualizado raw, mas isso codificava
+    // bug onde listagem mostrava saldo SEM custas.
     const div = baseDiv([mkCusta("c1", 100, "2025-01-01")]);
     const direto = calcularDetalheEncargosContrato(div, [], "2026-04-24");
     recomputeEntry("c1", div, [], "2026-04-24");
     const viaCache = cache.get("c1");
-    expect(viaCache.saldo).toBe(direto.saldoAtualizado);
+    expect(viaCache.saldo).toBe(direto.saldoAtualizado + (direto.custas?.atualizado || 0));
   });
 
   // ─── Shield 19 ────────────────────────────────────────────────────────

@@ -63,7 +63,8 @@ function recomputeEntry(contratoId, dividasDoContrato, allPagamentosDivida, hoje
   // Adapter recebe pagamentos GLOBAL (D-04 — filtra internamente) e hoje string "YYYY-MM-DD" (D-09).
   const detalhe = calcularDetalheEncargosContrato(dividasDoContrato || [], allPagamentosDivida || [], hoje);
   cache.set(contratoId, {
-    saldo: detalhe?.saldoAtualizado ?? 0,
+    // Phase 7.9 P7 — soma custas atualizadas (mesma fórmula de DetalheContrato L582 + DecomposicaoSaldoModal L62).
+    saldo: (detalhe?.saldoAtualizado ?? 0) + (detalhe?.custas?.atualizado ?? 0),
     detalhe,
     fingerprint: fp,
     status: "fresh",

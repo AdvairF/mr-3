@@ -59,7 +59,9 @@ export default function DecomposicaoSaldoModal({
   const custasAtualizado = Number(d?.custas?.atualizado || 0);
   // Phase 7.9 P3+P5 — correção sempre aplicada (independente de pago); decomposição
   // exibe 1 linha única "Custas pagas atualizadas" = motor.custas.atualizado.
-  const saldoAtualizado  = Number(d.saldoAtualizado || 0);
+  // Phase 7.9 P7 — soma custas atualizadas (motor expõe lado-a-lado, não agrega).
+  // Mesma fórmula de DetalheContrato L582 e useSaldoAtualizadoCache L66 (3 callsites alinhados).
+  const saldoAtualizado  = Number(d.saldoAtualizado || 0) + Number(d?.custas?.atualizado || 0);
 
   const indexador = (indexadorLabel && String(indexadorLabel).trim()) || "—";
 
