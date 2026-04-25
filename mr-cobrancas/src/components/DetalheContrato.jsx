@@ -607,12 +607,11 @@ export default function DetalheContrato({
       const atualizadoTotalDiv = Number(detDiv?.custas?.atualizado || somaNominalDiv);
       custas.forEach(c => {
         const nominal = Number(c.valor || 0);
+        // Phase 7.9 P3 — correção sempre aplicada (independente de c.pago).
+        // Advogado paga a custa de antemão e cobra correção desde a data do pagamento.
         let atualizado;
-        if (c.pago) {
-          atualizado = nominal;
-        } else if (isAvulsa && c.data && c.data < hoje_str) {
-          const fatorC = calcularFatorCorrecao("inpc", c.data, hoje_str);
-          atualizado = nominal * fatorC;
+        if (isAvulsa && c.data && c.data < hoje_str) {
+          atualizado = nominal * calcularFatorCorrecao("inpc", c.data, hoje_str);
         } else {
           atualizado = somaNominalDiv > 0 ? nominal * (atualizadoTotalDiv / somaNominalDiv) : nominal;
         }
@@ -1106,11 +1105,6 @@ export default function DetalheContrato({
                       </td>
                       <td style={{ padding: "8px 10px", display: "flex", gap: 4 }}>
                         <Btn sm outline color="#64748b" onClick={() => { setCustaEmEdicao(c); setCustaModalAberta(true); }}>Editar</Btn>
-                        {c.pago && (
-                          <Btn sm outline color="#d97706" onClick={() => handleTogglePagoCusta(c)}>
-                            Despagar
-                          </Btn>
-                        )}
                         <Btn sm outline color="#dc2626" onClick={() => handleExcluirCusta(c)}>Excluir</Btn>
                       </td>
                     </tr>

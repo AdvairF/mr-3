@@ -57,15 +57,8 @@ export default function DecomposicaoSaldoModal({
   const art523Hon        = Number(d?.art523?.honorarios || 0);
   const art523Total      = Number(d?.art523?.total || 0);
   const custasAtualizado = Number(d?.custas?.atualizado || 0);
-  // Phase 7.9 (D-24) — split client-side: pagas = soma nominal histórica de custas com pago:true;
-  // em aberto = atualizadoAgregado − pagasNominal. Usa `dividas` prop; fallback 0 se ausente.
-  const custasPagasNominal = Array.isArray(dividas)
-    ? dividas.reduce((s, div) => {
-        const custas = Array.isArray(div?.custas) ? div.custas : [];
-        return s + custas.reduce((acc, c) => acc + (c?.pago ? Number(c.valor || 0) : 0), 0);
-      }, 0)
-    : 0;
-  const custasEmAbertoAtualizadas = Math.max(0, custasAtualizado - custasPagasNominal);
+  // Phase 7.9 P3+P5 — correção sempre aplicada (independente de pago); decomposição
+  // exibe 1 linha única "Custas pagas atualizadas" = motor.custas.atualizado.
   const saldoAtualizado  = Number(d.saldoAtualizado || 0);
 
   const indexador = (indexadorLabel && String(indexadorLabel).trim()) || "—";
@@ -130,17 +123,14 @@ export default function DecomposicaoSaldoModal({
       if (art523Hon > 0)   rows.push({ label: "Art. 523 §1º — Honorários (10%)", value: art523Hon, signed: false, bold: false });
     }
 
-    // Phase 7.9 (D-24) — 2 linhas separadas (substitui linha única anterior):
-    if (custasPagasNominal > 0) {
-      rows.push({ label: "Custas judiciais pagas", value: custasPagasNominal, signed: false, bold: false });
-    }
-    if (custasEmAbertoAtualizadas > 0) {
-      rows.push({ label: "Custas judiciais em aberto (atualizadas)", value: custasEmAbertoAtualizadas, signed: false, bold: false });
+    // Phase 7.9 P5 — 1 linha única (substitui as 2 linhas pagas/em-aberto da iteração anterior).
+    if (custasAtualizado > 0) {
+      rows.push({ label: "Custas pagas atualizadas", value: custasAtualizado, signed: false, bold: false });
     }
 
     rows.push({ label: "Saldo Devedor Atualizado", value: saldoAtualizado, signed: false, bold: true, sempre: true });
     return rows;
-  }, [valorOriginal, totalPago, correcaoValor, indexador, multaValor, jurosValor, honorariosValor, art523Total, art523Multa, art523Hon, custasPagasNominal, custasEmAbertoAtualizadas, saldoAtualizado]);
+  }, [valorOriginal, totalPago, correcaoValor, indexador, multaValor, jurosValor, honorariosValor, art523Total, art523Multa, art523Hon, custasAtualizado, saldoAtualizado]);
 
   // Texto formatado para clipboard (D-12).
   const textoFormatado = useMemo(() => {
