@@ -579,7 +579,10 @@ export default function DetalheContrato({
     () => calcularDetalheEncargosContrato(dividas || [], allPagamentosDivida || [], hoje),
     [dividas, allPagamentosDivida, hoje]
   );
-  const saldoAtualizadoContrato = detalheEncargosContrato?.saldoAtualizado ?? 0;
+  // Phase 7.9 P1 — Resumo Financeiro inclui custas atualizadas (motor expõe `custas.atualizado`
+  // lado-a-lado de `saldoAtualizado` mas não agrega — UI soma client-side, D-01 strict).
+  const saldoAtualizadoContrato = (detalheEncargosContrato?.saldoAtualizado ?? 0)
+                                + (detalheEncargosContrato?.custas?.atualizado ?? 0);
 
   // Phase 7.9 — lista de custas (avulsas — todas em dívidas-fantasma _so_custas:true)
   // com valor atualizado per-custa. ZERO coluna "Vínculo" (custas sempre avulsas — Q1 RECONSIDERED 2026-04-25).
@@ -1103,9 +1106,11 @@ export default function DetalheContrato({
                       </td>
                       <td style={{ padding: "8px 10px", display: "flex", gap: 4 }}>
                         <Btn sm outline color="#64748b" onClick={() => { setCustaEmEdicao(c); setCustaModalAberta(true); }}>Editar</Btn>
-                        <Btn sm outline color={c.pago ? "#d97706" : "#059669"} onClick={() => handleTogglePagoCusta(c)}>
-                          {c.pago ? "Despagar" : "Pagar"}
-                        </Btn>
+                        {c.pago && (
+                          <Btn sm outline color="#d97706" onClick={() => handleTogglePagoCusta(c)}>
+                            Despagar
+                          </Btn>
+                        )}
                         <Btn sm outline color="#dc2626" onClick={() => handleExcluirCusta(c)}>Excluir</Btn>
                       </td>
                     </tr>

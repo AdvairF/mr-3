@@ -31,13 +31,17 @@ export default function NovaCustaModal({ contrato, custaInicial, onSalvar, onCan
 
     setSalvando(true);
     try {
+      // Phase 7.9 P2 — custas SEMPRE nascem pagas. data_pagamento = form.data
+      // (advogado paga a custa de antemão; a data informada é também a data-base da correção).
+      // Edit: preserva flag se usuário despagou (edge case de correção de erro).
+      const isEdit = !!custaInicial?.id;
       const payload = {
         id: custaInicial?.id ?? undefined,     // undefined em CRIAR; service preenche via gerarCustaId()
         descricao,
         valor: valorNum,
         data,                                   // shape D-22 — motor lê c.data legacy
-        pago: custaInicial?.pago ?? false,      // preserva em edit; default false em criar
-        data_pagamento: custaInicial?.data_pagamento ?? null,
+        pago: isEdit ? !!custaInicial?.pago : true,
+        data_pagamento: isEdit ? (custaInicial?.data_pagamento ?? null) : data,
       };
       await onSalvar(payload);
       // parent fecha modal via onCancelar ou re-render
