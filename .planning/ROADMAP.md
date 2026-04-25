@@ -335,9 +335,28 @@ Plans:
 **Depends on**: Phase 7.8 (motor Art.354 + schema `_so_custas`/`custas: JSONB` já suportam); Phase 7.8.2a (hook `useSaldoAtualizadoCache` + fingerprint D-06 amendado em commit `2ba8a9f` — custas summary C + `_so_custas` flag sequence S)
 **Requirements**: (UX — advogado precisa lançar custas judiciais nos contratos com correção monetária automática pelo mesmo indexador; UI de CRUD removida em refactor do App.jsx e precisa ser reconstruída)
 **Decisions**: ver `.planning/phases/07.9-custas-judiciais-crud/07.9-CONTEXT.md` (discuss locked 2026-04-24, D-01..D-16 herdadas + D-22..D-25 novas + SC1..SC10 + Shield 20 cross-contract isolation)
-**Plans**: TBD (2 plans propostos: 07.9-01 impl completa 5 modificados + 1 novo + 1 test + 07.9-02 UAT SC1-SC10 + bump com 3 pausas humanas)
+**Plans**: 2 (07.9-01 impl completa com 9 tasks — fingerprint amend + motor rename D-01 relaxed one-time + NovaCustaModal + services + wiring + Decomposição split + 5 shields + gates + SUMMARY; 07.9-02 UAT SC1-SC10 + bump com 3 pausas humanas)
 **UI hint**: yes (botão "Nova Custa" em DetalheContrato + NovaCustaModal form + lista de custas na seção do contrato + 2 linhas separadas no DecomposicaoSaldoModal — pagas e em aberto atualizadas)
 **Status**: Planned 2026-04-24 — awaiting /gsd-plan-phase 7.9
+
+### Phase 7.10a: ProcessosJudiciais migra fonte de pagamentos para pagamentos_divida (INSERTED)
+**Goal**: Migrar 1º consumidor (mais simples) do state `allPagamentos` legacy para `allPagamentosDivida`. Estratégia atômica: 7.10a = ProcessosJudiciais (folha, 1 cálculo isolado, sem testes acoplados, sem sub-componentes consumindo); 7.10b/c/d = Devedores, ModuloDividas (+sub-componentes), Dashboard em phases futuras. Escopo: App.jsx L8478 troca prop (1 linha) + ProcessosJudiciais.jsx L254 filter adapter via lookup divida_id ∈ dividas-do-devedor (~3 linhas, pattern novo porque `pagamentos_divida` não tem `devedor_id` direto — só FK `divida_id`). Shield 22 (grep callsite positivo + negativo) blinda regressão silenciosa. Shield 23 (equivalência filter, lição H3 da 7.8.2a) testa pattern novo === pattern legacy sintético — defesa contra shape mismatch. **Drift histórico aceito**: writes em `pagamentos_parciais` via UI legacy (App.jsx L2537+) não cortados nesta phase. **D-01 motor 100% intocado**.
+**Depends on**: Phase 7.3 (`allPagamentosDivida` state em App.jsx); Phase 7.9 (lições 7.9 SC1 chain aplicadas: helper-first, single-source-of-truth, shape mismatch defense via equivalência)
+**Requirements**: (tech debt — pagamentos_parciais é v1.0 legacy, em prod há meses; consumidores precisam migrar pra fonte correta sem big-bang)
+**Decisions**: ver `.planning/phases/07.10a-processos-judiciais-pagamentos-divida/07.10a-CONTEXT.md` (discuss locked 2026-04-25, D-01..D-25 herdadas + D-26..D-29 novas + SC1..SC4 + Shield 22 grep + Shield 23 equivalência)
+**Plans**: 2 (07.10a-01 impl com Shield 22+23 + gates; 07.10a-02 UAT SC1-SC4 + bump com 2 pausas humanas)
+**UI hint**: no (callsite App.jsx + filter adapter ProcessosJudiciais.jsx — UI render inalterado)
+**Status**: Planned 2026-04-25 — awaiting /gsd-plan-phase 7.10a
+
+### Phase 7.10.bug: Fix typo `[object Object]` em dbInsert "processos_judiciais" (BACKLOG)
+**Goal**: Investigar e corrigir bug pré-existente que impede cadastro de processo judicial em prod. Erro observado durante UAT 7.10a (2026-04-25) ao tentar "+ Novo Processo" na tela Processos Judiciais: `Erro ao salvar: Could not find the table 'public.processos_judiciais[object Object]' in the schema cache`. Typo JS clássico — concat objeto com string em algum `dbInsert("processos_judiciais" + algumObjeto, ...)` ou similar. Bug é INDEPENDENTE da migração 7.10a (que só toca leitura de pagamentos). Tela ProcessosJudiciais Total=0 em prod confirma: feature de criação nunca funcionou. Lição registrada em `memory/feedback_proc_judiciais_create_bug_preexisting.md`.
+**Depends on**: nenhum (standalone bugfix); pode ser executada em qualquer momento
+**Blocks**: UAT cross-check empírico real de feature ProcessosJudiciais nas phases futuras 7.10b/c/d (cross-check de saldo entre prod e local pós-migração — se essas migrarem componentes que ProcessosJudiciais depende, e UAT exigir dados reais de processo, esta phase 7.10.bug vira pré-condição)
+**Requirements**: (UX bug — cadastro de processo é feature visível na UI mas nunca funcionou em prod; descobrir + corrigir + smoke)
+**Decisions**: TBD em CONTEXT.md futura — escopo provável: grep em src/ por `dbInsert.*processos_judiciais` para localizar typo, fix, UAT cadastrar processo em prod
+**Plans**: 1 plan provável (impl + UAT + bump) — escopo cirúrgico
+**UI hint**: indireto (sem render new, fix em service layer destrava render existente)
+**Status**: Backlog 2026-04-25 — descoberto durante UAT 7.10a (PAUSA #1 cross-check). Sem prioridade fixa — depende de quando UAT empírico real de processos virar bloqueio.
 
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
