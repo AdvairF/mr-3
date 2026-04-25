@@ -2,7 +2,7 @@
 //
 // Phase 7.8.2a — Saldo Atualizado na Listagem de Contratos (cache SWR)
 // CONTEXT: D-01 motor intocado / D-02 isolamento (sem dependência reversa de UI)
-//          D-04 adapter filtra allPagamentosDivida internamente / D-06 fingerprint deep 12 campos
+//          D-04 adapter filtra allPagamentosDivida internamente / D-06 fingerprint deep 14 campos (12 originais + custas summary + _so_custas flag — Phase 7.9 amend)
 //          D-08 5 gatilhos / D-09 data Goiânia / D-13 invalidação híbrida.
 //
 // Cache shape (singleton):
@@ -23,7 +23,7 @@ const cache = new Map();
 const listeners = new Set();
 function notify() { listeners.forEach(l => { try { l(); } catch (e) { console.error("[useSaldoAtualizadoCache] listener threw:", e); } }); }
 
-// ─── D-06 Fingerprint VERBATIM (12 campos — não alterar) ────────────────────
+// ─── D-06 Fingerprint VERBATIM (14 campos — 12 originais + C custas summary + S _so_custas flag sequence — Phase 7.9 amend 2026-04-24) ──
 function contratoFingerprint(dividasDoContrato, pagamentosFiltered, dataHoje) {
   const D = dividasDoContrato.map(d => [
     d.id, d.valor_total, d.data_vencimento, d.data_origem,
@@ -35,7 +35,19 @@ function contratoFingerprint(dividasDoContrato, pagamentosFiltered, dataHoje) {
   const P = pagamentosFiltered.map(p =>
     [p.id, p.divida_id, p.valor, p.data_pagamento].join(":")
   ).sort().join("|");
-  return `${dataHoje}|D:${D}|P:${P}`;
+  // Phase 7.9 amend — custas summary (belt) + _so_custas flag sequence (suspenders).
+  // Ambos defendem D-05 handlers (criarCusta/editarCusta/excluirCusta/togglePagoCusta) contra silent-stale.
+  const C = JSON.stringify(
+    dividasDoContrato
+      .map(d => [d.id, (d.custas || []).length, (d.custas || []).reduce((s, c) => s + Number(c.valor || 0), 0)])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+  );
+  const S = dividasDoContrato
+    .map(d => [d.id, d._so_custas ? 1 : 0])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    .map(x => x.join(":"))
+    .join("|");
+  return `${dataHoje}|D:${D}|P:${P}|C:${C}|S:${S}`;
 }
 
 // ─── D-09 Data Goiânia (sv-SE => "YYYY-MM-DD" no fuso America/Sao_Paulo) ───

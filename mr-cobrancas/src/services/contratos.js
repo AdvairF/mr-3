@@ -68,6 +68,22 @@ const TABLE = "contratos_dividas";
 const HIST_TABLE = "contratos_historico";
 const PAG_TABLE = "pagamentos_contrato";
 
+// ─── Phase 7.9 — Custas Judiciais helpers ───────────────────────────────
+// D-22 data pattern (YYYY-MM-DD, fuso Goiânia — reusa D-09 da 7.8.2a).
+function hojeGoianiaDate() {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+// Q5 — UUID client-side com fallback pra ambientes sem crypto.randomUUID.
+function gerarCustaId() {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
 export function listarContratos() {
   return dbGet(TABLE, "order=created_at.desc");
 }
@@ -545,4 +561,105 @@ export async function atualizarParcelasCustom(documentoId, parcelasEditadas) {
   }
 
   return { ok: true, updated };
+}
+
+// ─── Phase 7.9 — CRUD de Custas Judiciais (avulsas only) ───────────────
+// D-01 invariante: motor Art.354 (devedorCalc.js + pagamentos.js + dividas.js) NÃO é tocado.
+// D-22 integral only: toggle `pago` (sem tabela pagamentos_custa).
+// D-23 simplificada: SEMPRE cria custa avulsa (dívida-fantasma _so_custas:true).
+//                    ZERO dropdown de vínculo, ZERO escolha de documento — Q1 RECONSIDERED 2026-04-25.
+
+/**
+ * Cria uma custa judicial avulsa.
+ * SEMPRE cria nova dívida-fantasma (`_so_custas:true`) com `custas:[novaCusta]`.
+ * @param {string|number} contratoId — ID do contrato pai
+ * @param {object} payload — { descricao, valor, data, pago?, data_pagamento? } (NO divida_id — sempre avulsa)
+ * @returns {Promise<{ dividaId: string, custaId: string }>}
+ */
+export async function criarCusta(contratoId, payload) {
+  const dataCusta = payload?.data || "";
+  const custaItem = {
+    id:             payload?.id || gerarCustaId(),
+    descricao:      String(payload?.descricao || "").trim(),
+    valor:          Number(payload?.valor || 0),
+    data:           dataCusta,                            // shape D-22 — motor lê c.data legacy (D-01 strict)
+    pago:           !!payload?.pago,
+    data_pagamento: payload?.pago ? (payload?.data_pagamento || hojeGoianiaDate()) : null,
+  };
+
+  // SEMPRE cria nova dívida-fantasma (`_so_custas:true`).
+  const novaDivida = await dbInsert("dividas", {
+    contrato_id:   contratoId,
+    _so_custas:    true,
+    custas:        [custaItem],
+    valor_total:   0,
+    data_origem:   dataCusta || hojeGoianiaDate(),
+    data_vencimento: dataCusta || hojeGoianiaDate(),
+  });
+  const dividaRow = Array.isArray(novaDivida) ? novaDivida[0] : novaDivida;
+  return { dividaId: String(dividaRow?.id || ""), custaId: custaItem.id };
+}
+
+/**
+ * Edita uma custa existente (aplica patch sobre o item matched por custaId).
+ * @param {string|number} contratoId — não usado em path (contexto / futura auditoria)
+ * @param {string} dividaId — UUID da dívida-fantasma que contém a custa (caller passa c.divida_id da lista do contrato)
+ * @param {string} custaId — id da custa dentro do array JSONB
+ * @param {object} patch — campos a atualizar (ex: { descricao, valor, data })
+ * @returns {Promise<void>}
+ * @throws {Error} se custa não encontrada
+ */
+export async function editarCusta(contratoId, dividaId, custaId, patch) {
+  // Lê divida via dbGet (sem cross-contract validation — Q1 RECONSIDERED 2026-04-25).
+  // dbGet(table, queryString) — query no formato PostgREST (não objeto).
+  const dividaRows = await dbGet("dividas", `id=eq.${encodeURIComponent(dividaId)}&limit=1`);
+  const divida = Array.isArray(dividaRows) ? dividaRows[0] : null;
+  if (!divida) throw new Error("divida não encontrada");
+  const custasAtuais = Array.isArray(divida.custas) ? divida.custas : [];
+  const idx = custasAtuais.findIndex(c => String(c.id) === String(custaId));
+  if (idx < 0) throw new Error("custa não encontrada");
+
+  const original = custasAtuais[idx];
+  const merged = { ...original, ...patch };
+  const novasCustas = [...custasAtuais];
+  novasCustas[idx] = merged;
+  await atualizarDivida(dividaId, { custas: novasCustas });
+}
+
+/**
+ * Exclui uma custa do array JSONB. Se ficar vazio E divida._so_custas === true,
+ * mantém a dívida vazia (Q2 conservative — evita cascade de effects não auditados).
+ */
+export async function excluirCusta(contratoId, dividaId, custaId) {
+  const dividaRows = await dbGet("dividas", `id=eq.${encodeURIComponent(dividaId)}&limit=1`);
+  const divida = Array.isArray(dividaRows) ? dividaRows[0] : null;
+  if (!divida) throw new Error("divida não encontrada");
+  const custasAtuais = Array.isArray(divida.custas) ? divida.custas : [];
+  const novasCustas = custasAtuais.filter(c => String(c.id) !== String(custaId));
+  await atualizarDivida(dividaId, { custas: novasCustas });
+  // Q2 — dívida avulsa vazia é preservada conservativamente (comment locked).
+}
+
+/**
+ * Flip `pago` boolean da custa. Se `pago: true` → seta data_pagamento para hoje (Goiânia DATE);
+ * se `pago: false` → seta data_pagamento: null.
+ */
+export async function togglePagoCusta(contratoId, dividaId, custaId) {
+  const dividaRows = await dbGet("dividas", `id=eq.${encodeURIComponent(dividaId)}&limit=1`);
+  const divida = Array.isArray(dividaRows) ? dividaRows[0] : null;
+  if (!divida) throw new Error("divida não encontrada");
+  const custasAtuais = Array.isArray(divida.custas) ? divida.custas : [];
+  const idx = custasAtuais.findIndex(c => String(c.id) === String(custaId));
+  if (idx < 0) throw new Error("custa não encontrada");
+
+  const original = custasAtuais[idx];
+  const novoPago = !original.pago;
+  const merged = {
+    ...original,
+    pago: novoPago,
+    data_pagamento: novoPago ? hojeGoianiaDate() : null,
+  };
+  const novasCustas = [...custasAtuais];
+  novasCustas[idx] = merged;
+  await atualizarDivida(dividaId, { custas: novasCustas });
 }

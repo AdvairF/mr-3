@@ -8,10 +8,12 @@ import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
 import { Inp } from "./ui/Inp.jsx";
 import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
          registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato,
-         calcularTotaisContratoNominal, atualizarParcelasCustom, excluirDocumento } from "../services/contratos.js";
+         calcularTotaisContratoNominal, atualizarParcelasCustom, excluirDocumento,
+         criarCusta, editarCusta, excluirCusta, togglePagoCusta } from "../services/contratos.js";
 import { listarPagamentos, calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";
 import { calcularDetalheEncargosContrato } from "../utils/devedorCalc.js";
 import DecomposicaoSaldoModal from "./DecomposicaoSaldoModal.jsx";
+import NovaCustaModal from "./NovaCustaModal.jsx";                // Phase 7.9
 // Phase 7.8.2a — D-05 enforcement (callers completude p/ cache SWR de listagem)
 import { invalidateContrato, removeContrato } from "../hooks/useSaldoAtualizadoCache.js";
 
@@ -150,6 +152,10 @@ export default function DetalheContrato({
   const [saldoCalculado,        setSaldoCalculado]        = useState(0);
   // Phase 7.8 — estado de abertura do modal de composição do saldo atualizado (plan 07.8-03).
   const [showDecomposicaoModal, setShowDecomposicaoModal] = useState(false);
+
+  // Phase 7.9 — Custas Judiciais CRUD
+  const [custaModalAberta, setCustaModalAberta] = useState(false);
+  const [custaEmEdicao, setCustaEmEdicao] = useState(null);  // { id, descricao, valor, data, pago, divida_id (interno — id da dívida-fantasma) } ou null
 
   useEffect(() => {
     setLoadingDocumentos(true);
@@ -475,6 +481,70 @@ export default function DetalheContrato({
     }
   }
 
+  // Phase 7.9 — D-05 handlers (invalidateContrato ANTES de toast.success).
+  // contratoId explícito passado ao service. dividaId (id da dívida-fantasma) vem de c.divida_id
+  // do custasUnificadas, computado da lista de dívidas carregada para ESTE contrato.
+
+  async function handleCriarCusta(payload) {
+    try {
+      await criarCusta(contrato.id, payload);
+      invalidateContrato(contrato.id);            // D-05 — antes do toast
+      toast.success("Custa criada.");
+      setCustaModalAberta(false);
+      setCustaEmEdicao(null);
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(e?.message || "Erro ao criar custa.");
+      throw e; // re-throw pra NovaCustaModal saber que falhou
+    }
+  }
+
+  async function handleEditarCusta(custaOriginal, patch) {
+    try {
+      await editarCusta(contrato.id, custaOriginal.divida_id, custaOriginal.id, patch);
+      invalidateContrato(contrato.id);            // D-05 — antes do toast
+      toast.success("Custa atualizada.");
+      setCustaModalAberta(false);
+      setCustaEmEdicao(null);
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(e?.message || "Erro ao atualizar custa.");
+      throw e;
+    }
+  }
+
+  async function handleExcluirCusta(custa) {
+    if (!window.confirm("Excluir esta custa? Esta ação não pode ser desfeita.")) return;
+    try {
+      await excluirCusta(contrato.id, custa.divida_id, custa.id);
+      invalidateContrato(contrato.id);            // D-05 — antes do toast
+      toast.success("Custa excluída.");
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(e?.message || "Erro ao excluir custa.");
+    }
+  }
+
+  async function handleTogglePagoCusta(custa) {
+    try {
+      await togglePagoCusta(contrato.id, custa.divida_id, custa.id);
+      invalidateContrato(contrato.id);            // D-05 — antes do toast
+      toast.success(custa.pago ? "Custa marcada como em aberto." : "Custa marcada como paga.");
+      await onCarregarTudo();
+    } catch (e) {
+      toast.error(e?.message || "Erro ao alterar status da custa.");
+    }
+  }
+
+  // Proxy handler pra NovaCustaModal — delega pra criar ou editar.
+  async function handleSalvarCustaFromModal(payload) {
+    if (custaEmEdicao?.id) {
+      await handleEditarCusta(custaEmEdicao, payload);
+    } else {
+      await handleCriarCusta(payload);
+    }
+  }
+
   // Phase 7.5 D-06: Map<docId, Set<String(dividaId)>> de parcelas readonly
   // (com saldo_quitado OR com ≥1 pagamento em pagamentos_divida).
   // Pré-computado uma vez por render, lookup O(1) no componente filho.
@@ -509,6 +579,43 @@ export default function DetalheContrato({
     [dividas, allPagamentosDivida, hoje]
   );
   const saldoAtualizadoContrato = detalheEncargosContrato?.saldoAtualizado ?? 0;
+
+  // Phase 7.9 — lista de custas (avulsas — todas em dívidas-fantasma _so_custas:true)
+  // com valor atualizado per-custa. ZERO coluna "Vínculo" (custas sempre avulsas — Q1 RECONSIDERED 2026-04-25).
+  const custasUnificadas = useMemo(() => {
+    const out = [];
+    const detalhePorDividaMap = new Map(
+      (detalheEncargosContrato?.detalhePorDivida || [])
+        .map((d, idx) => [String(idx), d])
+    );
+    (dividas || []).forEach((d, dividaIdx) => {
+      const custas = Array.isArray(d.custas) ? d.custas : [];
+      if (custas.length === 0) return;
+      const detDiv = detalhePorDividaMap.get(String(dividaIdx));
+      // Heurística de valor atualizado por custa: se `detDiv.custas.atualizado` existe, dividir
+      // proporcionalmente ao valor nominal de cada custa. Para custas pagas, exibir valor nominal
+      // (histórico D-24).
+      const somaNominalDiv = custas.reduce((s, c) => s + Number(c.valor || 0), 0);
+      const atualizadoTotalDiv = Number(detDiv?.custas?.atualizado || somaNominalDiv);
+      custas.forEach(c => {
+        const nominal = Number(c.valor || 0);
+        const atualizado = c.pago
+          ? nominal
+          : (somaNominalDiv > 0 ? nominal * (atualizadoTotalDiv / somaNominalDiv) : nominal);
+        out.push({
+          id:             c.id,
+          divida_id:      d.id,
+          descricao:      c.descricao || "",
+          valor_nominal:  nominal,
+          valor_atualizado: atualizado,
+          data:           c.data || "",                     // shape D-22 — motor lê c.data legacy
+          pago:           !!c.pago,
+          data_pagamento: c.data_pagamento || null,
+        });
+      });
+    });
+    return out;
+  }, [dividas, detalheEncargosContrato]);
 
   const credoresOptions = [{ v: "", l: "— sem credor" }, ...(credores || []).map(c => ({ v: String(c.id), l: c.nome }))];
   const devedoresOptions = [{ v: "", l: "— sem devedor" }, ...(devedores || []).map(d => ({ v: String(d.id), l: d.nome }))];
@@ -944,6 +1051,71 @@ export default function DetalheContrato({
         );
       })}
 
+      {/* 4.5 — Phase 7.9 — Seção Custas Judiciais (aparece SEMPRE, mesmo vazia, se contrato tem documentos) */}
+      {(contrato.num_documentos || 0) > 0 && (
+        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 20px", border: "1px solid #e2e8f0", marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 13, color: "#0f172a", margin: 0 }}>
+              Custas Judiciais ({custasUnificadas.length})
+            </p>
+            <Btn color="#7c3aed" sm onClick={() => { setCustaEmEdicao(null); setCustaModalAberta(true); }}>
+              + Nova Custa
+            </Btn>
+          </div>
+
+          {custasUnificadas.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>Nenhuma custa lançada.</p>
+          ) : (
+            <div style={{ overflow: "auto" }}>
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Descrição</th>
+                    <th style={th}>Valor original</th>
+                    <th style={th}>Valor atualizado</th>
+                    <th style={th}>Data despesa</th>
+                    <th style={th}>Pago</th>
+                    <th style={th}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {custasUnificadas.map(c => (
+                    <tr key={c.id} style={{ borderTop: "1px solid #f1f5f9" }}>
+                      <td style={{ padding: "8px 10px" }}>{c.descricao || "—"}</td>
+                      <td style={{ padding: "8px 10px" }}>{fmtBRL(c.valor_nominal)}</td>
+                      <td style={{ padding: "8px 10px" }}>{fmtBRL(c.valor_atualizado)}</td>
+                      <td style={{ padding: "8px 10px" }}>{fmtData(c.data)}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        {c.pago
+                          ? <span style={{ background: "#dcfce7", color: "#065f46", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>Pago {c.data_pagamento ? `em ${fmtData(c.data_pagamento)}` : ""}</span>
+                          : <span style={{ background: "#fef3c7", color: "#92400e", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>Em aberto</span>}
+                      </td>
+                      <td style={{ padding: "8px 10px", display: "flex", gap: 4 }}>
+                        <Btn sm outline color="#64748b" onClick={() => { setCustaEmEdicao(c); setCustaModalAberta(true); }}>Editar</Btn>
+                        <Btn sm outline color={c.pago ? "#d97706" : "#059669"} onClick={() => handleTogglePagoCusta(c)}>
+                          {c.pago ? "Despagar" : "Pagar"}
+                        </Btn>
+                        <Btn sm outline color="#dc2626" onClick={() => handleExcluirCusta(c)}>Excluir</Btn>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Phase 7.9 — NovaCustaModal (criar ou editar — mesmo componente, dispatched por custaEmEdicao) */}
+      {custaModalAberta && (
+        <NovaCustaModal
+          contrato={contrato}
+          custaInicial={custaEmEdicao}
+          onSalvar={handleSalvarCustaFromModal}
+          onCancelar={() => { setCustaModalAberta(false); setCustaEmEdicao(null); }}
+        />
+      )}
+
       {/* 5. Adicionar Documento */}
       {!adicionandoDocumento && (
         <div style={{ marginTop: 8 }}>
@@ -1121,6 +1293,7 @@ export default function DetalheContrato({
           devedor={devedor}
           indexadorLabel={contrato?.indice_correcao ? String(contrato.indice_correcao).toUpperCase() : "—"}
           dataCalculo={hoje}
+          dividas={dividas}                               /* Phase 7.9 (D-24) */
           onClose={() => setShowDecomposicaoModal(false)}
         />
       )}
