@@ -578,8 +578,8 @@ export async function atualizarParcelasCustom(documentoId, parcelasEditadas) {
  */
 export async function criarCusta(contratoId, payload) {
   // FK propagation: dividas.devedor_id é NOT NULL (schema 002_dividas_tabela.sql:18).
-  // Pattern: adicionarDocumento L269 + gerarPayloadParcelasDocumento L210 fazem o mesmo lookup.
-  const contratoRows = await dbGet("contratos", `id=eq.${encodeURIComponent(contratoId)}&limit=1`);
+  // Reusa helper buscarContrato (L91-93) — TABLE = "contratos_dividas".
+  const contratoRows = await buscarContrato(contratoId);
   const contrato = Array.isArray(contratoRows) ? contratoRows[0] : null;
   if (!contrato) throw new Error("contrato não encontrado");
 
