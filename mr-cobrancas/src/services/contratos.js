@@ -577,6 +577,12 @@ export async function atualizarParcelasCustom(documentoId, parcelasEditadas) {
  * @returns {Promise<{ dividaId: string, custaId: string }>}
  */
 export async function criarCusta(contratoId, payload) {
+  // FK propagation: dividas.devedor_id é NOT NULL (schema 002_dividas_tabela.sql:18).
+  // Pattern: adicionarDocumento L269 + gerarPayloadParcelasDocumento L210 fazem o mesmo lookup.
+  const contratoRows = await dbGet("contratos", `id=eq.${encodeURIComponent(contratoId)}&limit=1`);
+  const contrato = Array.isArray(contratoRows) ? contratoRows[0] : null;
+  if (!contrato) throw new Error("contrato não encontrado");
+
   const dataCusta = payload?.data || "";
   const custaItem = {
     id:             payload?.id || gerarCustaId(),
@@ -589,11 +595,13 @@ export async function criarCusta(contratoId, payload) {
 
   // SEMPRE cria nova dívida-fantasma (`_so_custas:true`).
   const novaDivida = await dbInsert("dividas", {
-    contrato_id:   contratoId,
-    _so_custas:    true,
-    custas:        [custaItem],
-    valor_total:   0,
-    data_origem:   dataCusta || hojeGoianiaDate(),
+    contrato_id:     contratoId,
+    devedor_id:      contrato.devedor_id,                 // FK NOT NULL — herda do contrato
+    credor_id:       contrato.credor_id || null,          // parity com adicionarDocumento pattern
+    _so_custas:      true,
+    custas:          [custaItem],
+    valor_total:     0,
+    data_origem:     dataCusta || hojeGoianiaDate(),
     data_vencimento: dataCusta || hojeGoianiaDate(),
   });
   const dividaRow = Array.isArray(novaDivida) ? novaDivida[0] : novaDivida;
