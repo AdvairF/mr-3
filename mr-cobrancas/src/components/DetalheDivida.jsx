@@ -197,6 +197,7 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
           devedores={devedores}
           devedorAtualId={null}
           onRemovePrincipal={handleRemovePrincipalWarning}
+          readOnly={true}
         />
       </div>
 

@@ -17,7 +17,7 @@ const RESP_LABELS = {
   DIVISIVEL:   "Divisível",
 };
 
-export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtualId, onRemovePrincipal }) {
+export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtualId, onRemovePrincipal, readOnly = false }) {
   const { participantes, loading, error, adicionar, trocarPapel, remover } = useDevedoresDividas(dividaId);
   const participantesEnriquecidos = participantes.map(p => ({
     ...p,
@@ -33,12 +33,14 @@ export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtu
         <p style={{ fontSize: 10, fontWeight: 800, color: "#7c3aed", textTransform: "uppercase", letterSpacing: ".05em", margin: 0 }}>
           Devedores desta dívida
         </p>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{ background: "#ede9fe", color: "#4f46e5", border: "none", borderRadius: 7, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}
-        >
-          + Adicionar
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => setShowModal(true)}
+            style={{ background: "#ede9fe", color: "#4f46e5", border: "none", borderRadius: 7, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}
+          >
+            + Adicionar
+          </button>
+        )}
       </div>
 
       {loading && (
@@ -86,7 +88,7 @@ export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtu
             <span style={{ fontSize: 10, color: "#94a3b8" }}>
               {RESP_LABELS[p.responsabilidade] || p.responsabilidade}
             </span>
-            {!isAtual && (
+            {!readOnly && !isAtual && (
               <button
                 onClick={async () => {
                   const isPrincipal = p.papel === "PRINCIPAL";
@@ -116,7 +118,7 @@ export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtu
                 ✕
               </button>
             )}
-            {p.papel !== "PRINCIPAL" && (
+            {!readOnly && p.papel !== "PRINCIPAL" && (
               <button
                 title="Promover a Principal"
                 onClick={async () => {
@@ -136,7 +138,7 @@ export default function DevedoresDaDivida({ dividaId, devedores = [], devedorAtu
         );
       })}
 
-      {showModal && (
+      {!readOnly && showModal && (
         <AdicionarParticipanteModal
           dividaId={dividaId}
           devedores={devedores}

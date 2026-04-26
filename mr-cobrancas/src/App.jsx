@@ -3897,6 +3897,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                           dividaId={String(div.id)}
                           devedores={devedores}
                           devedorAtualId={sel.id}
+                          readOnly={true}
                         />
                       </>
                     )}
