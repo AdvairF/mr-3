@@ -65,6 +65,9 @@ import ModuloContratos from "./components/ModuloContratos.jsx";
 // Cálculo de saldo devedor (compartilhado com FilaDevedor)
 import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos, calcularPlanilhaCompleta } from "./utils/devedorCalc.js";
 
+// Phase 7.10bcd — helper compartilhado D-31 (agrupa pagamentos_divida por devedor via lookup divida_id)
+import { agruparPagamentosPorDevedor } from "./utils/agruparPagamentosPorDevedor.js";
+
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -2981,15 +2984,11 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     listarVinculadosIds().then(ids => setVinculadosSet(ids)).catch(() => {});
   }, []);
 
-  const pgtosPorDevedor = useMemo(() => {
-    const m = new Map();
-    allPagamentos.forEach(p => {
-      const k = String(p.devedor_id);
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(p);
-    });
-    return m;
-  }, [allPagamentos]);
+  // Phase 7.10bcd — fonte trocada pra pagamentos_divida (sem devedor_id direto). Helper agrupa via lookup divida_id ∈ dividas-do-devedor.
+  const pgtosPorDevedor = useMemo(
+    () => agruparPagamentosPorDevedor(devedores, allPagamentos),
+    [devedores, allPagamentos]
+  );
 
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -8465,7 +8464,7 @@ export default function App() {
   function renderPage(t) {
     switch (t) {
       case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} allPagamentos={allPagamentos} />;
-      case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} allPagamentos={allPagamentos} />;
+      case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} allPagamentos={allPagamentosDivida} />;
       case "credores": return <Credores credores={credores} setCredores={setCredores} />;
       case "calculadora": return <Calculadora devedores={devedores} credores={credores} />;
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;
