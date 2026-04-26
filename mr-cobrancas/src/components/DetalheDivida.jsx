@@ -71,7 +71,9 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
   }
 
   const devedor = devedores.find(d => String(d.id) === String(divida.devedor_id));
-  const pagamentosDoDevedor = allPagamentos.filter(p => String(p.devedor_id) === String(divida.devedor_id));
+  // Phase 7.10bcd — fonte trocada pra pagamentos_divida (sem devedor_id direto). Filter via Set lookup divida_id ∈ dividas-do-devedor (D-27 pattern reutilizável).
+  const dividaIdsDoDevedor = new Set((devedor?.dividas || []).map(d => String(d.id)));
+  const pagamentosDoDevedor = allPagamentos.filter(p => dividaIdsDoDevedor.has(String(p.divida_id)));
   const credor = credores?.find(c => String(c.id) === String(divida.credor_id));
 
   const saldosMap = devedor ? calcularSaldosPorDivida(devedor, pagamentosDoDevedor, hoje) : null;

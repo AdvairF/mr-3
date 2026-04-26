@@ -8484,7 +8484,7 @@ export default function App() {
           allDividas={allDividas}
           devedores={devedores}
           credores={credores}
-          allPagamentos={allPagamentos}
+          allPagamentos={allPagamentosDivida}
           hoje={hoje_app}
           onCarregarTudo={carregarTudo}
           setTab={setTab}
