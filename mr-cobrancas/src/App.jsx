@@ -70,6 +70,10 @@ import { agruparPagamentosPorDevedor } from "./utils/agruparPagamentosPorDevedor
 // Phase 7.13f — helper paralelo D-pre-6 (fan-out 1:N via junction; só Pessoas usa).
 // Dashboard L568 + parent App L8438 PRESERVADOS no helper original (anti-dupla-contagem).
 import { agruparPagamentosPorDevedorIncluindoSolidarios } from "./utils/agruparPagamentosPorDevedorIncluindoSolidarios.js";
+// Phase 7.13f.bug — helper paralelo de DÍVIDAS via junction (fix bug U6b: FIADOR mostrava
+// saldo R$ 0 porque motor calcularSaldoDevedorAtualizado itera d.dividas singular legacy).
+// Pessoas-only; D-01 strict (motor intocado, fix injeta {...d, dividas: fanout} ANTES do motor).
+import { dividasPorDevedorIncluindoSolidarios } from "./utils/dividasPorDevedorIncluindoSolidarios.js";
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -3001,6 +3005,24 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     [devedores, allPagamentos, devedoresDividasJunction]
   );
 
+  // Phase 7.13f.bug — D-pre-6 fix: fan-out 1:N de DÍVIDAS via junction. Motor
+  // calcularSaldoDevedorAtualizado(d, pgtos, hoje) itera d.dividas singular (legacy),
+  // então FIADOR sem dividas.devedor_id=ele tinha d.dividas=[] → saldo R$ 0.
+  // Fix: injeta {...d, dividas: fanout} ANTES de chamar motor (D-01 strict preservado).
+  const dividasViaJunction = useMemo(
+    () => dividasPorDevedorIncluindoSolidarios(devedores, devedoresDividasJunction),
+    [devedores, devedoresDividasJunction]
+  );
+
+  // Helper inline: retorna view-devedor com d.dividas substituído pelo fan-out via junction
+  // (D-pre-6: fiador/coobrigado vêem dívidas via junction). Fallback: se devedor não está
+  // na junction, retorna devedor original (back-compat com legacy single-FK).
+  function devedorWithDividasViaJunction(devedor, dividasViaJunctionMap) {
+    const fanout = dividasViaJunctionMap.get(String(devedor.id));
+    if (!fanout || fanout.length === 0) return devedor;
+    return { ...devedor, dividas: fanout };
+  }
+
   const hoje = new Date().toISOString().slice(0, 10);
 
   // Escuta filtro vindo do Dashboard
@@ -3041,7 +3063,9 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     setModal(tipo);
     if (tipo === "novo") { setForm({ ...FORM_DEV_VAZIO, responsavel: user?.nome || "" }); setSecaoForm("id"); }
     if (tipo === "ficha" && dev) {
-      const d = { ...dev, dividas: dev.dividas || [], contatos: dev.contatos || [], acordos: dev.acordos || [] };
+      // Phase 7.13f.bug — Site 1: view-devedor com d.dividas via junction (FIADOR/COOBRIGADO vêem dívidas do contrato).
+      const dView = devedorWithDividasViaJunction(dev, dividasViaJunction);
+      const d = { ...dView, dividas: dView.dividas || [], contatos: dev.contatos || [], acordos: dev.acordos || [] };
       // Verificar atrasados nos acordos
       d.acordos = d.acordos.map(ac => ({ ...ac, parcelas: verificarAtrasados(ac.parcelas || []) }));
       setSel(d);
@@ -3497,7 +3521,9 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   });
 
   const calcDiasAtraso = d => {
-    const divs = (d.dividas || []).filter(div => !div._nominal && !div._so_custas && (div.valor_total || 0) > 0);
+    // Phase 7.13f.bug — Site 2: dívidas via junction (FIADOR conta atraso das dívidas do contrato).
+    const dView = devedorWithDividasViaJunction(d, dividasViaJunction);
+    const divs = (dView.dividas || []).filter(div => !div._nominal && !div._so_custas && (div.valor_total || 0) > 0);
     if (!divs.length) return -1;
     const oldest = divs.reduce((min, div) => {
       const dt = div.data_vencimento || div.data_origem;
@@ -3521,7 +3547,12 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   // RENDER FICHA INDIVIDUAL
   // ─────────────────────────────────────────────────────────────
   if (modal === "ficha" && sel) {
-    const dividas = sel.dividas || [];
+    // Phase 7.13f.bug — Site 3: view-devedor com d.dividas via junction (FIADOR/COOBRIGADO).
+    // Idempotente: Site 1 já aplica em abrirModal, mas re-aplica defensivamente para
+    // setSel() de outros fluxos (aderirAcordo L3186, excluirDivida L3359, etc).
+    // Override só .dividas — outros campos (id, nome, contatos, acordos) seguem em sel.
+    const selView = devedorWithDividasViaJunction(sel, dividasViaJunction);
+    const dividas = selView.dividas || [];
     const acordos = sel.acordos || [];
     const contatos = [...(sel.contatos || [])].reverse();
     const credor = credores.find(c => String(c.id) === String(sel.credor_id));
@@ -4066,7 +4097,13 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
             {filteredSorted.length === 0 && (
               <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Nenhum devedor encontrado.</td></tr>
             )}
-            {filteredSorted.map(d => {
+            {filteredSorted.map(dRaw => {
+              // Phase 7.13f.bug — Site 4: view-devedor com d.dividas via junction (FIADOR
+              // mostra saldo cheio do contrato em listagem Pessoas — D-pre-6 LOCKED).
+              // Override apenas .dividas; demais campos (id, nome, status, credor_id,
+              // acordos, valor_original, valor_nominal, cpf_cnpj, cidade, tipo, telefone)
+              // preservados via spread → key={d.id} e demais refs back-compat.
+              const d = devedorWithDividasViaJunction(dRaw, dividasViaJunction);
               const cr = credores.find(c => String(c.id) === String(d.credor_id));
               const acordosDev = d.acordos || [];
               const totais = calcularTotaisAcordo(acordosDev);
