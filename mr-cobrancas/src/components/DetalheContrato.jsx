@@ -5,6 +5,7 @@ import AtrasoCell from "./AtrasoCell.jsx";
 import AdicionarDocumento from "./AdicionarDocumento.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
+import DevedoresDoContrato from "./DevedoresDoContrato.jsx";   // Phase 7.13c — D-pre-9 cadastro multi-devedor por contrato
 import { Inp } from "./ui/Inp.jsx";
 import { listarDocumentosPorContrato, editarContrato, cascatearCredorDevedor, registrarEvento, listarHistorico,
          registrarPagamentoContrato, excluirPagamentoContrato, listarPagamentosContrato, excluirContrato,
@@ -279,10 +280,15 @@ export default function DetalheContrato({
 
       await editarContrato(contrato.id, payload);
 
+      // Phase 7.13c (D-pre-9 / Q4): snapshot histórico migra `devedor_id` (FK única
+      // legacy) para `devedor_ids: [...]` (array — futuro multi-devedor cascade).
+      // Como contrato ainda mantém devedor_id na tabela contratos_dividas (back-compat
+      // header), snapshot atual envolve o valor em array de 1 elemento para forward
+      // compat. Diff entries renderizam array sem mudança no render (JSONB livre).
       const campos_db = {
         referencia:            contrato.referencia            ?? null,
         credor_id:             contrato.credor_id             ?? null,
-        devedor_id:            contrato.devedor_id            ?? null,
+        devedor_ids:           contrato.devedor_id != null ? [contrato.devedor_id] : [],
         indice_correcao:       contrato.indice_correcao       ?? null,
         data_inicio_atualizacao: contrato.data_inicio_atualizacao ?? null,
         multa_percentual:      contrato.multa_percentual      ?? null,
@@ -292,10 +298,14 @@ export default function DetalheContrato({
         despesas:              contrato.despesas              ?? null,
         art523_opcao:          contrato.art523_opcao          ?? null,
       };
+      const payloadSnapshot = {
+        ...payload,
+        devedor_ids: payload.devedor_id != null ? [payload.devedor_id] : [],
+      };
       const diff = {};
       for (const k of Object.keys(campos_db)) {
-        const antes  = String(campos_db[k] ?? "");
-        const depois = String(payload[k]   ?? "");
+        const antes  = Array.isArray(campos_db[k]) ? JSON.stringify(campos_db[k]) : String(campos_db[k] ?? "");
+        const depois = Array.isArray(payloadSnapshot[k]) ? JSON.stringify(payloadSnapshot[k]) : String(payloadSnapshot[k] ?? "");
         if (antes !== depois) diff[k] = { antes, depois };
       }
       if (Object.keys(diff).length > 0) {
@@ -772,6 +782,9 @@ export default function DetalheContrato({
         })()}
         <p style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", marginTop: 8, marginBottom: 0 }}>(amortização sequencial conforme Art. 354 CC)</p>
       </div>
+
+      {/* 3a. Devedores do Contrato — Phase 7.13c (D-pre-9 multi-devedor cadastro só por contrato) */}
+      <DevedoresDoContrato contratoId={contrato.id} devedores={devedores} />
 
       {/* 3b. Registrar Pagamento — botão e form inline */}
       {!registrandoPagamento && (
