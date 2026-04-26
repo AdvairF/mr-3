@@ -566,15 +566,11 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
   const hoje = new Date().toISOString().slice(0, 10);
 
   // ── Métricas de cobrança ──────────────────────────────────────
-  const pgtosPorDevedorCarteira = useMemo(() => {
-    const m = new Map();
-    allPagamentos.forEach(p => {
-      const k = String(p.devedor_id);
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(p);
-    });
-    return m;
-  }, [allPagamentos]);
+  // Phase 7.10bcd — fonte trocada pra pagamentos_divida (sem devedor_id direto). Helper compartilhado agrupa via lookup divida_id ∈ dividas-do-devedor (mesmo de Devedores Map L2986).
+  const pgtosPorDevedorCarteira = useMemo(
+    () => agruparPagamentosPorDevedor(devedores, allPagamentos),
+    [devedores, allPagamentos]
+  );
 
   // divida_id -> devedor_id do principal (para anti-dupla-contagem)
   const [principaisDividaIds, setPrincipaisDividaIds] = useState(null);
@@ -679,10 +675,14 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
 
   const recuperadoPeriodo = useMemo(() => {
     // Soma pagamentos do período para devedores com status de pagamento total
+    // Phase 7.10bcd — pagamentos_divida sem devedor_id direto. Lookup intermediário divida_id → devedor_id (D-27).
     const statusPago = new Set(["pago_integral", "recuperado"]);
+    const dividaIdToDevedorId = new Map();
+    devedores.forEach(d => (d.dividas || []).forEach(div => dividaIdToDevedorId.set(String(div.id), String(d.id))));
     return pagamentosNoPeriodo
       .filter(p => {
-        const dev = devedores.find(d => String(d.id) === String(p.devedor_id));
+        const devId = dividaIdToDevedorId.get(String(p.divida_id));
+        const dev = devId ? devedores.find(d => String(d.id) === devId) : null;
         return dev && statusPago.has(dev.status);
       })
       .reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
@@ -691,12 +691,17 @@ function Dashboard({ devedores, processos, andamentos, user, lembretes = [], all
   const taxaPeriodo = totalCarteira > 0 ? (recebidoPeriodo / totalCarteira * 100) : 0;
 
   const ultimosPagamentos = useMemo(() => {
+    // Phase 7.10bcd — pagamentos_divida sem devedor_id direto. Lookup intermediário divida_id → devedor_id via helper map; pgtosDev filter via Set lookup divida_id ∈ dividas-do-devedor (D-27).
+    const dividaIdToDevedorId = new Map();
+    devedores.forEach(d => (d.dividas || []).forEach(div => dividaIdToDevedorId.set(String(div.id), String(d.id))));
     return [...pagamentosNoPeriodo]
       .sort((a, b) => (b.data_pagamento || "").localeCompare(a.data_pagamento || ""))
       .slice(0, 5)
       .map(p => {
-        const dev = devedores.find(d => String(d.id) === String(p.devedor_id));
-        const pgtosDev = allPagamentos.filter(pp => String(pp.devedor_id) === String(p.devedor_id));
+        const devId = dividaIdToDevedorId.get(String(p.divida_id));
+        const dev = devId ? devedores.find(d => String(d.id) === devId) : null;
+        const dividaIdsDoDevedor = new Set((dev?.dividas || []).map(d => String(d.id)));
+        const pgtosDev = allPagamentos.filter(pp => dividaIdsDoDevedor.has(String(pp.divida_id)));
         const totalPago = pgtosDev.reduce((s, pp) => s + (parseFloat(pp.valor) || 0), 0);
         const saldoDev = calcularSaldoDevedorAtualizado(dev || {}, pgtosDev, hoje);
         return { ...p, nomeDevedor: dev?.nome || "—", saldoRestante: saldoDev };
@@ -8421,15 +8426,10 @@ export default function App() {
 
   // ── hooks que devem ser chamados antes de qualquer early return ──
   const hoje_app = new Date().toISOString().slice(0, 10);
-  const pgtosPorDevedorCarteira = useMemo(() => {
-    const m = new Map();
-    allPagamentos.forEach(p => {
-      const k = String(p.devedor_id);
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(p);
-    });
-    return m;
-  }, [allPagamentos]);
+  const pgtosPorDevedorCarteira = useMemo(
+    () => agruparPagamentosPorDevedor(devedores, allPagamentosDivida),
+    [devedores, allPagamentosDivida]
+  );
   const totalCarteira = useMemo(
     () => devedores.reduce((s, d) =>
       s + calcularSaldoDevedorAtualizado(d, pgtosPorDevedorCarteira.get(String(d.id)) || [], hoje_app),
@@ -8463,7 +8463,7 @@ export default function App() {
 
   function renderPage(t) {
     switch (t) {
-      case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} allPagamentos={allPagamentos} />;
+      case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} allPagamentos={allPagamentosDivida} />;
       case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} allPagamentos={allPagamentosDivida} />;
       case "credores": return <Credores credores={credores} setCredores={setCredores} />;
       case "calculadora": return <Calculadora devedores={devedores} credores={credores} />;
