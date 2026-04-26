@@ -8338,11 +8338,14 @@ export default function App() {
   const [allDividas, setAllDividas] = useState([]);
   const [allContratos, setAllContratos] = useState([]);
   const [allDocumentos, setAllDocumentos] = useState([]);
+  // Phase 7.13e — junction devedores_dividas global (D-pre-14): consolidação client-side
+  // ModuloContratos render inline "Nome (Papel), Nome (Papel)" + Pessoas saldo cheio (Task 6).
+  const [devedoresDividasJunction, setDevedoresDividasJunction] = useState([]);
 
   const carregarTudo = useCallback(async (silencioso = false) => {
     if (!silencioso) setCarregando(true);
     try {
-      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos, documentos, pgtosDivida] = await Promise.all([
+      const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos, documentos, pgtosDivida, junctionRows] = await Promise.all([
         dbGet("devedores"),
         dbGet("credores"),
         dbGet("processos"),
@@ -8354,12 +8357,14 @@ export default function App() {
         dbGet("contratos_dividas", "order=created_at.desc"),
         dbGet("documentos_contrato", "order=created_at.asc"),  // novo — nível 2
         dbGet("pagamentos_divida"),                             // Phase 7.3 — fonte correta de pagamentos (Phase 4 + Phase 7 SP)
+        dbGet("devedores_dividas", "select=devedor_id,divida_id,papel"), // Phase 7.13e — junction global (D-pre-14)
       ]);
       setLembretesList(Array.isArray(lems) ? lems : []);
       setAllPagamentos(Array.isArray(pgtos) ? pgtos : []);
       setAllPagamentosDivida(Array.isArray(pgtosDivida) ? pgtosDivida : []);
       setAllContratos(Array.isArray(contratos) ? contratos : []);
       setAllDocumentos(Array.isArray(documentos) ? documentos : []);
+      setDevedoresDividasJunction(Array.isArray(junctionRows) ? junctionRows : []);
       // Build dividasMap: Map<String(devedor_id), divida[]> — same pattern as pgtosPorDevedorCarteira
       const parseJ = v => { if (!v) return []; if (Array.isArray(v)) return v; try { const r = JSON.parse(v); return Array.isArray(r) ? r : []; } catch { return []; } };
       const documentosMap = new Map((documentos || []).map(d => [String(d.id), d.tipo]));
@@ -8506,6 +8511,7 @@ export default function App() {
           credores={credores}
           allPagamentos={allPagamentos}
           allPagamentosDivida={allPagamentosDivida}
+          devedoresDividasJunction={devedoresDividasJunction}
           hoje={hoje_app}
           onCarregarTudo={carregarTudo}
           setTab={setTab}

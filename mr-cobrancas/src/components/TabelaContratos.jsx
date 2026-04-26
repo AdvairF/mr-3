@@ -10,12 +10,25 @@ const th = { padding: "8px 10px", textAlign: "left", fontWeight: 700, color: "#6
 const td = { padding: "9px 10px", color: "#374151", verticalAlign: "middle" };
 const POR_PAG = 20;
 
+// Phase 7.13e — label dictionary papel (D-pre-2/D-pre-14 inline expansion).
+// Mantém paridade visual com PAPEL_META de DevedoresDaDivida.jsx (chips), mas só labels
+// PT-BR (sem cores — listagem é texto inline, não chips).
+const PAPEL_LABEL = {
+  PRINCIPAL: 'Principal',
+  COOBRIGADO: 'Coobrigado',
+  AVALISTA: 'Avalista',
+  FIADOR: 'Fiador',
+  CONJUGE: 'Cônjuge',
+  OUTRO: 'Outro',
+};
+
 export default function TabelaContratos({
   contratos,
   devedores,
   credores,
   parcelasPorContrato,
   totaisPorContrato,
+  devedoresPorContrato,         // Phase 7.13e — Map<contratoId, [{devedor_id, papel}]> consolidado
   hoje,
   onVerDetalhe,
   // Phase 7.8.2a — coluna opcional "Saldo Atualizado" (cache SWR).
@@ -57,13 +70,23 @@ export default function TabelaContratos({
           </thead>
           <tbody>
             {visiveis.map(c => {
-              const devedor = devedores.find(d => String(d.id) === String(c.devedor_id));
+              // Phase 7.13e — fallback legacy: contrato sem rows na junction (header-only)
+              const fallbackDevedor = devedores.find(d => String(d.id) === String(c.devedor_id));
               const credor = credores?.find(cr => String(cr.id) === String(c.credor_id));
               const parcelas = parcelasPorContrato.get(String(c.id)) || [];
               const atrasadas = parcelas.filter(d =>
                 !d.saldo_quitado && d.data_vencimento && d.data_vencimento < hoje
               ).length;
               const SaldoCell = saldoAtualizadoColuna?.Cell;
+              // Phase 7.13e — render inline "Nome (Papel), Nome (Papel)" (D-pre-2/D-pre-14)
+              const devedoresInline = devedoresPorContrato?.get(String(c.id)) || [];
+              const devedoresStr = devedoresInline
+                .map(({ devedor_id, papel }) => {
+                  const dev = devedores.find(d => String(d.id) === String(devedor_id));
+                  const nome = dev?.nome || `#${devedor_id}`;
+                  return `${nome} (${PAPEL_LABEL[papel] || papel})`;
+                })
+                .join(', ');
 
               return (
                 <tr
@@ -80,7 +103,7 @@ export default function TabelaContratos({
                     }
                   </td>
                   <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>
-                    {devedor?.nome || "—"}
+                    {devedoresStr || fallbackDevedor?.nome || "—"}
                   </td>
                   <td style={td}>
                     {c.num_documentos > 0

@@ -21,6 +21,7 @@ export default function ModuloContratos({
   credores,
   allPagamentos,
   allPagamentosDivida,
+  devedoresDividasJunction = [],   // Phase 7.13e — junction D-pre-14 (consolidação client-side)
   hoje,
   onCarregarTudo,
   setTab,
@@ -86,6 +87,39 @@ export default function ModuloContratos({
     return m;
   }, [allContratos, parcelasPorContrato, allPagamentosDivida]);
 
+  // Phase 7.13e — Map<contratoId, [{devedor_id, papel}]> consolidado client-side (D-pre-2/D-pre-14).
+  // DISTINCT por devedor_id (uma entrada por devedor, não 12x — cada devedor aparece N vezes
+  // na junction, uma por dívida do contrato — fan-out D-pre-10). Sort: PRINCIPAL primeiro.
+  const devedoresPorContrato = useMemo(() => {
+    const dividaToContrato = new Map();
+    (allDividas || []).forEach(d => {
+      if (d.contrato_id) dividaToContrato.set(String(d.id), String(d.contrato_id));
+    });
+    const out = new Map();
+    (devedoresDividasJunction || []).forEach(r => {
+      const contratoId = dividaToContrato.get(String(r.divida_id));
+      if (!contratoId) return;
+      if (!out.has(contratoId)) out.set(contratoId, new Map());
+      // DISTINCT por devedor_id (uma entrada por devedor — primeiro papel encontrado)
+      const devMap = out.get(contratoId);
+      const key = String(r.devedor_id);
+      if (!devMap.has(key)) {
+        devMap.set(key, { devedor_id: r.devedor_id, papel: r.papel });
+      }
+    });
+    // Converte Map<id,{...}> → Array com PRINCIPAL primeiro, depois ordem original
+    const result = new Map();
+    for (const [contratoId, devMap] of out.entries()) {
+      const arr = Array.from(devMap.values()).sort((a, b) => {
+        if (a.papel === 'PRINCIPAL' && b.papel !== 'PRINCIPAL') return -1;
+        if (b.papel === 'PRINCIPAL' && a.papel !== 'PRINCIPAL') return 1;
+        return 0;
+      });
+      result.set(contratoId, arr);
+    }
+    return result;
+  }, [devedoresDividasJunction, allDividas]);
+
   const contratosAtivos = contratos.filter(c =>
     (parcelasPorContrato.get(String(c.id)) || []).some(d => !d.saldo_quitado)
   ).length;
@@ -131,6 +165,7 @@ export default function ModuloContratos({
             credores={credores}
             parcelasPorContrato={parcelasPorContrato}
             totaisPorContrato={totaisPorContrato}
+            devedoresPorContrato={devedoresPorContrato}
             hoje={hoje}
             onVerDetalhe={handleVerDetalhe}
             saldoAtualizadoColuna={{
