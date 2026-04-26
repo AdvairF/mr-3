@@ -63,6 +63,7 @@
 
 import { dbGet, dbInsert, dbUpdate, dbDelete, sb } from "../config/supabase.js";
 import { atualizarDivida } from "./dividas.js";
+import { seedDevedoresDoContrato } from "./devedoresDividas.js";
 
 const TABLE = "contratos_dividas";
 const HIST_TABLE = "contratos_historico";
@@ -294,7 +295,13 @@ export async function adicionarDocumento(contratoId, documentoPayload, contrato,
   const rows = [];
   for (const p of parcelasPayload) {
     const r = await dbInsert("dividas", p);
-    rows.push(Array.isArray(r) ? r[0] : r);
+    const novaDivida = Array.isArray(r) ? r[0] : r;
+    rows.push(novaDivida);
+    // Phase 7.13 D-pre-11: cascade fan-out — popula junction com TODOS os devedores
+    // do contrato (não só PRINCIPAL legado). Substitui seedPrincipal isolado.
+    if (novaDivida?.id) {
+      await seedDevedoresDoContrato(novaDivida.id, contratoId);
+    }
   }
   await recalcularTotaisContrato(contratoId);
   return { documento, parcelas: rows };

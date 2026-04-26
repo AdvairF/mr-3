@@ -3259,12 +3259,19 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
       setSel(parsed);
       setNd(DIVIDA_VAZIA);
       toast.success("Dívida adicionada com sucesso!");
-      // seedPrincipal with UUID from DB (NOT Date.now())
+      // Phase 7.13 D-pre-11: seed devedores via cascade (contrato) ou seedPrincipal (standalone)
       try {
-        const { seedPrincipal } = await import("./services/devedoresDividas.js");
-        await seedPrincipal(sel.id, novaDiv.id);
+        if (novaDiv.contrato_id) {
+          // Dívida em contrato → cascade copia TODOS os devedores existentes
+          const { seedDevedoresDoContrato } = await import("./services/devedoresDividas.js");
+          await seedDevedoresDoContrato(novaDiv.id, novaDiv.contrato_id);
+        } else {
+          // Dívida standalone (sem contrato) — preserva back-compat seedPrincipal
+          const { seedPrincipal } = await import("./services/devedoresDividas.js");
+          await seedPrincipal(sel.id, novaDiv.id);
+        }
       } catch (seedErr) {
-        console.warn("seedPrincipal failed (non-critical):", seedErr);
+        console.warn("seed devedores failed (non-critical):", seedErr);
       }
     } catch (e) {
       toast.error("Não foi possível salvar a dívida no Supabase:" + e.message);
