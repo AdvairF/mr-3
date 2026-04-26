@@ -67,6 +67,9 @@ import { calcularSaldoDevedorAtualizado, calcularDetalheEncargos, calcularPlanil
 
 // Phase 7.10bcd — helper compartilhado D-31 (agrupa pagamentos_divida por devedor via lookup divida_id)
 import { agruparPagamentosPorDevedor } from "./utils/agruparPagamentosPorDevedor.js";
+// Phase 7.13f — helper paralelo D-pre-6 (fan-out 1:N via junction; só Pessoas usa).
+// Dashboard L568 + parent App L8438 PRESERVADOS no helper original (anti-dupla-contagem).
+import { agruparPagamentosPorDevedorIncluindoSolidarios } from "./utils/agruparPagamentosPorDevedorIncluindoSolidarios.js";
 
 // ─── FONT ────────────────────────────────────────────────────
 const FontLink = () => (
@@ -2962,7 +2965,7 @@ function AbaPagamentosParciais({ devedor, onAtualizarDevedor, user, fmt, fmtDate
   );
 }
 
-function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos = [], setTab, allPagamentos = [] }) {
+function Devedores({ devedores, setDevedores, credores, onModalChange, user, processos = [], setTab, allPagamentos = [], devedoresDividasJunction = [] }) {
   const { confirm, ConfirmModal } = useConfirm();
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
@@ -2989,10 +2992,13 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
     listarVinculadosIds().then(ids => setVinculadosSet(ids)).catch(() => {});
   }, []);
 
-  // Phase 7.10bcd — fonte trocada pra pagamentos_divida (sem devedor_id direto). Helper agrupa via lookup divida_id ∈ dividas-do-devedor.
+  // Phase 7.13f — D-pre-6: helper paralelo fan-out 1:N via junction (todos devedores
+  // da dívida, não só PRINCIPAL). Pessoas mostra saldo cheio do contrato p/ FIADOR/COOBRIGADO
+  // (perspectiva de cobrança individual — solidariedade passiva). Dashboard NÃO troca:
+  // L571 e L8438 mantêm helper original p/ anti-dupla-contagem em Carteira Total.
   const pgtosPorDevedor = useMemo(
-    () => agruparPagamentosPorDevedor(devedores, allPagamentos),
-    [devedores, allPagamentos]
+    () => agruparPagamentosPorDevedorIncluindoSolidarios(devedores, allPagamentos, devedoresDividasJunction),
+    [devedores, allPagamentos, devedoresDividasJunction]
   );
 
   const hoje = new Date().toISOString().slice(0, 10);
@@ -8477,7 +8483,7 @@ export default function App() {
   function renderPage(t) {
     switch (t) {
       case "dashboard": return <Dashboard devedores={devedores} processos={processos} andamentos={andamentos} user={user} lembretes={lembretesList} allPagamentos={allPagamentosDivida} />;
-      case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} allPagamentos={allPagamentosDivida} />;
+      case "devedores": return <Devedores devedores={devedores} setDevedores={setDevedores} credores={credores} onModalChange={setModalAberto} user={user} processos={processos} setTab={setTab} allPagamentos={allPagamentosDivida} devedoresDividasJunction={devedoresDividasJunction} />;
       case "credores": return <Credores credores={credores} setCredores={setCredores} />;
       case "calculadora": return <Calculadora devedores={devedores} credores={credores} />;
       case "relatorios": return <Relatorios devedores={devedores} processos={processos} andamentos={andamentos} credores={credores} />;

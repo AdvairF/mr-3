@@ -22,7 +22,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:regressao": "vitest run src/services/__tests__/calculos.test.js src/services/__tests__/saldoAtualizadoCache.test.js src/services/__tests__/custasCache.test.js src/services/__tests__/processosJudiciaisFilter.test.js src/services/__tests__/agruparPagamentosPorDevedor.test.js src/services/__tests__/devedoresDividasContrato.test.js",
+    "test:regressao": "vitest run src/services/__tests__/calculos.test.js src/services/__tests__/saldoAtualizadoCache.test.js src/services/__tests__/custasCache.test.js src/services/__tests__/processosJudiciaisFilter.test.js src/services/__tests__/agruparPagamentosPorDevedor.test.js src/services/__tests__/devedoresDividasContrato.test.js src/services/__tests__/agruparPagamentosPorDevedorIncluindoSolidarios.test.js",
     "prebuild": "npm run test:regressao"
   }
 }
