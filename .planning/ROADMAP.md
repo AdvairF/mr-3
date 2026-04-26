@@ -358,6 +358,25 @@ Plans:
 **UI hint**: indireto (sem render new, fix em service layer destrava render existente)
 **Status**: Backlog 2026-04-25 — descoberto durante UAT 7.10a (PAUSA #1 cross-check). Sem prioridade fixa — depende de quando UAT empírico real de processos virar bloqueio.
 
+### Phase 7.10bcd: Migração 3 consumidores (Devedores + ModuloDividas + Dashboard) para pagamentos_divida (INSERTED)
+**Goal**: Migrar 3 consumidores legacy lendo `allPagamentos` (alimentado por `pagamentos_parciais` v1.0) para `allPagamentosDivida` (Phase 7.3 fonte correta) em 1 phase com 3 commits atômicos. Estratégia fast-track aceita pelo usuário com 6 mitigations não-negociáveis (M1-M6). Escopo: helper novo `agruparPagamentosPorDevedor.js` (Devedores Map L2986 + Dashboard L568) + Set lookup inline pattern 7.10a (D-27) em TabelaDividas L44 + DetalheDivida L74 + Dashboard L696. 3 commits sequenciais bisect-able: `feat(07.10b): Devedores...` → `feat(07.10c): ModuloDividas...` → `feat(07.10d): Dashboard...`. **D-01 motor 100% intocado** em todos 3.
+**Depends on**: Phase 7.10a (pattern Set lookup divida_id ∈ dividas-do-devedor estabelecido em D-27; lições helper-first + schema completeness aplicadas pre-execute)
+**Requirements**: (tech debt fast-track — 3 consumidores legacy migrar de uma vez aceitando risco maior; mitigations M1-M6 reduzem risco residual)
+**Decisions**: ver `.planning/phases/07.10bcd-migracao-pagamentos-divida-tres-consumidores/07.10bcd-CONTEXT.md` (discuss locked 2026-04-25, D-01..D-29 herdadas + D-30..D-34 novas + SC1..SC7 mandatórios + Shield 24a/b/c grep + helper test trivial)
+**Plans**: 2 (07.10bcd-01 impl com 3 commits atômicos + 3 sub-PAUSAs intra-execute; 07.10bcd-02 UAT 7 SCs + bump com 2 PAUSAs)
+**UI hint**: no (callsites App.jsx + filter adapters + helper novo — UI render inalterado, valores cross-check via 7 pontos visuais)
+**Status**: Planned 2026-04-25 — awaiting /gsd-plan-phase 7.10bcd
+
+### Phase 7.10.bug2: TabelaDividas/DetalheDivida/ModuloDividas — custas avulsas (`_so_custas:true`) exibem valor atualizado com correção INPC (BACKLOG)
+**Goal**: Tratar dívidas-fantasma `_so_custas:true` (custas avulsas introduzidas em Phase 7.9) na UI de listagem/detalhe de dívidas. Hoje, motor `calcularSaldosPorDivida` (`devedorCalc.js` L172-176) filtra `_so_custas` antes do cálculo → `saldosMap[id_so_custas] === undefined` → TabelaDividas L94-96 e DetalheDivida (similar) renderizam "Calculando..." indefinido. Bug pré-existente desde 7.9 introduction; descoberto durante UAT cross-check da 7.10bcd 2026-04-25 mas **NÃO regressão da 7.10bcd** — comportamento idêntico em PROD 7.10a confirmado. Escopo: (a) detectar `_so_custas:true` na linha; (b) iterar JSONB `custas[]` aplicando `calcularFatorCorrecao` INPC por custa desde data da custa; (c) somar valores atualizados e exibir na coluna "Saldo Atualizado"; (d) repetir lógica em DetalheDivida (single dívida). **Decisão arquitetural pendente**: helper compartilhado `calcularValorAtualizadoCustasAvulsas` vs inline em cada componente. NÃO é fix trivial 1 linha — phase própria com discuss/plan/UAT.
+**Depends on**: nenhum (standalone bugfix); independente de outras phases backlog
+**Blocks**: nada crítico; UI mostra "Calculando..." em poucas linhas de custas avulsas — feature minoritária da 7.9
+**Requirements**: (UX bug — gap entre motor que ignora `_so_custas` e UI que espera saldo calculado; lição registrada em `memory/feedback_so_custas_ui_calculando_indefinido.md`)
+**Decisions**: TBD em CONTEXT.md futura — escopo provável: helper `calcularValorAtualizadoCustasAvulsas(custas, dataInicioAtualizacao, hoje)` em `utils/`, consumir em TabelaDividas L94-96 + DetalheDivida + Dashboard se necessário; regressão test trivial; UAT visual com custas avulsas conhecidas (drift ≤ centavo do INPC oficial)
+**Plans**: 1-2 plans prováveis (impl + UAT/bump) — escopo médio, não trivial
+**UI hint**: yes (TabelaDividas + DetalheDivida exibem novo valor onde antes era "Calculando...")
+**Status**: Backlog 2026-04-25 — descoberto durante UAT 7.10bcd PAUSA #1 (cross-check PROD vs LOCAL). Sem prioridade fixa; pode ser executada em paralelo com outras phases backlog v1.4.
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
