@@ -37,7 +37,7 @@ export async function criar(dados) {
     status: dados.status || "ATIVO",
     credor_id: dados.credor_id ? Number(dados.credor_id) : null,
     observacoes: dados.observacoes || null,
-  }, { headers: { Prefer: "return=representation" } });
+  });
 }
 
 export async function atualizar(id, dados) {
@@ -59,7 +59,7 @@ export async function adicionarDevedor({ processoId, devedorId, papel, dataCitac
     data_citacao: dataCitacao || null,
     status_citacao: statusCitacao || "PENDENTE",
     observacao: observacao || null,
-  }, { headers: { Prefer: "return=representation" } });
+  });
 }
 
 export async function removerDevedor(rowId) {
