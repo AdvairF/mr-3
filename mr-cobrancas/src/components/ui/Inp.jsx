@@ -1,3 +1,6 @@
+// Inp/INP — wrappers de input. Para type="date" e type="number", delegam ao <InputBR> (paste-friendly BR — Phase 7.14, D-pre-3 + D-pre-8).
+import InputBR from "./InputBR.jsx";
+
 // Inp — versão simples (usada em Credores)
 export function Inp({ label, value, onChange, type = "text", options, span, ...rest }) {
   const st = {
@@ -20,6 +23,14 @@ export function Inp({ label, value, onChange, type = "text", options, span, ...r
             </option>
           ))}
         </select>
+      ) : (type === "date" || type === "number") ? (
+        <InputBR
+          type={type === "number" ? "value" : "date"}
+          value={value}
+          onChange={onChange}
+          style={st}
+          {...rest}
+        />
       ) : (
         <input type={type} value={value} onChange={e => onChange(e.target.value)} style={st} {...rest} />
       )}
@@ -50,6 +61,14 @@ export function INP({ label, value, onChange, type = "text", opts, options, span
             </option>
           ))}
         </select>
+      ) : (type === "date" || type === "number") ? (
+        <InputBR
+          type={type === "number" ? "value" : "date"}
+          value={value}
+          onChange={onChange}
+          style={st}
+          {...rest}
+        />
       ) : (
         <input type={type} value={value} onChange={e => onChange(e.target.value)} style={st} {...rest} />
       )}
