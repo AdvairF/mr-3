@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
+import InputBR from "./ui/InputBR.jsx";
 import {
   listarPagamentos,
   criarPagamento,
@@ -203,19 +204,19 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
                   {editandoId === row.id ? (
                     <>
                       <td style={td}>
-                        <input
+                        <InputBR
                           type="date"
                           value={editForm.data_pagamento}
-                          onChange={e => setEditForm(f => ({ ...f, data_pagamento: e.target.value }))}
+                          onChange={v => setEditForm(f => ({ ...f, data_pagamento: v }))}
                           style={{ padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13 }}
                         />
                       </td>
                       <td style={td}>
-                        <input
-                          type="number"
+                        <InputBR
+                          type="value"
                           step="0.01"
                           value={editForm.valor}
-                          onChange={e => setEditForm(f => ({ ...f, valor: e.target.value }))}
+                          onChange={v => setEditForm(f => ({ ...f, valor: v }))}
                           style={{ padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, width: 100 }}
                         />
                       </td>
@@ -296,10 +297,10 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px" }}>
               Data
             </label>
-            <input
+            <InputBR
               type="date"
               value={novoForm.data_pagamento}
-              onChange={e => setNovoForm(f => ({ ...f, data_pagamento: e.target.value }))}
+              onChange={v => setNovoForm(f => ({ ...f, data_pagamento: v }))}
               required
               style={{ padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             />
@@ -310,12 +311,12 @@ export default function PagamentosDivida({ divida, hoje, onSaldoChange, onTotalP
             <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".5px" }}>
               Valor
             </label>
-            <input
-              type="number"
+            <InputBR
+              type="value"
               step="0.01"
               min="0.01"
               value={novoForm.valor}
-              onChange={e => setNovoForm(f => ({ ...f, valor: e.target.value }))}
+              onChange={v => setNovoForm(f => ({ ...f, valor: v }))}
               required
               style={{ padding: "8px 10px", border: "1.5px solid #e2e8f0", borderRadius: 9, fontSize: 13, width: 120, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             />

@@ -10,6 +10,7 @@ import {
   JUROS_LABEL,
 } from "../utils/correcao.js";
 import Art523Option from "./Art523Option.jsx";
+import InputBR from "./ui/InputBR.jsx";
 import { fmt, fmtDate } from "../utils/formatters.js";
 import { dbGet, dbInsert, dbDelete, dbUpdate } from "../config/supabase.js";
 
@@ -403,7 +404,7 @@ function PainelCalculo({ c, devedores }) {
         <div style={S.secao}><span>🧮</span> Parâmetros de Cálculo</div>
         <div style={S.row2}>
           <div><label style={S.label}>Data do Cálculo</label>
-            <input type="date" value={c.dataCalculo} onChange={e => { c.setDataCalculo(e.target.value); c.setResultado(null); }} style={S.inp} /></div>
+            <InputBR type="date" value={c.dataCalculo} onChange={v => { c.setDataCalculo(v); c.setResultado(null); }} style={S.inp} /></div>
           <div><label style={S.label}>Índice de Correção</label>
             <select value={c.indexador} onChange={e => { c.setIndexador(e.target.value); c.setResultado(null); }} style={S.inp}>
               {INDICE_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
@@ -422,9 +423,9 @@ function PainelCalculo({ c, devedores }) {
         </div>
         <div style={S.row3}>
           <div><label style={S.label}>Multa (%)</label>
-            <input type="number" value={c.multa} onChange={e => { c.setMulta(e.target.value); c.setResultado(null); }} style={S.inp} step="0.5" min="0" /></div>
+            <InputBR type="value" value={c.multa} onChange={v => { c.setMulta(v); c.setResultado(null); }} style={S.inp} step="0.5" min="0" /></div>
           <div><label style={S.label}>Honorários (%)</label>
-            <input type="number" value={c.honorariosPct} onChange={e => { c.setHonorariosPct(e.target.value); c.setResultado(null); }} style={S.inp} step="1" min="0" /></div>
+            <InputBR type="value" value={c.honorariosPct} onChange={v => { c.setHonorariosPct(v); c.setResultado(null); }} style={S.inp} step="1" min="0" /></div>
           <div><label style={S.label}>Base Multa</label>
             <select value={c.baseMulta} onChange={e => { c.setBaseMulta(e.target.value); c.setResultado(null); }} style={S.inp}>
               <option value="original">Original</option>
@@ -695,7 +696,7 @@ function AbaModelos({ c, devedores }) {
               </select>
             </div>
             <div><label style={S.label}>Desconto Acordo (%)</label>
-              <input type="number" value={c.descontoPct} onChange={e=>c.setDescontoPct(e.target.value)} style={S.inp} min="0" max="100" />
+              <InputBR type="value" value={c.descontoPct} onChange={c.setDescontoPct} style={S.inp} min="0" max="100" />
             </div>
           </div>
         </div>
@@ -1036,7 +1037,7 @@ function AbaPeticoes({ c, devedores }) {
             <div><label style={S.label}>Cidade</label><input value={c.cidadePeticao} onChange={e=>c.setCidadePeticao(e.target.value)} style={S.inp} /></div>
             <div><label style={S.label}>UF OAB</label><select value={c.ufAdv} onChange={e=>c.setUfAdv(e.target.value)} style={S.inp}>{UFS_LIST.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
           </div>
-          {c.tipoPeticao === "acordo" && <div style={{ marginBottom:12 }}><label style={S.label}>Desconto (%)</label><input type="number" value={c.descontoPct} onChange={e=>c.setDescontoPct(e.target.value)} style={S.inp} min="0" max="100" /></div>}
+          {c.tipoPeticao === "acordo" && <div style={{ marginBottom:12 }}><label style={S.label}>Desconto (%)</label><InputBR type="value" value={c.descontoPct} onChange={c.setDescontoPct} style={S.inp} min="0" max="100" /></div>}
           <button onClick={gerarPeticao} disabled={!c.devId} style={{ background:"linear-gradient(135deg,#1e40af,#1d4ed8)", color:"#fff", border:"none", borderRadius:10, padding:"12px 0", fontSize:14, fontWeight:800, cursor:c.devId?"pointer":"not-allowed", opacity:c.devId?1:0.5, width:"100%" }}>
             ⚖️ Gerar Petição
           </button>

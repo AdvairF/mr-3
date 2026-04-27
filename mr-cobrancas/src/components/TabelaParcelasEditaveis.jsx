@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
+import InputBR from "./ui/InputBR.jsx";
 
 // fmtBRL local — não importa nada externo (componente 100% isolado, D-02)
 function fmtBRL(v) {
@@ -303,22 +304,22 @@ export default function TabelaParcelasEditaveis({
                   {p.numero}
                 </div>
                 <div role="cell">
-                  <input
-                    type="number"
+                  <InputBR
+                    type="value"
                     min="0"
                     step="0.01"
                     value={valoresStr[i] ?? ""}
-                    onChange={e => atualizarValorStr(i, e.target.value)}
+                    onChange={v => atualizarValorStr(i, v)}
                     disabled={ro}
                     title={tooltip}
                     style={ro ? cellInputDisabledStyle : cellInputStyle}
                   />
                 </div>
                 <div role="cell">
-                  <input
+                  <InputBR
                     type="date"
                     value={p.data_vencimento}
-                    onChange={e => atualizarLinha(i, "data_vencimento", e.target.value)}
+                    onChange={v => atualizarLinha(i, "data_vencimento", v)}
                     disabled={ro}
                     title={tooltip}
                     style={ro ? cellInputDisabledStyle : cellInputStyle}

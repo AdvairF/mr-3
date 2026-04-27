@@ -1,4 +1,5 @@
 import { Inp } from "./ui/Inp.jsx";
+import InputBR from "./ui/InputBR.jsx";
 import Btn from "./ui/Btn.jsx";
 import { fmt } from "../utils/formatters.js";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
@@ -73,18 +74,18 @@ export default function DividaForm({ value, onChange, credores = [], onConfirmar
                       <tr key={p.id} style={{ borderTop: "1px solid #f8fafc" }}>
                         <td style={{ padding: "5px 9px", fontWeight: 700 }}>{i + 1}</td>
                         <td style={{ padding: "5px 9px" }}>
-                          <input
-                            type="number"
+                          <InputBR
+                            type="value"
                             value={p.valor}
-                            onChange={e => onEditParc && onEditParc(p.id, "valor", e.target.value)}
+                            onChange={v => onEditParc && onEditParc(p.id, "valor", v)}
                             style={{ width: 85, padding: "3px 6px", border: "1.5px solid #e2e8f0", borderRadius: 6, fontSize: 12, fontWeight: 700, color: "#4f46e5", outline: "none" }}
                           />
                         </td>
                         <td style={{ padding: "5px 9px" }}>
-                          <input
+                          <InputBR
                             type="date"
                             value={p.venc}
-                            onChange={e => onEditParc && onEditParc(p.id, "venc", e.target.value)}
+                            onChange={v => onEditParc && onEditParc(p.id, "venc", v)}
                             style={{ padding: "3px 6px", border: "1.5px solid #e2e8f0", borderRadius: 6, fontSize: 11, outline: "none" }}
                           />
                         </td>
@@ -133,17 +134,17 @@ export default function DividaForm({ value, onChange, credores = [], onConfirmar
               onChange={e => onChange("custas", (value.custas || []).map((x, xi) => xi === ci ? { ...x, descricao: e.target.value } : x))}
               style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none", fontFamily: "Plus Jakarta Sans" }}
             />
-            <input
-              type="number"
+            <InputBR
+              type="value"
               placeholder="Valor (R$)"
               value={c.valor}
-              onChange={e => onChange("custas", (value.custas || []).map((x, xi) => xi === ci ? { ...x, valor: e.target.value } : x))}
+              onChange={v => onChange("custas", (value.custas || []).map((x, xi) => xi === ci ? { ...x, valor: v } : x))}
               style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none", fontFamily: "Plus Jakarta Sans" }}
             />
-            <input
+            <InputBR
               type="date"
               value={c.data}
-              onChange={e => onChange("custas", (value.custas || []).map((x, xi) => xi === ci ? { ...x, data: e.target.value } : x))}
+              onChange={v => onChange("custas", (value.custas || []).map((x, xi) => xi === ci ? { ...x, data: v } : x))}
               style={{ padding: "6px 8px", border: "1.5px solid #fed7aa", borderRadius: 7, fontSize: 11, outline: "none" }}
             />
             <button

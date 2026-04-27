@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
+import InputBR from "./ui/InputBR.jsx";
 import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
 import { STATUS_DEV } from "../utils/constants.js";
@@ -331,8 +332,8 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
             <option value="MEDIA">Média</option>
             <option value="BAIXA">Baixa</option>
           </select>
-          <input style={{ ...inpS, width: 110 }} placeholder="Valor mín" type="number" value={filtroValorMin} onChange={e => setFiltroValorMin(e.target.value)} />
-          <input style={{ ...inpS, width: 110 }} placeholder="Valor máx" type="number" value={filtroValorMax} onChange={e => setFiltroValorMax(e.target.value)} />
+          <InputBR style={{ ...inpS, width: 110 }} placeholder="Valor mín" type="value" value={filtroValorMin} onChange={setFiltroValorMin} />
+          <InputBR style={{ ...inpS, width: 110 }} placeholder="Valor máx" type="value" value={filtroValorMax} onChange={setFiltroValorMax} />
         </div>
 
         {/* Linha 2: checkboxes de status */}
@@ -466,12 +467,12 @@ function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
             {formEvento.tipo_evento === "PROMESSA_PAGAMENTO" && (
               <div>
                 <label style={lbl}>Data da Promessa *</label>
-                <input type="date" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.data_promessa} onChange={e => setFormEvento(f => ({ ...f, data_promessa: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
+                <InputBR type="date" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.data_promessa} onChange={v => setFormEvento(f => ({ ...f, data_promessa: v }))} min={new Date().toISOString().slice(0, 10)} />
               </div>
             )}
             <div>
               <label style={lbl}>Giro de Carteira (dias)</label>
-              <input type="number" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.giro_carteira_dias} onChange={e => setFormEvento(f => ({ ...f, giro_carteira_dias: e.target.value }))} placeholder="0 = sem giro" min="0" max="365" />
+              <InputBR type="value" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.giro_carteira_dias} onChange={v => setFormEvento(f => ({ ...f, giro_carteira_dias: v }))} placeholder="0 = sem giro" min="0" max="365" />
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
@@ -992,12 +993,12 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
             {form.tipo_evento === "PROMESSA_PAGAMENTO" && (
               <div>
                 <label style={lbl}>Data da Promessa *</label>
-                <input type="date" style={inpStyle} value={form.data_promessa} onChange={e => F("data_promessa", e.target.value)} min={new Date().toISOString().slice(0, 10)} />
+                <InputBR type="date" style={inpStyle} value={form.data_promessa} onChange={v => F("data_promessa", v)} min={new Date().toISOString().slice(0, 10)} />
               </div>
             )}
             <div>
               <label style={lbl}>Giro de Carteira (dias)</label>
-              <input type="number" style={inpStyle} value={form.giro_carteira_dias} onChange={e => F("giro_carteira_dias", e.target.value)} placeholder="0 = sem giro" min="0" max="365" />
+              <InputBR type="value" style={inpStyle} value={form.giro_carteira_dias} onChange={v => F("giro_carteira_dias", v)} placeholder="0 = sem giro" min="0" max="365" />
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
@@ -1151,9 +1152,9 @@ function FilaHistorico() {
         </select>
         {filtroData === "custom" && (
           <>
-            <input type="date" style={inp2} value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
+            <InputBR type="date" style={inp2} value={dataInicio} onChange={setDataInicio} />
             <span style={{ color: "#94a3b8" }}>até</span>
-            <input type="date" style={inp2} value={dataFim} onChange={e => setDataFim(e.target.value)} />
+            <InputBR type="date" style={inp2} value={dataFim} onChange={setDataFim} />
           </>
         )}
         <div style={{ flex: 1 }} />

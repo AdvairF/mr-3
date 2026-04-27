@@ -1,6 +1,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import Btn from "./ui/Btn.jsx";
+import InputBR from "./ui/InputBR.jsx";
 import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import TabelaParcelasEditaveis from "./TabelaParcelasEditaveis.jsx";
 import { adicionarDocumento } from "../services/contratos.js";
@@ -145,13 +146,13 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         {/* Campo 3: Valor */}
         <div>
           <label style={labelStyle}>Valor (R$) *</label>
-          <input
-            type="number"
+          <InputBR
+            type="value"
             min="0.01"
             step="0.01"
             placeholder="0,00"
             value={valor}
-            onChange={e => setValor(e.target.value)}
+            onChange={setValor}
             style={inputStyle}
           />
         </div>
@@ -159,10 +160,10 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         {/* Campo 4: Data de Emissão */}
         <div>
           <label style={labelStyle}>Data de Emissão *</label>
-          <input
+          <InputBR
             type="date"
             value={dataEmissao}
-            onChange={e => setDataEmissao(e.target.value)}
+            onChange={setDataEmissao}
             style={inputStyle}
           />
         </div>
@@ -170,13 +171,13 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
         {/* Campo 5: Nº de Parcelas (Phase 7.5 D-03) */}
         <div>
           <label style={labelStyle}>Nº de Parcelas *</label>
-          <input
-            type="number"
+          <InputBR
+            type="value"
             min="1"
             max="999"
             placeholder="Ex.: 3"
             value={numParcelas}
-            onChange={e => { setNumParcelas(e.target.value); setParcelasCustom(null); }}
+            onChange={v => { setNumParcelas(v); setParcelasCustom(null); }}
             style={inputStyle}
           />
         </div>

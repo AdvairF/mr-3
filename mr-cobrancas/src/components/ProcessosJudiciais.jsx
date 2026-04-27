@@ -13,6 +13,7 @@ import {
 } from "../services/processosJudiciais.js";
 import { calcularSaldoDevedorAtualizado } from "../utils/devedorCalc.js";
 import { UFS } from "../utils/constants.js";
+import InputBR from "./ui/InputBR.jsx";
 
 const fmt = (v) => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
@@ -378,10 +379,10 @@ export default function ProcessosJudiciais({ devedores = [], credores = [], paga
                       >
                         {["PENDENTE", "CITADO", "AR_NEGATIVO", "EDITAL", "DESISTIDO"].map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      <input
+                      <InputBR
                         type="date"
                         value={row.data_citacao || ""}
-                        onChange={e => handleAtualizarCitacao(row.id, { ...row, data_citacao: e.target.value })}
+                        onChange={v => handleAtualizarCitacao(row.id, { ...row, data_citacao: v })}
                         style={{ fontSize: 11, padding: "3px 8px", borderRadius: 7, border: "1px solid #e2e8f0" }}
                       />
                     </div>
@@ -496,7 +497,7 @@ export default function ProcessosJudiciais({ devedores = [], credores = [], paga
                 </div>
                 <div>
                   <label style={labelStyle}>Próximo Prazo</label>
-                  <input type="date" value={formAndamento.prazo} onChange={e => setFormAndamento(f => ({ ...f, prazo: e.target.value }))} style={inputStyle} />
+                  <InputBR type="date" value={formAndamento.prazo} onChange={v => setFormAndamento(f => ({ ...f, prazo: v }))} style={inputStyle} />
                 </div>
               </div>
               <div style={{ marginBottom: 12 }}>
@@ -757,11 +758,11 @@ function ModalNovoProcesso({ form, setForm, credores, salvando, modoEdicao, onSa
           </div>
           <div>
             <label style={labelStyle}>Valor da Causa</label>
-            <input type="number" value={form.valor_causa || ""} onChange={e => F("valor_causa", e.target.value)} placeholder="0.00" style={inputStyle} />
+            <InputBR type="value" value={form.valor_causa || ""} onChange={v => F("valor_causa", v)} placeholder="0.00" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Data de Distribuição</label>
-            <input type="date" value={form.data_distribuicao || ""} onChange={e => F("data_distribuicao", e.target.value)} style={inputStyle} />
+            <InputBR type="date" value={form.data_distribuicao || ""} onChange={v => F("data_distribuicao", v)} style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Status</label>
@@ -846,7 +847,7 @@ function ModalVincularDevedor({ devedores, idsVinculados, form, setForm, busca, 
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={labelStyle}>Data de Citação</label>
-            <input type="date" value={form.dataCitacao || ""} onChange={e => F("dataCitacao", e.target.value)} style={inputStyle} />
+            <InputBR type="date" value={form.dataCitacao || ""} onChange={v => F("dataCitacao", v)} style={inputStyle} />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={labelStyle}>Observação</label>
