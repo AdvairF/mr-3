@@ -43,6 +43,7 @@ export default function NovoContrato({ devedores, credores, onCarregarTudo, onVo
 
   async function handleSalvar() {
     if (!devedor_id) { toast("Selecione o devedor.", { icon: "⚠️" }); return; }
+    if (!credor_id)  { toast("Selecione o credor.",  { icon: "⚠️" }); return; }
     setSalvando(true);
     try {
       const payload = {
