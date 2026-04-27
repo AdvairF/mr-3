@@ -402,43 +402,14 @@ Plans:
 **UI hint**: yes (componente novo `DevedoresDoContrato` em DetalheContrato + Modal wizard D-pre-13 promoção a PRINCIPAL + listagem inline ModuloContratos + Pessoas saldo cheio para não-PRINCIPAL + DetalheDivida read-only)
 **Status**: **SHIPPED** 2026-04-26 — tag `v1.4-phase7.13` em `ba20aa2` pai + `b6fbe20` submódulo. Smoke prod mrcobrancas.com.br PASS. 7 commits cumulativos (6 feat 07.13a-f + 1 fix 07.13f.bug). 16 files +1332/-31. 34/34 tests PASS. D-01 motor INTOCADO cumulativo. Schema zero-diff. 14 D-pre + D-pre-15 deferred. 3 deviations registradas (audit pré-execute + junction pré-existente corrupta + fix-forward 07.13f.bug). UAT visual completo via 2 PAUSAs internas. 3 memory feedbacks novos. Ver `07.13-LEARNINGS.md` (11 decisions + 7 lessons + 9 patterns + 7 surprises).
 
-### Phase 7.14: Blindagens de Integridade de Dados — v1.4 (BACKLOG, NOVA 2026-04-26)
-**Goal**: Phase consolidada de blindagens de integridade descoberta durante UAT pós-ship da Phase 7.13. 3 sub-itens semanticamente conectados (validação de integridade) que features anteriores expuseram. Phase grande única — audit pre-execute identifica dados órfãos antes de aplicar NOT NULL constraints.
-
-**Sub-item 1 — Soft delete de Pessoas com dependências (BUG BLOQUEANTE em prod):**
-- **Causa raiz:** DELETE em `devedores` viola FK `eventos_andamento_devedor_id_fkey` (e provavelmente outras: `credores`, `contratos_dividas`, `documentos_contrato`, `devedores_dividas`, `devedores_vinculados`, `processos_devedores`).
-- **Erro reproduzido em prod** ao tentar excluir TRADIO PAGAMENTOS LTDA via UI.
-- **Estratégia:** soft delete via coluna `devedores.deleted_at TIMESTAMPTZ`. UI "Excluir" marca `deleted_at=NOW()`. Listagens filtram `deleted_at IS NULL`. Histórico/eventos_andamento preservados intactos.
-- **Justificativa forense:** NUNCA apagar histórico jurídico (prescrição, defesa, auditoria). Pattern padrão em domínio jurídico.
-- **Pre-execute audit obrigatório:** listar TODAS as FKs apontando pra `devedores` antes do PLAN. Decidir CASCADE vs soft-delete por tabela.
-
-**Sub-item 2 — Remover botão "+ Dívida" do módulo Dívidas (criação solta):**
-- **Estado atual:** botão "+ Dívida" no `ModuloDividas` permite criar dívida sem `contrato_id`.
-- **Comportamento desejado:** dívida SEMPRE pertence a contrato. Criar dívida = criar via DetalheContrato → "+ Adicionar Documento".
-- **Fix:** remover botão "+ Dívida" do `ModuloDividas`.
-- **Pre-execute audit SQL:** `SELECT COUNT(*) FROM dividas WHERE contrato_id IS NULL` — se > 0, decidir backfill (criar contrato sintético) ou DELETE com warning ao usuário.
-- **Validação schema:** `ALTER TABLE dividas ALTER COLUMN contrato_id SET NOT NULL` (após backfill se necessário).
-
-**Sub-item 3 — Validar criação de contrato exige devedor + credor:**
-- **Estado atual:** contrato pode ser salvo com `devedor_id=null` ou `credor_id=null`.
-- **Comportamento desejado:** form bloqueia salvar se ambos não preenchidos.
-- **Fix:** validação app-level no `DetalheContrato.handleSalvar`. UI: Toast/Modal "Devedor e Credor são obrigatórios".
-- **Pre-execute audit SQL:** contratos órfãos sem devedor/credor existem? Backfill ou bloqueio + erro semântico.
-- **Validação schema:** `ALTER TABLE contratos_dividas ALTER COLUMN devedor_id SET NOT NULL` + `ALTER COLUMN credor_id SET NOT NULL` (após audit).
-
-**Arquitetura:** phase grande única com 3 sub-itens semanticamente conectados. Migration consolidada em 1 arquivo SQL (soft delete + 2 NOT NULLs). Audit phase pre-execute identifica dados órfãos antes de aplicar constraints.
-
-**Risk:** ALTO (3 mudanças de schema; potencial impacto em dados em prod se órfãos existem).
-**Estimativa:** 2-3 sessões.
-**Severidade:** ALTA — sub-item 1 é bug bloqueante real (usuário não consegue excluir devedores). Sub-itens 2/3 evitam corrupção futura.
-
-**Depends on:** nenhum (standalone).
-**Blocks:** sub-item 1 bloqueia operação CRUD de Pessoas em prod. Pode justificar **priorizar acima de Phase 8** quando v1.4 milestone fechar.
-**Requirements:** descobertos durante UAT Phase 7.13 (lição registrada em `memory/feedback_blindagens_integridade_apos_funcionamento.md` — phases que adicionam features expõem lacunas de validação pré-existentes).
-**Decisions:** TBD em CONTEXT.md futura — não criada nesta sessão (decisão usuário 2026-04-26: fica no backlog até decisão de prioridade na próxima sessão).
-**Plans:** 2-3 plans prováveis (audit + impl + UAT/bump). Pre-execute walkthrough mental DEVE incluir "tentar quebrar" (criar inválido, deletar com referência, atalho de UI legacy).
-**UI hint:** yes (Modal validation no DetalheContrato + remoção de botão em ModuloDividas + UX de soft-delete em Pessoas).
-**Status:** Backlog 2026-04-26 — descoberto durante UAT Phase 7.13 em prod. **Severidade ALTA pelo sub-item 1 (bug bloqueante)**.
+### Phase 7.14: Blindagens de Integridade de Dados (INSERTED)
+**Goal**: Fechar lacunas de validação pré-existentes que afloraram quando features novas (7.13 múltiplos devedores) começaram a exercitar caminhos pouco testados. 4 sub-itens semanticamente conectados: (1) soft delete devedor via `deleted_at TIMESTAMPTZ` — bypassa bug bloqueante prod `eventos_andamento_devedor_id_fkey` sem precisar fixar 12 FKs uma a uma; (2) remover botão "+ Nova Dívida" obsoleto pós-7.5/7.6/7.13 (zero órfãos confirmados em prod); (3) validar criação contrato (UI guard + service throw, defense in depth, lição `db_integration_gate_missing`); (4) paste-friendly BR via `parseInputBR.js` + wrapper `<InputBR>` (escopo restrito a date + value, ~24 inputs; CPF/CNPJ/CEP/tel mantém mask existente). **D-pre-11 exceção forense:** ProcessosJudiciais preserva devedor soft-deleted no polo passivo com badge "Inativo" cinza (advogado pode reabrir caso, defender ação revisional, calcular prescrição). **D-pre-12:** App.jsx:3947 `<DividaForm>` (drawer Pessoas) preservado como caminho legacy aceitável (não cria órfã, herda contrato_id do contexto). **D-01 motor 100% intocado** (gate dual C1 diff + C2 --name-only).
+**Depends on**: nenhum (standalone). Lições aplicadas pre-execute: `blindagens_integridade_apos_funcionamento` (esta phase é a consequência) + `cross_entity_uat_isolation` + `helper_fanout_must_cover_motor_inputs` + `db_integration_gate_missing`.
+**Requirements**: (bug bloqueante DELETE devedor em prod descoberto durante UAT 7.13; validações schema dormentes expostas; fricção paste BR `DD/MM/AAAA` e `R$ 1.234,56` reportada em uso real)
+**Decisions**: ver `.planning/phases/07.14-blindagens-de-integridade-de-dados/07.14-CONTEXT.md` (discuss locked 2026-04-27, 12 D-pre — D-pre-1..D-pre-12 — incluindo D-pre-11 exceção forense ProcessosJudiciais e D-pre-12 preservação App.jsx:3947 drawer Pessoas; investigação SQL prod confirma 6 devedores total + zero órfãos `dividas.contrato_id IS NULL` + bug raiz `eventos_andamento_devedor_id_fkey` sem CASCADE)
+**Plans**: 4 plans separados (pattern 7.13 — sub-itens com baseline distinto, commits atômicos bisect-able). Ordem sugerida 02 → 03 → 01 → 04. Total 17-23 tasks, 4-6 commits atômicos minimum. autonomous:false.
+**UI hint**: yes (handler `excluirDevedor` vira UPDATE `deleted_at` + badge "Inativo" forense em ProcessosJudiciais.jsx + remoção botão "+ Nova Dívida" + delete `NovaDivida.jsx` + validação UI `NovoContrato.handleSalvar` + wrapper novo `<InputBR>` em `src/components/ui/` + helper novo `src/utils/parseInputBR.js` com 2 parsers).
+**Status**: **INSERTED** 2026-04-27 — CONTEXT.md drafted (363 linhas, 12 D-pre, 4 plans dimensionados, 22 SCs UAT propostos). Pendente: `/gsd-plan-phase 7.14`. **Severidade ALTA** pelo sub-item 1 (bug bloqueante real DELETE prod). Banco minúsculo (6 devedores) reduz risco de migration.
 
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
