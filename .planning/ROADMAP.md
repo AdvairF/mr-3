@@ -391,7 +391,7 @@ Plans:
 **Decisions:** TBD em CONTEXT.md futura. Escopo combinado (sub-bugs 1+2): helper `calcularValorAtualizadoCustasAvulsas` (sub-bug 1) + schema migration `custas[]` separar `pago_advogado`/`quitado_devedor` + Modal NovaCusta refatorado + motor opt-in para `quitado_devedor` (sub-bug 2). Regressão test trivial; UAT visual com custas avulsas conhecidas (drift ≤ centavo INPC oficial).
 **Plans:** 2-3 plans prováveis (sub-bug 1 + sub-bug 2 podem ser commits/plans separados ou consolidados; decisão pós-discuss). Escopo médio-alto.
 **UI hint:** yes (TabelaDividas + DetalheDivida exibem novo valor; Modal NovaCusta refatorado; coluna saldo de custas reflete `quitado_devedor`)
-**Status:** Backlog 2026-04-25 (sub-bug 1) + EXPANDIDA 2026-04-26 com sub-bug 2 (descoberto durante UAT Phase 7.13). Sem prioridade fixa; **sub-bug 2 pode justificar priorizar pós-ship 7.13**.
+**Status:** Backlog 2026-04-25 (sub-bug 1) + EXPANDIDA 2026-04-26 com sub-bug 2 (descoberto durante UAT Phase 7.13). Sem prioridade fixa. **Phase 7.14 (Blindagens de Integridade — bug bloqueante de DELETE em prod) pode vir ANTES**: sub-item 1 da 7.14 é bug ATIVO impedindo operação CRUD de Pessoas em prod (severidade ALTA imediata), enquanto 7.10.bug2 sub-bug 2 é perda de receita latente (severidade ALTA cumulativa). Decisão de ordem na próxima sessão.
 
 ### Phase 7.13: Múltiplos Devedores por Contrato (Solidariedade Passiva) (INSERTED)
 **Goal**: Suporte a N devedores por contrato com solidariedade passiva (CC art. 264-285 e 818-839). Hoje `contratos_dividas.devedor_id` é single-FK BIGINT NOT NULL. Phase introduz capacidade do advogado cadastrar múltiplos devedores (PRINCIPAL + COOBRIGADO/AVALISTA/FIADOR/CONJUGE/OUTRO) num mesmo contrato, refletido em UI cadastro (DetalheContrato componente multi-devedor + wizard D-pre-13), listagens (ModuloContratos inline `"Mendes (Principal), João (Fiador)"` + Pessoas com saldo cheio para fiador) e detalhes (DetalheDivida read-only). **Implementação reusa junction `devedores_dividas` existente** (Migrações 001+002, 6 papéis + coluna responsabilidade SOLIDARIA/SUBSIDIARIA/DIVISIVEL) — zero migration nova, schema zero-diff. Vinculação no contrato = fan-out N rows na junction (1 por dívida). Carteira Total Dashboard preserva dedupe atual via `papel=PRINCIPAL` filter (App.jsx L597-608) — zero mudança Dashboard. Wizard 2-steps obrigatório (D-pre-13) para promoção a PRINCIPAL com PRINCIPAL anterior existente: dropdown 5 papéis sem default, sobrepõe demoção silenciosa. **D-01 motor 100% intocado.**
@@ -400,7 +400,45 @@ Plans:
 **Decisions**: ver `.planning/phases/07.13-multiplos-devedores-contrato-solidariedade-passiva/07.13-CONTEXT.md` (discuss locked 2026-04-26, D-01..D-34 herdadas + D-pre-1..D-pre-14 novas; investigação reverteu 4 das 8 decisões pre-locked do briefing após descoberta da junction `devedores_dividas` JÁ existente com 6 papéis + responsabilidade integrada em Dashboard anti-dupla-contagem)
 **Plans**: 2 (07.13-01 impl com 6 commits atômicos no submódulo + Final Gates Task verificação; 07.13-02 UAT 10 SCs + 2 SC-iso cross-entity + bump com pausas humanas)
 **UI hint**: yes (componente novo `DevedoresDoContrato` em DetalheContrato + Modal wizard D-pre-13 promoção a PRINCIPAL + listagem inline ModuloContratos + Pessoas saldo cheio para não-PRINCIPAL + DetalheDivida read-only)
-**Status**: Planned 2026-04-26 — awaiting /gsd-plan-phase 7.13
+**Status**: **SHIPPED** 2026-04-26 — tag `v1.4-phase7.13` em `ba20aa2` pai + `b6fbe20` submódulo. Smoke prod mrcobrancas.com.br PASS. 7 commits cumulativos (6 feat 07.13a-f + 1 fix 07.13f.bug). 16 files +1332/-31. 34/34 tests PASS. D-01 motor INTOCADO cumulativo. Schema zero-diff. 14 D-pre + D-pre-15 deferred. 3 deviations registradas (audit pré-execute + junction pré-existente corrupta + fix-forward 07.13f.bug). UAT visual completo via 2 PAUSAs internas. 3 memory feedbacks novos. Ver `07.13-LEARNINGS.md` (11 decisions + 7 lessons + 9 patterns + 7 surprises).
+
+### Phase 7.14: Blindagens de Integridade de Dados — v1.4 (BACKLOG, NOVA 2026-04-26)
+**Goal**: Phase consolidada de blindagens de integridade descoberta durante UAT pós-ship da Phase 7.13. 3 sub-itens semanticamente conectados (validação de integridade) que features anteriores expuseram. Phase grande única — audit pre-execute identifica dados órfãos antes de aplicar NOT NULL constraints.
+
+**Sub-item 1 — Soft delete de Pessoas com dependências (BUG BLOQUEANTE em prod):**
+- **Causa raiz:** DELETE em `devedores` viola FK `eventos_andamento_devedor_id_fkey` (e provavelmente outras: `credores`, `contratos_dividas`, `documentos_contrato`, `devedores_dividas`, `devedores_vinculados`, `processos_devedores`).
+- **Erro reproduzido em prod** ao tentar excluir TRADIO PAGAMENTOS LTDA via UI.
+- **Estratégia:** soft delete via coluna `devedores.deleted_at TIMESTAMPTZ`. UI "Excluir" marca `deleted_at=NOW()`. Listagens filtram `deleted_at IS NULL`. Histórico/eventos_andamento preservados intactos.
+- **Justificativa forense:** NUNCA apagar histórico jurídico (prescrição, defesa, auditoria). Pattern padrão em domínio jurídico.
+- **Pre-execute audit obrigatório:** listar TODAS as FKs apontando pra `devedores` antes do PLAN. Decidir CASCADE vs soft-delete por tabela.
+
+**Sub-item 2 — Remover botão "+ Dívida" do módulo Dívidas (criação solta):**
+- **Estado atual:** botão "+ Dívida" no `ModuloDividas` permite criar dívida sem `contrato_id`.
+- **Comportamento desejado:** dívida SEMPRE pertence a contrato. Criar dívida = criar via DetalheContrato → "+ Adicionar Documento".
+- **Fix:** remover botão "+ Dívida" do `ModuloDividas`.
+- **Pre-execute audit SQL:** `SELECT COUNT(*) FROM dividas WHERE contrato_id IS NULL` — se > 0, decidir backfill (criar contrato sintético) ou DELETE com warning ao usuário.
+- **Validação schema:** `ALTER TABLE dividas ALTER COLUMN contrato_id SET NOT NULL` (após backfill se necessário).
+
+**Sub-item 3 — Validar criação de contrato exige devedor + credor:**
+- **Estado atual:** contrato pode ser salvo com `devedor_id=null` ou `credor_id=null`.
+- **Comportamento desejado:** form bloqueia salvar se ambos não preenchidos.
+- **Fix:** validação app-level no `DetalheContrato.handleSalvar`. UI: Toast/Modal "Devedor e Credor são obrigatórios".
+- **Pre-execute audit SQL:** contratos órfãos sem devedor/credor existem? Backfill ou bloqueio + erro semântico.
+- **Validação schema:** `ALTER TABLE contratos_dividas ALTER COLUMN devedor_id SET NOT NULL` + `ALTER COLUMN credor_id SET NOT NULL` (após audit).
+
+**Arquitetura:** phase grande única com 3 sub-itens semanticamente conectados. Migration consolidada em 1 arquivo SQL (soft delete + 2 NOT NULLs). Audit phase pre-execute identifica dados órfãos antes de aplicar constraints.
+
+**Risk:** ALTO (3 mudanças de schema; potencial impacto em dados em prod se órfãos existem).
+**Estimativa:** 2-3 sessões.
+**Severidade:** ALTA — sub-item 1 é bug bloqueante real (usuário não consegue excluir devedores). Sub-itens 2/3 evitam corrupção futura.
+
+**Depends on:** nenhum (standalone).
+**Blocks:** sub-item 1 bloqueia operação CRUD de Pessoas em prod. Pode justificar **priorizar acima de Phase 8** quando v1.4 milestone fechar.
+**Requirements:** descobertos durante UAT Phase 7.13 (lição registrada em `memory/feedback_blindagens_integridade_apos_funcionamento.md` — phases que adicionam features expõem lacunas de validação pré-existentes).
+**Decisions:** TBD em CONTEXT.md futura — não criada nesta sessão (decisão usuário 2026-04-26: fica no backlog até decisão de prioridade na próxima sessão).
+**Plans:** 2-3 plans prováveis (audit + impl + UAT/bump). Pre-execute walkthrough mental DEVE incluir "tentar quebrar" (criar inválido, deletar com referência, atalho de UI legacy).
+**UI hint:** yes (Modal validation no DetalheContrato + remoção de botão em ModuloDividas + UX de soft-delete em Pessoas).
+**Status:** Backlog 2026-04-26 — descoberto durante UAT Phase 7.13 em prod. **Severidade ALTA pelo sub-item 1 (bug bloqueante)**.
 
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
