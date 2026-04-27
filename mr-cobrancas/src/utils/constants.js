@@ -11,6 +11,23 @@ export const STATUS_DEV = [
   { v: "ajuizado",       l: "Ajuizado",            cor: "#c2410c", bg: "#ffedd5" },
 ];
 
+// ─── STATUS CONTRATO (Phase 7.13b D-pre-4) ────────────────────
+export const STATUS_CONTRATO = [
+  { v: "em_cobranca",     l: "Em Cobrança",      cor: "#64748b", bg: "#f1f5f9" },
+  { v: "em_localizacao",  l: "Em Localização",   cor: "#2563eb", bg: "#dbeafe" },
+  { v: "em_negociacao",   l: "Em Negociação",    cor: "#d97706", bg: "#fef3c7" },
+  { v: "notificado",      l: "Notificado",       cor: "#7c3aed", bg: "#ede9fe" },
+  { v: "ajuizado",        l: "Ajuizado",         cor: "#c2410c", bg: "#ffedd5" },
+  { v: "quitado",         l: "Quitado",          cor: "#065f46", bg: "#d1fae5" },
+  { v: "arquivado",       l: "Arquivado",        cor: "#475569", bg: "#e2e8f0" },
+];
+
+// STATUS terminais — Fila operacional EXCLUI; toggle UI Plan 02 default ON esconde quitado/arquivado
+export const STATUS_CONTRATO_TERMINAIS = ["quitado", "arquivado", "ajuizado"];
+
+// STATUS ativos — usados em listarContratosParaFila / entrarNaFila / reciclarContratos
+export const STATUS_CONTRATO_ATIVOS = ["em_cobranca", "em_localizacao", "em_negociacao", "notificado"];
+
 // ─── UFS ──────────────────────────────────────────────────────
 export const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 

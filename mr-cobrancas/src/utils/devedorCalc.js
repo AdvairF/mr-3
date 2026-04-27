@@ -852,3 +852,16 @@ export function calcularDetalheEncargosContrato(dividasDoContrato, allPagamentos
   const pseudoDevedor = { dividas: dividasDoContrato || [] };
   return calcularDetalheEncargos(pseudoDevedor, pagamentosFiltrados, hoje);
 }
+
+/**
+ * Phase 7.13b D-pre-12: helper thin para Fila por Contrato.
+ * Compõe motor existente — NÃO modifica calcularDetalheEncargos (D-01 INTOCADO).
+ * Reduz ruído em callsites da Fila (listarContratosParaFila + calcularScoreContrato + atualizarValoresAtrasados).
+ *
+ * @param {Array}  dividasDoContrato    parcelas/dívidas do contrato (lista de rows da tabela `dividas`)
+ * @param {Array}  allPagamentosDivida  lista global de pagamentos_divida (adapter filtra por divida_id)
+ * @param {string} hoje                 "YYYY-MM-DD"
+ * @returns {number}                    saldo atualizado em R$ (já com encargos aplicados pelo motor)
+ */
+export const calcularSaldoContratoAtualizado = (dividasDoContrato, allPagamentosDivida, hoje) =>
+  calcularDetalheEncargosContrato(dividasDoContrato, allPagamentosDivida, hoje).saldoAtualizado;
