@@ -365,6 +365,11 @@ export default function ProcessosJudiciais({ devedores = [], credores = [], paga
                       {dev.cpf_cnpj && <p style={{ fontSize: 11, color: "#94a3b8", margin: "2px 0 0" }}>{dev.cpf_cnpj}</p>}
                     </div>
                     <BadgePapel papel={row.papel} />
+                    {dev.deleted_at && (
+                      <span style={{ background: "#f1f5f9", color: "#64748b", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99 }}>
+                        Inativo
+                      </span>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <select
                         value={row.status_citacao || "PENDENTE"}
