@@ -8389,7 +8389,7 @@ export default function App() {
     if (!silencioso) setCarregando(true);
     try {
       const [devs, creds, procs, ands, reg, lems, pgtos, divs, contratos, documentos, pgtosDivida, junctionRows] = await Promise.all([
-        dbGet("devedores"),
+        dbGet("devedores", "deleted_at=is.null"),
         dbGet("credores"),
         dbGet("processos"),
         dbGet("andamentos"),
