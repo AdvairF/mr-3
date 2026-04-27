@@ -583,7 +583,7 @@ async function listarFila(filtros = {}) {
 
     const [contratos, devedores] = await Promise.all([
       contratoIds.length > 0 ? dbGet("contratos", `id=in.(${contratoIds.join(",")})`) : Promise.resolve([]),
-      devedorIds.length > 0 ? dbGet("devedores", `id=in.(${devedorIds.join(",")})`) : Promise.resolve([]),
+      devedorIds.length > 0 ? dbGet("devedores", `id=in.(${devedorIds.join(",")})&deleted_at=is.null`) : Promise.resolve([]),
     ]);
 
     const contratoMap = Object.fromEntries(contratos.map((c) => [c.id, c]));
