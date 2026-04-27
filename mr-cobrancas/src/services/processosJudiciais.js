@@ -67,6 +67,13 @@ export async function removerDevedor(rowId) {
 }
 
 export async function listarDevedores(processoId) {
+  // D-pre-11 (Phase 7.14): exceção forense — JOIN aninhado devedor:devedores(...)
+  // intencionalmente SEM filtro deleted_at=is.null. Processo judicial já cadastrado
+  // preserva devedor soft-deleted no polo passivo (histórico forense para reabertura,
+  // ação revisional, prescrição). UI ProcessosJudiciais.jsx exibe badge "Inativo" cinza
+  // no chip quando dev.deleted_at é truthy. Criação NOVA de processo aplica filtro
+  // normal via lookup global (App.jsx:8392 D-pre-9 callsite 1) — não permite adicionar
+  // inativo como novo réu.
   return sb(
     `${TABLE_DEV}?processo_id=eq.${processoId}&select=*,devedor:devedores(id,nome,cpf_cnpj,telefone,email)&order=created_at.asc`
   );
