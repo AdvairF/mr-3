@@ -3497,7 +3497,7 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
   async function excluirDevedor(d) {
     if (!await confirm(`Excluir "${d.nome}"?`)) return;
     try {
-      await dbDelete("devedores", d.id);
+      await dbUpdate("devedores", d.id, { deleted_at: new Date().toISOString() });
     } catch (e) {
       toast.error("Erro ao excluir devedor: " + (e?.message || e));
       return;
