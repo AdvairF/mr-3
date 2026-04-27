@@ -6,7 +6,7 @@ const testIds = { devedor: null, contrato: null, parcelas: [], eventos: [], oper
 
 async function setup() {
   // 1. Buscar um devedor existente para lookup (nao criar — tabela legada BIGINT)
-  const devedores = await dbGet("devedores", "select=id&limit=1");
+  const devedores = await dbGet("devedores", "select=id&limit=1&deleted_at=is.null");
   if (!devedores.length) throw new Error("Nenhum devedor encontrado para teste");
   testIds.devedor = devedores[0].id;
   console.log(`[SETUP] Usando devedor existente: id=${testIds.devedor}`);
