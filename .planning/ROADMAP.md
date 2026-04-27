@@ -411,6 +411,21 @@ Plans:
 **UI hint**: yes (handler `excluirDevedor` vira UPDATE `deleted_at` + badge "Inativo" forense em ProcessosJudiciais.jsx + remoção botão "+ Nova Dívida" + delete `NovaDivida.jsx` + validação UI `NovoContrato.handleSalvar` + wrapper novo `<InputBR>` em `src/components/ui/` + helper novo `src/utils/parseInputBR.js` com 2 parsers).
 **Status**: **INSERTED** 2026-04-27 — CONTEXT.md drafted (363 linhas, 12 D-pre, 4 plans dimensionados, 22 SCs UAT propostos). Pendente: `/gsd-plan-phase 7.14`. **Severidade ALTA** pelo sub-item 1 (bug bloqueante real DELETE prod). Banco minúsculo (6 devedores) reduz risco de migration.
 
+### Phase 7.14b: Remover botão "+Nova Dívida" do drawer Pessoas/Devedores (BACKLOG, NOVA 2026-04-27)
+**Goal**: Remover callsite legacy `<DividaForm>` em `App.jsx:3947` (drawer Pessoas/Devedores → aba Dívidas) que contradiz spirit de D-pre-6 da 7.14 ("dívida sempre via DetalheContrato → +Adicionar Documento"). Preservado como caminho legacy aceitável durante 7.14 via D-pre-12 — usuário considerou após Plan 02 7.14 UAT que o callsite deve ser removido em phase futura.
+**Severidade**: BAIXA (UX consistência — não cria dívida órfã, herda contrato_id do contexto)
+**Trigger**: usuário considerou após Plan 02 7.14 UAT que esse callsite legacy contradiz spirit D-pre-6
+**Decisão da sessão**: deferred pra 7.14b por princípio anti-mid-flight (lição 7.13 Q1 reconsidered + lição 7.13 sub-item formulário inline — não expandir surface de phase ativa).
+**Depends on**: Phase 7.14 SHIPPED em prod + 1-2 dias de uso real do usuário (validar se há regressão de UX antes de remover)
+**Escopo (~15min execução)**:
+- Remover botão "+ Nova Dívida" e form em `App.jsx:3947` + linha 32 import `DividaForm`
+- Grep verificação zero refs `DividaForm` em `App.jsx`
+- Decidir: deletar `DividaForm.jsx` (consumer único agora removido) OU manter por aceitação legacy
+- 1 SC UAT (drawer Pessoas/Devedores → aba Dívidas → form ausente)
+**Plans**: TBD (1 plan trivial)
+**UI hint**: yes (remoção UI App.jsx drawer)
+**Status**: Backlog 2026-04-27 — reabrir após 7.14 SHIP em prod e usuário usar por 1-2 dias
+
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
 **Depends on**: Phase 7 (dados de pagamentos por contrato necessários para totais e lista de pagamentos recebidos no PDF)
