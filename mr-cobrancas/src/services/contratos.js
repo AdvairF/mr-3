@@ -109,6 +109,8 @@ export async function registrarEvento(contratoId, tipoEvento, snapshotCampos) {
 }
 
 export async function criarContrato(payload) {
+  if (!payload.devedor_id) throw new Error("criarContrato: devedor_id obrigatório");
+  if (!payload.credor_id)  throw new Error("criarContrato: credor_id obrigatório");
   const res = await dbInsert(TABLE, payload);
   const contrato = Array.isArray(res) ? res[0] : res;
   if (contrato?.id) {
