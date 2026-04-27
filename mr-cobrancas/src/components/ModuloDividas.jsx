@@ -2,7 +2,6 @@ import { useState } from "react";
 import FiltroDividas from "./FiltroDividas.jsx";
 import TabelaDividas from "./TabelaDividas.jsx";
 import DetalheDivida from "./DetalheDivida.jsx";
-import NovaDivida from "./NovaDivida.jsx";
 import Btn from "./ui/Btn.jsx";
 
 export default function ModuloDividas({ allDividas, devedores, credores, allPagamentos, hoje, onCarregarTudo, setTab }) {
@@ -38,9 +37,6 @@ export default function ModuloDividas({ allDividas, devedores, credores, allPaga
     setSelectedDivida(null);
   }
 
-  function handleNovaDivida() { setView("nova"); }
-  function handleVoltarDaNova() { setView("lista"); }
-
   return (
     <div style={{ padding: "4px 0 32px 0" }}>
       {view === "lista" && (
@@ -55,7 +51,6 @@ export default function ModuloDividas({ allDividas, devedores, credores, allPaga
                 {allDividas.filter(d => d.status === "em cobrança").length} em cobrança
               </span>
             </div>
-            <Btn onClick={handleNovaDivida} color="#059669" sm>+ Nova Dívida</Btn>
           </div>
 
           {/* Filter bar */}
@@ -86,15 +81,6 @@ export default function ModuloDividas({ allDividas, devedores, credores, allPaga
           onVoltar={handleVoltar}
           onCarregarTudo={onCarregarTudo}
           setTab={setTab}
-        />
-      )}
-
-      {view === "nova" && (
-        <NovaDivida
-          devedores={devedores}
-          credores={credores}
-          onCarregarTudo={onCarregarTudo}
-          onVoltar={handleVoltarDaNova}
         />
       )}
     </div>
