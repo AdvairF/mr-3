@@ -420,6 +420,38 @@ Plans:
 **UI hint**: yes (rewrite `FilaDevedor.jsx` 4 telas — FilaPainel/FilaOperador/FilaAtendimento/FilaPesquisa — 1278 linhas; cards recalculados por contrato; toggle "Esconder quitados/arquivados" default ON; busca devedor.nome/cpf retornando contratos múltiplos; `DetalheContrato.jsx` view target sem mudança).
 **Status**: **INSERTED** 2026-04-27 — CONTEXT.md drafted (252 linhas, 12 D-pre, 3 plans dimensionados, 3 cenários UAT propostos). Pendente: `/gsd-plan-phase 7.13b`. **Severidade MÉDIA** (refactor estrutural — não bloqueia uso, mas alinha fonte de verdade). Banco minúsculo (5 devedores ativos) reduz risco de migration γ.
 
+### Phase 7.13c: Encargos — Contrato como Fonte Única (BACKLOG, NOVA 2026-04-28)
+**Severidade:** ALTA — bug sistêmico financeiro descoberto em UAT 7.13b. Saldo "atualizado" exibido em prod desde Phase 7.8 usa encargos das dívidas individuais (potencialmente stale/divergentes do contrato). Afeta 5 consumers: DetalheContrato + Pessoas + Detalhe-Devedor + Carteira Total Dashboard + FilaPainel/FilaPesquisa.
+
+⚠ **DECISÕES FINANCEIRAS RETROATIVAS:** Saldos exibidos pelo sistema desde Phase 7.8 (quando calcularDetalheEncargosContrato foi introduzido) podem estar incorretos para contratos onde encargos contratuais (contratos_dividas) divergem dos encargos por dívida (dividas). Recomenda-se auditar relatórios e decisões financeiras tomadas com base em valores exibidos pelo sistema antes do shipping da 7.13c.
+
+**Goal:** Resolver inconsistência sistêmica entre encargos cadastrados em contratos_dividas (verdade declarada pelo usuário) e encargos lidos pelo motor das dívidas individuais (path atual). Decidir arquitetura: motor lê do contrato OU adapters redirecionam dividas←contratos_dividas no fetch.
+
+**Trigger:** UAT 7.13b PAUSA #1-RETOMADA descobriu drift entre contratos_dividas (multa 2%, honor 10%) e dividas (multa 30%, honor 0%) no contrato M L FRIOS UUID 335a2ad2-9481-4836-a88a-55fbe6375827. Motor exibia saldo baseado em multa 30%.
+
+**Depends on:** Phase 7.13b SHIPPED + decisão arquitetural usuário sobre fonte única.
+
+**Investigação requerida (pre-discuss):**
+- Análise per-campo: quais encargos são per-CONTRATO (juros_am, multa, indice_correcao, honorarios, art523_opcao, data_inicio_atualizacao) vs quais ficam per-DIVIDA (data_vencimento, valor_total, json_id_legado, observacoes).
+- Investigar se dividas.juros_am_percentual / multa_percentual / honorarios_percentual / indice_correcao são DRIFT (cópia do contrato no momento da criação, não sincroniza quando contrato é editado) OU por design (alguma dívida pode ter encargo distinto — exigência forense).
+- Audit prod: quantos contratos têm drift? Quantos contratos têm dívidas com encargos heterogêneos entre si?
+
+**Decisão arquitetural pendente (D-pre-1 da 7.13c):**
+- Path A (recomendado se análise confirmar fonte única): motor lê encargos do contrato. Adapter dividasMap em App.jsx + listarContratosParaFila redireciona campos ← contratos_dividas (lookup por contrato_id). D-01 motor INTOCADO. Migration eventual: DROP campos redundantes em dividas.
+- Path B (se análise revelar uso forense por-dívida): preserva schema atual mas garante sincronização — UPDATE contratos_dividas cascade para dividas, OR validation que rejeita drift.
+- Path C (híbrido): dívida herda do contrato por default, override per-row possível com flag.
+
+**D-01 motor INTOCADO:** invariante cumulative preservado em todos os paths. Adapters mudam, motor não.
+
+**Plans esperados (a dimensionar em discuss-phase):**
+- Plan 01: análise prod + decisão arquitetural + UAT humano cruzando 5+ contratos com cálculo manual.
+- Plan 02: implementação adapter unificado em App.jsx + service Fila + qualquer outro consumer.
+- Plan 03: migration eventual + UAT cumulative + tag.
+
+**UI hint:** no — só fix de fonte de dados (UI permanece igual, mas com saldo correto).
+
+**Status:** BACKLOG 2026-04-28 — aguardando decisão usuário sobre escopo + arquitetura. Severidade ALTA bloqueia confiabilidade financeira do app.
+
 ### Phase 7.14b: Remover botão "+Nova Dívida" do drawer Pessoas/Devedores (BACKLOG, NOVA 2026-04-27)
 **Goal**: Remover callsite legacy `<DividaForm>` em `App.jsx:3947` (drawer Pessoas/Devedores → aba Dívidas) que contradiz spirit de D-pre-6 da 7.14 ("dívida sempre via DetalheContrato → +Adicionar Documento"). Preservado como caminho legacy aceitável durante 7.14 via D-pre-12 — usuário considerou após Plan 02 7.14 UAT que o callsite deve ser removido em phase futura.
 **Severidade**: BAIXA (UX consistência — não cria dívida órfã, herda contrato_id do contexto)
