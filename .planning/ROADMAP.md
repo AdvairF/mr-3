@@ -367,7 +367,7 @@ Plans:
 **UI hint**: no (callsites App.jsx + filter adapters + helper novo — UI render inalterado, valores cross-check via 7 pontos visuais)
 **Status**: Planned 2026-04-25 — awaiting /gsd-plan-phase 7.10bcd
 
-### Phase 7.10.bug2: Custas avulsas (`_so_custas:true`) UI bugs — DOIS sub-bugs (BACKLOG, EXPANDIDA 2026-04-26)
+### Phase 7.10.bug2: Custas avulsas (`_so_custas:true`) UI bugs — DOIS sub-bugs (BACKLOG, EXPANDIDA 2026-04-26, REVISADA 2026-04-28)
 
 **Sub-bug 1 — Saldo "Calculando..." indefinido em ModuloDividas/TabelaDividas/DetalheDivida (pré-existente desde Phase 7.9):**
 - **Causa raiz:** motor `calcularSaldosPorDivida` (`devedorCalc.js` L172-176) filtra `_so_custas` antes do cálculo → `saldosMap[id_so_custas] === undefined` → TabelaDividas L94-96 e DetalheDivida (similar) renderizam "Calculando..." indefinido.
@@ -377,7 +377,7 @@ Plans:
 **Sub-bug 2 — Semântica de quitação invertida (NOVO, descoberto durante UAT Phase 7.13 2026-04-26):**
 - **Estado atual:** custa marcada `pago=true` aparece como "Quitada R$ 0,00" na UI.
 - **Estado correto (advogado/forense):** `pago=true` significa "advogado pagou taxa ao judiciário com próprio dinheiro" (despesa adiantada do escritório). Custa CONTINUA SENDO DÍVIDA do devedor — deve mostrar valor original + correção monetária INPC + status "Em Cobrança", NÃO "Quitada R$ 0,00".
-- **Impacto forense (real):** advogado adianta custas processuais, depois cobra de volta do devedor com correção INPC. Sistema atual NÃO cobra correção de custas adiantadas — **perda potencial de receita**. Boolean único `pago` confunde 2 conceitos distintos do fluxo financeiro jurídico.
+- **Impacto forense (REVISADO 2026-04-28):** fluxo correto é advogado adianta custas processuais e cobra de volta do devedor com correção INPC. Audit técnico 2026-04-28 confirmou: motor `devedorCalc.js:432-444` e `:480-491` IMPLEMENTA esse fluxo corretamente — NÃO lê `c.pago`, soma todas custas com fator INPC. Bug é VISUAL/semântico apenas: badge "Pago em..." em `DetalheContrato.jsx:1115-1116` confunde QUEM pagou (advogado vs devedor) ao usuário operador. Sem perda de receita real. Boolean único `pago` confunde 2 conceitos distintos do fluxo financeiro jurídico no nível de UX.
 - **Fix arquitetural:** separar 2 conceitos em `custas[]` JSONB:
   - (a) `pago_advogado` boolean + `data_despesa` (quando advogado pagou ao judiciário; dispara correção INPC)
   - (b) `quitado_devedor` boolean + `data_quitacao_devedor` opcional (quando devedor reembolsou; ESSE zera saldo)
@@ -386,12 +386,12 @@ Plans:
 - Lição registrada em `memory/feedback_custas_semantica_quitacao_dual.md`. Lição transferível: phases que adicionam status `paid/quitado` devem perguntar **"paid POR QUEM e PARA QUEM?"** antes de assumir semântica única.
 
 **Depends on:** nenhum (standalone bugfix); independente de outras phases backlog
-**Blocks:** sub-bug 1 — nada crítico (UI mostra "Calculando..." em poucas linhas); **sub-bug 2 — receita real** (correção INPC de custas adiantadas não cobrada).
-**Severidade combinada:** **ALTA pelo sub-bug 2** (impacto financeiro real). Pode justificar **priorizar acima de Phase 8** quando v1.4 milestone fechar (decisão pós-7.13 ship).
+**Blocks:** sub-bug 1 — nada crítico (UI mostra "Calculando..." em poucas linhas); sub-bug 2 — UX confuso (badge "Pago em..." sugere quitação devedor quando é despesa adiantada do escritório). Audit 2026-04-28 desconfirmou hipótese inicial de "perda de receita real".
+**Severidade combinada:** **MÉDIA-BAIXA** (revisada 2026-04-28; era ALTA antes do audit). Bug visual/semântico — não financeiro real. **NÃO justifica priorizar acima de Phase 8** ou de phases arquiteturais (7.13c).
 **Decisions:** TBD em CONTEXT.md futura. Escopo combinado (sub-bugs 1+2): helper `calcularValorAtualizadoCustasAvulsas` (sub-bug 1) + schema migration `custas[]` separar `pago_advogado`/`quitado_devedor` + Modal NovaCusta refatorado + motor opt-in para `quitado_devedor` (sub-bug 2). Regressão test trivial; UAT visual com custas avulsas conhecidas (drift ≤ centavo INPC oficial).
 **Plans:** 2-3 plans prováveis (sub-bug 1 + sub-bug 2 podem ser commits/plans separados ou consolidados; decisão pós-discuss). Escopo médio-alto.
 **UI hint:** yes (TabelaDividas + DetalheDivida exibem novo valor; Modal NovaCusta refatorado; coluna saldo de custas reflete `quitado_devedor`)
-**Status:** Backlog 2026-04-25 (sub-bug 1) + EXPANDIDA 2026-04-26 com sub-bug 2 (descoberto durante UAT Phase 7.13). Sem prioridade fixa. **Phase 7.14 (Blindagens de Integridade — bug bloqueante de DELETE em prod) pode vir ANTES**: sub-item 1 da 7.14 é bug ATIVO impedindo operação CRUD de Pessoas em prod (severidade ALTA imediata), enquanto 7.10.bug2 sub-bug 2 é perda de receita latente (severidade ALTA cumulativa). Decisão de ordem na próxima sessão.
+**Status:** Backlog 2026-04-25 (sub-bug 1) + EXPANDIDA 2026-04-26 com sub-bug 2 + **REVISADA 2026-04-28** (severidade rebaixada ALTA → MÉDIA-BAIXA após audit técnico que confirmou motor cobra correção INPC corretamente — bug é apenas VISUAL/semântico em UI badge). Sem prioridade fixa. 7.13c (encargos arquitetural, ALTA verdadeira) prioritária acima desta. Phase 7.14 SHIPPED 2026-04-28 — não bloqueia mais.
 
 ### Phase 7.13: Múltiplos Devedores por Contrato (Solidariedade Passiva) (INSERTED)
 **Goal**: Suporte a N devedores por contrato com solidariedade passiva (CC art. 264-285 e 818-839). Hoje `contratos_dividas.devedor_id` é single-FK BIGINT NOT NULL. Phase introduz capacidade do advogado cadastrar múltiplos devedores (PRINCIPAL + COOBRIGADO/AVALISTA/FIADOR/CONJUGE/OUTRO) num mesmo contrato, refletido em UI cadastro (DetalheContrato componente multi-devedor + wizard D-pre-13), listagens (ModuloContratos inline `"Mendes (Principal), João (Fiador)"` + Pessoas com saldo cheio para fiador) e detalhes (DetalheDivida read-only). **Implementação reusa junction `devedores_dividas` existente** (Migrações 001+002, 6 papéis + coluna responsabilidade SOLIDARIA/SUBSIDIARIA/DIVISIVEL) — zero migration nova, schema zero-diff. Vinculação no contrato = fan-out N rows na junction (1 por dívida). Carteira Total Dashboard preserva dedupe atual via `papel=PRINCIPAL` filter (App.jsx L597-608) — zero mudança Dashboard. Wizard 2-steps obrigatório (D-pre-13) para promoção a PRINCIPAL com PRINCIPAL anterior existente: dropdown 5 papéis sem default, sobrepõe demoção silenciosa. **D-01 motor 100% intocado.**
