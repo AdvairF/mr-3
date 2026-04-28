@@ -462,6 +462,18 @@ function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
       .catch(() => setAllPagamentosDivida([]));
   }, [dividas]);
 
+  // Carrega histórico de eventos do banco no mount + on contrato.id change
+  // Paridade comportamental com HEAD pre-7.13b L570-581 (filter migrado para contrato_id — schema 7.13b D-pre-10).
+  // Limit=50 preservado de HEAD por paridade — paginação/limit configurable é phase futura se demandado.
+  useEffect(() => {
+    if (!contrato?.id) return;
+    dbGet("eventos_andamento", `contrato_id=eq.${contrato.id}&order=data_evento.desc&limit=50`)
+      .then(rows => { if (Array.isArray(rows)) setEventos(rows); })
+      .catch(err => {
+        console.error("Erro ao fetchar eventos_andamento do contrato:", contrato?.id, err);
+      });
+  }, [contrato?.id]);
+
   const detalheEncargos = useMemo(() => {
     if (!dividas?.length) return null;
     const hoje = new Date().toISOString().slice(0, 10);
