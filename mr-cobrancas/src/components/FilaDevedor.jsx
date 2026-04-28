@@ -1,19 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+/**
+ * FilaDevedor.jsx — Phase 7.13b D-pre-1..D-pre-6 + Q5-Q7
+ *
+ * Refactor estrutural — Fila por CONTRATO (não por devedor).
+ * 4 telas: FilaPainel (supervisor), FilaOperador (lobby),
+ *          FilaAtendimento (atendimento), FilaPesquisa (busca histórica).
+ *
+ * 1 contrato = 1 linha (D-pre-2). Devedor com 2 contratos = 2 linhas.
+ * Status PER CONTRATO independente (D-pre-4 — 7 valores STATUS_CONTRATO).
+ * Toggle 'Esconder quitados/arquivados' default ON (D-pre-6 Q6).
+ * Clique abre DetalheContrato modal overlay (D-pre-3).
+ */
+
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import toast from "react-hot-toast";
 import Modal from "./ui/Modal.jsx";
 import Btn from "./ui/Btn.jsx";
 import InputBR from "./ui/InputBR.jsx";
+import DetalheContrato from "./DetalheContrato.jsx";
 import { dbGet } from "../config/supabase.js";
 import { filaDevedor } from "../services/filaDevedor.js";
-import { STATUS_DEV } from "../utils/constants.js";
-import { calcularValorFace, calcularResumoFinanceiro, calcularDetalheEncargos } from "../utils/devedorCalc.js";
+import { STATUS_CONTRATO, STATUS_CONTRATO_TERMINAIS } from "../utils/constants.js";
+import { calcularDetalheEncargosContrato } from "../utils/devedorCalc.js";
 
-// ─── Status ativos para fila ──────────────────────────────────
-const STATUS_ATIVOS = ["novo", "em_localizacao", "notificado", "em_negociacao"];
-const STATUS_TERMINAIS = ["acordo_firmado", "pago_integral", "pago_parcial", "irrecuperavel", "ajuizado"];
-const TODOS_STATUS = STATUS_DEV;
-
-// ─── PriorityBadge ────────────────────────────────────────────
+// ─── PriorityBadge (preservada verbatim) ──────────────────────
 function PriorityBadge({ prioridade }) {
   const map = {
     ALTA:  { cor: "#DC2626", bg: "#FEE2E2", label: "Alta" },
@@ -35,9 +44,9 @@ function PriorityBadge({ prioridade }) {
   );
 }
 
-// ─── StatusBadge devedor ──────────────────────────────────────
+// ─── StatusBadge contrato (D-pre-4 — STATUS_CONTRATO) ─────────
 function StatusBadge({ status }) {
-  const s = STATUS_DEV.find(x => x.v === status) || { l: status, cor: "#64748b", bg: "#f1f5f9" };
+  const s = STATUS_CONTRATO.find(x => x.v === status) || { l: status, cor: "#64748b", bg: "#f1f5f9" };
   return (
     <span style={{
       display: "inline-block", background: s.bg, color: s.cor,
@@ -49,7 +58,7 @@ function StatusBadge({ status }) {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
+// ─── Helpers compartilhados ───────────────────────────────────
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
   return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -70,14 +79,14 @@ const inpS = { padding: "7px 10px", borderRadius: 9, border: "1px solid #d1d5db"
 
 const TIPOS_EVENTO_LABEL = { LIGACAO: "Ligação", WHATSAPP: "WhatsApp", EMAIL: "E-mail", SMS: "SMS", PROMESSA_PAGAMENTO: "Promessa", SEM_CONTATO: "Sem contato", ACORDO: "Acordo", TELEFONE_NAO_EXISTE: "Tel. Inativo", CONTATO_COM_CLIENTE: "Contato", RECADO: "Recado" };
 
-// ─── AtendimentoBadge ─────────────────────────────────────────
-function AtendimentoBadge({ devedor }) {
+// ─── AtendimentoBadge (props: contrato no lugar de devedor) ───
+function AtendimentoBadge({ contrato }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const semana = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-  if (devedor._bloqueado) {
+  if (contrato._bloqueado) {
     return <span style={{ fontSize: 10, fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "1px 6px", borderRadius: 99 }}>⏰ Promessa</span>;
   }
-  const ue = devedor._ultimo_evento;
+  const ue = contrato._ultimo_evento;
   if (!ue) {
     return <span style={{ fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#fee2e2", padding: "1px 6px", borderRadius: 99 }}>🔴 Nunca</span>;
   }
@@ -91,7 +100,7 @@ function AtendimentoBadge({ devedor }) {
   return null;
 }
 
-// ─── UltimoAtendimentoCell ────────────────────────────────────
+// ─── UltimoAtendimentoCell (preservada) ───────────────────────
 function UltimoAtendimentoCell({ ultimoEvento }) {
   if (!ultimoEvento) {
     return <span style={{ color: "#94a3b8", fontSize: 11 }}>— Nunca atendido</span>;
@@ -105,41 +114,28 @@ function UltimoAtendimentoCell({ ultimoEvento }) {
   );
 }
 
-// ─── helper: parse seguro de dividas (string JSON ou array) ──
-function parseDividas(raw) {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === "string") {
-    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
-  }
-  return [];
-}
-
-// ─── DividaCell ───────────────────────────────────────────────
-function DividaCell({ devedor }) {
-  // Usa _saldo_atualizado (computado no serviço com encargos + pagamentos abatidos)
-  // ou cai para calcularValorFace se o campo não existir
-  const saldo = devedor._saldo_atualizado != null ? devedor._saldo_atualizado : calcularValorFace(devedor);
-  const face = calcularValorFace(devedor);
-  const qtd = parseDividas(devedor.dividas).length;
-  const temParcial = devedor._tem_pagamento_parcial;
+// ─── ContratoCell (rename de DividaCell — Q3) ─────────────────
+// W2.3 — predicado direto sem .some() em closure constante
+function ContratoCell({ contrato }) {
+  const nDividas = contrato._dividas?.length || 0;
+  const saldoOuValor = contrato._saldo_atualizado != null
+    ? contrato._saldo_atualizado
+    : (Number(contrato.valor_original) || 0);
+  const valorOriginalNum = Number(contrato.valor_original || 0);
+  const temPagamentos = nDividas > 0 && valorOriginalNum > 0 && saldoOuValor < valorOriginalNum;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <span style={{ fontWeight: 700, color: saldo > 0 ? "#dc2626" : "#64748b", fontSize: 13 }}>
-        {fmtBRL(saldo)}
+      <span style={{ fontWeight: 700, color: saldoOuValor > 0 ? "#dc2626" : "#64748b", fontSize: 13 }}>
+        {fmtBRL(saldoOuValor)}
       </span>
-      {face > 0 && Math.abs(saldo - face) > 1 && (
-        <span style={{ fontSize: 10, color: "#94a3b8" }}>Orig: {fmtBRL(face)}</span>
-      )}
+      <div style={{ fontSize: 10, color: "#94a3b8" }}>
+        {nDividas} {nDividas === 1 ? "parcela" : "parcelas"}
+        {contrato.numero_contrato && ` • ${contrato.numero_contrato}`}
+      </div>
       <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-        {temParcial && (
+        {temPagamentos && (
           <span style={{ fontSize: 10, fontWeight: 700, color: "#0f766e", background: "#ccfbf1", padding: "1px 5px", borderRadius: 99 }}>
             Parcial
-          </span>
-        )}
-        {qtd > 0 && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", background: "#ede9fe", padding: "1px 5px", borderRadius: 99 }}>
-            {qtd} dívida{qtd > 1 ? "s" : ""}
           </span>
         )}
       </div>
@@ -147,1132 +143,712 @@ function DividaCell({ devedor }) {
   );
 }
 
-// ─── CredorCell ───────────────────────────────────────────────
-function CredorCell({ devedor, credores }) {
-  const credor = (credores || []).find(c => String(c.id) === String(devedor.credor_id));
-  const primeiraDiv = parseDividas(devedor.dividas)[0];
+// ─── CredorCell (preservado) ──────────────────────────────────
+function CredorCell({ credor }) {
+  if (!credor) return <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {credor && <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{credor.nome}</span>}
-      {devedor.numero_processo && <span style={{ fontSize: 10, color: "#6366f1" }}>Proc: {devedor.numero_processo}</span>}
-      {primeiraDiv?.descricao && <span style={{ fontSize: 10, color: "#94a3b8" }}>{primeiraDiv.descricao}</span>}
-      {!credor && !devedor.numero_processo && !primeiraDiv?.descricao && <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>}
+      <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{credor.nome || "—"}</span>
     </div>
   );
 }
 
-// ─── TELA 1: FilaPainel (Supervisor) ─────────────────────────
+// ─── Card auxiliar (Q5) ───────────────────────────────────────
+function Card({ title, value, cor }) {
+  return (
+    <div style={{ padding: 12, border: "1px solid #e2e8f0", borderRadius: 10, background: "#fff" }}>
+      <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".5px" }}>{title}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: cor }}>{value}</div>
+    </div>
+  );
+}
+
+// ─── TELA 1: FilaPainel (Supervisor — listagem por contrato) ──
 function FilaPainel({ usuarioId, credores, onAbrirAtendimento }) {
-  const [devedores, setDevedores] = useState([]);
-  const [carregando, setCarregando] = useState(true);
-  const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState([...STATUS_ATIVOS]);
-  const [filtroCredor, setFiltroCredor] = useState("");
-  const [filtroPrioridade, setFiltroPrioridade] = useState("");
-  const [filtroValorMin, setFiltroValorMin] = useState("");
-  const [filtroValorMax, setFiltroValorMax] = useState("");
-  const [selecionados, setSelecionados] = useState([]);
-  const [modalEvento, setModalEvento] = useState(null); // devedor selecionado
-  const [formEvento, setFormEvento] = useState({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
-  const [salvandoEvento, setSalvandoEvento] = useState(false);
-  const [filtroAtendimento, setFiltroAtendimento] = useState("pendentes");
+  const [contratos, setContratos] = useState([]);
   const [totalEventosHoje, setTotalEventosHoje] = useState(0);
-  const [hoveredRow, setHoveredRow] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [filtros, setFiltros] = useState({
+    status_list: [],
+    credor_id: "",
+    prioridade: "",
+    busca: "",
+    valor_min: null,
+    valor_max: null,
+  });
+  // W2.2 — toggle default ON (D-pre-6 Q6)
+  const [esconderQuitadosArquivados, setEsconderQuitadosArquivados] = useState(true);
+  const [contratoAberto, setContratoAberto] = useState(null);
   const pollRef = useRef(null);
 
-  const carregar = useCallback(async (silencioso = false) => {
-    if (!silencioso) setCarregando(true);
-    const filtros = {
-      busca: busca || undefined,
-      status_list: filtroStatus.length ? filtroStatus : undefined,
-      credor_id: filtroCredor || undefined,
-      prioridade: filtroPrioridade || undefined,
-      valor_min: filtroValorMin ? Number(filtroValorMin) : undefined,
-      valor_max: filtroValorMax ? Number(filtroValorMax) : undefined,
-    };
-    const r = await filaDevedor.listarDevedoresParaFila(filtros);
+  const carregar = useCallback(async (silent = false) => {
+    if (!silent) setCarregando(true);
+    const r = await filaDevedor.listarContratosParaFila(filtros);
     if (r.success) {
-      setDevedores(r.data);
+      setContratos(r.data || []);
       setTotalEventosHoje(r.totalEventosHoje || 0);
-    } else toast.error("Erro ao carregar fila: " + r.error);
-    if (!silencioso) setCarregando(false);
-  }, [busca, filtroStatus, filtroCredor, filtroPrioridade, filtroValorMin, filtroValorMax]);
+    } else {
+      toast.error("Erro ao carregar fila: " + (r.error || ""));
+    }
+    if (!silent) setCarregando(false);
+  }, [filtros]);
 
+  // Polling 30s preservado (pattern legacy)
   useEffect(() => {
     carregar();
     pollRef.current = setInterval(() => carregar(true), 30000);
     return () => clearInterval(pollRef.current);
   }, [carregar]);
 
-  async function handleRegistrarEvento() {
-    if (!modalEvento || !formEvento.tipo_evento) return;
-    setSalvandoEvento(true);
-    const dados = {
-      tipo_evento: formEvento.tipo_evento,
-      descricao: formEvento.descricao || undefined,
-      telefone_usado: formEvento.telefone_usado || undefined,
-      data_promessa: formEvento.data_promessa || undefined,
-      giro_carteira_dias: formEvento.giro_carteira_dias ? Number(formEvento.giro_carteira_dias) : undefined,
+  // D-pre-6 + filtros locais
+  const contratosFiltrados = useMemo(() => {
+    return contratos.filter(c => {
+      if (esconderQuitadosArquivados && (c.status === 'quitado' || c.status === 'arquivado')) return false;
+      // ⚠ ajuizado NÃO incluído no toggle (operador pode querer ver)
+      return true;
+    });
+  }, [contratos, esconderQuitadosArquivados]);
+
+  // Cards Q5 — recalculados POR CONTRATO
+  // W2.1 — cards usam MESMA base que tabela (contratosFiltrados)
+  const cards = useMemo(() => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    // Use STATUS_CONTRATO_TERMINAIS para excluir terminais nos cards de count Pendentes/Atendidos/Valor
+    const naoTerminais = contratosFiltrados.filter(c => !STATUS_CONTRATO_TERMINAIS.includes(c.status));
+    return {
+      pendentes: naoTerminais.filter(c => !c._ultimo_evento || c._ultimo_evento.data_evento.slice(0, 10) !== hoje).length,
+      atendidosHoje: naoTerminais.filter(c => c._ultimo_evento?.data_evento.slice(0, 10) === hoje).length,
+      eventosHoje: totalEventosHoje, // count global do service
+      valorEmAberto: naoTerminais.reduce((s, c) => s + (Number(c._saldo_atualizado) || 0), 0),
     };
-    const r = await filaDevedor.registrarEvento(modalEvento.id, usuarioId, dados);
-    if (r.success) {
-      toast.success("Evento registrado!");
-      setModalEvento(null);
-      setFormEvento({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
-      await carregar(true);
-    } else {
-      toast.error("Erro: " + r.error);
-    }
-    setSalvandoEvento(false);
-  }
-
-  function toggleStatus(s) {
-    setFiltroStatus(prev =>
-      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
-    );
-  }
-
-  // Contadores (calculados da lista completa, antes do filtro de atendimento)
-  const hojeCC = new Date().toISOString().slice(0, 10);
-  const cntPendentes = devedores.filter(d =>
-    !d._bloqueado && (!d._ultimo_evento || d._ultimo_evento.data_evento.slice(0, 10) < hojeCC)
-  ).length;
-  const cntAtendidosHoje = devedores.filter(d =>
-    d._ultimo_evento?.data_evento?.slice(0, 10) === hojeCC
-  ).length;
-  const valorTotalAberto = devedores.reduce((s, d) => s + (d._saldo_atualizado ?? calcularValorFace(d)), 0);
-
-  const cards = [
-    { label: "Pendentes", valor: cntPendentes, cor: "#6366f1", bg: "rgba(99,102,241,.08)" },
-    { label: "Atendidos Hoje", valor: cntAtendidosHoje, cor: "#10b981", bg: "rgba(16,185,129,.08)" },
-    { label: "Eventos Hoje", valor: totalEventosHoje, cor: "#f59e0b", bg: "rgba(245,158,11,.08)" },
-    { label: "Valor em Aberto", valor: fmtBRL(valorTotalAberto), cor: "#ef4444", bg: "rgba(239,68,68,.08)", isText: true },
-  ];
-
-  // Filtro de atendimento (client-side, sobre a lista retornada pelo serviço)
-  let devedoresFiltrados = [...devedores];
-  {
-    const semana = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-    if (filtroAtendimento === "pendentes") {
-      devedoresFiltrados = devedoresFiltrados.filter(d =>
-        !d._bloqueado && (!d._ultimo_evento || d._ultimo_evento.data_evento.slice(0, 10) < hojeCC)
-      );
-      // Ordenação inteligente: ALTA → MEDIA → BAIXA, depois valor desc, depois mais antigo
-      const priOrd = { ALTA: 0, MEDIA: 1, BAIXA: 2 };
-      devedoresFiltrados.sort((a, b) => {
-        const pd = (priOrd[a._prioridade] ?? 2) - (priOrd[b._prioridade] ?? 2);
-        if (pd !== 0) return pd;
-        const vd = (b._saldo_atualizado ?? calcularValorFace(b)) - (a._saldo_atualizado ?? calcularValorFace(a));
-        if (vd !== 0) return vd;
-        return (a.created_at || "").localeCompare(b.created_at || "");
-      });
-    } else if (filtroAtendimento === "atendidos_hoje") {
-      devedoresFiltrados = devedoresFiltrados.filter(d =>
-        d._ultimo_evento?.data_evento?.slice(0, 10) === hojeCC
-      );
-    } else if (filtroAtendimento === "atendidos_semana") {
-      devedoresFiltrados = devedoresFiltrados.filter(d => {
-        const data = d._ultimo_evento?.data_evento?.slice(0, 10);
-        return data && data >= semana;
-      });
-    }
-    // "todos" = sem filtro adicional
-  }
+  }, [contratosFiltrados, totalEventosHoje]);
 
   return (
-    <div>
-      {/* Contadores */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
-        {cards.map(c => (
-          <div key={c.label} style={{ background: c.bg, border: `1px solid ${c.cor}22`, borderRadius: 14, padding: "14px 16px" }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: c.cor, marginBottom: 4, textTransform: "uppercase", letterSpacing: ".5px" }}>{c.label}</p>
-            <p style={{ fontSize: c.isText ? 16 : 28, fontWeight: 800, color: c.cor, fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1.2 }}>{c.valor}</p>
-          </div>
-        ))}
+    <div style={{ padding: "16px 20px", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#1f2937" }}>Fila de Atendimento</h2>
+      <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
+        {contratosFiltrados.length} contrato(s) — atualização automática a cada 30s
+      </p>
+
+      {/* Cards Q5 */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+        <Card title="Pendentes" value={cards.pendentes} cor="#dc2626" />
+        <Card title="Atendidos Hoje" value={cards.atendidosHoje} cor="#16a34a" />
+        <Card title="Eventos Hoje" value={cards.eventosHoje} cor="#2563eb" />
+        <Card title="Valor em Aberto" value={fmtBRL(cards.valorEmAberto)} cor="#7c3aed" />
       </div>
 
-      {/* Tabs de atendimento */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-        {[
-          { id: "pendentes", label: "⏳ Pendentes" },
-          { id: "atendidos_hoje", label: "✅ Atendidos Hoje" },
-          { id: "atendidos_semana", label: "📅 Atendidos Semana" },
-          { id: "todos", label: "🗓️ Todos" },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setFiltroAtendimento(tab.id)} style={{
-            padding: "7px 16px", borderRadius: 99, fontSize: 12, fontWeight: 700,
-            fontFamily: "'Plus Jakarta Sans',sans-serif", cursor: "pointer",
-            border: filtroAtendimento === tab.id ? "none" : "1px solid #e2e8f0",
-            background: filtroAtendimento === tab.id ? "#f97316" : "#fff",
-            color: filtroAtendimento === tab.id ? "#fff" : "#64748b",
-            transition: "all .15s",
-          }}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <div style={{ background: "#f8fafc", borderRadius: 14, padding: "14px 16px", marginBottom: 16, border: "1px solid #e8f0f7" }}>
-        {/* Linha 1: busca + credor + prioridade */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+      {/* B2.4 — Filtros completos: busca + credor + prioridade + valor min/max + toggle */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        <input
+          style={inpS}
+          placeholder="Buscar por nome/CPF do devedor"
+          value={filtros.busca}
+          onChange={e => setFiltros({ ...filtros, busca: e.target.value })}
+        />
+        <select
+          style={inpS}
+          value={filtros.credor_id}
+          onChange={e => setFiltros({ ...filtros, credor_id: e.target.value })}
+        >
+          <option value="">Todos credores</option>
+          {(credores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+        <select
+          style={inpS}
+          value={filtros.prioridade}
+          onChange={e => setFiltros({ ...filtros, prioridade: e.target.value })}
+        >
+          <option value="">Todas prioridades</option>
+          <option value="ALTA">Alta</option>
+          <option value="MEDIA">Média</option>
+          <option value="BAIXA">Baixa</option>
+        </select>
+        {/* B2.4 — InputBR type="value" mantém STRING (lição feedback_motor_parity_via_string_preservation.md) */}
+        <InputBR
+          type="value"
+          placeholder="Valor mín"
+          value={filtros.valor_min ?? ""}
+          onChange={(v) => setFiltros({ ...filtros, valor_min: v === "" ? null : Number(v) })}
+          style={{ ...inpS, width: 120 }}
+        />
+        <InputBR
+          type="value"
+          placeholder="Valor máx"
+          value={filtros.valor_max ?? ""}
+          onChange={(v) => setFiltros({ ...filtros, valor_max: v === "" ? null : Number(v) })}
+          style={{ ...inpS, width: 120 }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
           <input
-            style={{ ...inpS, flex: 1, minWidth: 200 }}
-            placeholder="Buscar por nome ou CPF/CNPJ..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
+            type="checkbox"
+            checked={esconderQuitadosArquivados}
+            onChange={e => setEsconderQuitadosArquivados(e.target.checked)}
           />
-          <select style={inpS} value={filtroCredor} onChange={e => setFiltroCredor(e.target.value)}>
-            <option value="">Todos os credores</option>
-            {(credores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select>
-          <select style={inpS} value={filtroPrioridade} onChange={e => setFiltroPrioridade(e.target.value)}>
-            <option value="">Todas prioridades</option>
-            <option value="ALTA">Alta</option>
-            <option value="MEDIA">Média</option>
-            <option value="BAIXA">Baixa</option>
-          </select>
-          <InputBR style={{ ...inpS, width: 110 }} placeholder="Valor mín" type="value" value={filtroValorMin} onChange={setFiltroValorMin} />
-          <InputBR style={{ ...inpS, width: 110 }} placeholder="Valor máx" type="value" value={filtroValorMax} onChange={setFiltroValorMax} />
-        </div>
-
-        {/* Linha 2: checkboxes de status */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".4px" }}>Status:</span>
-          {STATUS_ATIVOS.map(s => {
-            const info = STATUS_DEV.find(x => x.v === s);
-            const ativo = filtroStatus.includes(s);
-            return (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12, fontWeight: 600, color: ativo ? info.cor : "#94a3b8" }}>
-                <input type="checkbox" checked={ativo} onChange={() => toggleStatus(s)} style={{ accentColor: info.cor }} />
-                {info?.l}
-              </label>
-            );
-          })}
-        </div>
+          Esconder quitados/arquivados
+        </label>
       </div>
 
-      {/* Tabela */}
-      {carregando ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Carregando fila...</div>
-      ) : devedoresFiltrados.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum devedor encontrado neste filtro</div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>{devedoresFiltrados.length} devedor(es) — atualização automática a cada 30s</p>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: "#f8fafc" }}>
-                <th style={th}>Nome</th>
-                <th style={th}>CPF/CNPJ</th>
-                <th style={th}>Status</th>
-                <th style={th}>Valor Dívida</th>
-                <th style={th}>Título / Credor</th>
-                <th style={th}>Último Atendimento</th>
-                <th style={th}>Dias s/ contato</th>
-                <th style={th}>Prioridade</th>
-                <th style={th}>Telefone</th>
-                <th style={th}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devedoresFiltrados.map(d => {
-                const isHovered = hoveredRow === d.id;
-                const bgBase = d._em_atendimento ? "rgba(245,158,11,.06)" : d._bloqueado ? "rgba(239,68,68,.04)" : "#fff";
-                const bgHover = d._em_atendimento ? "rgba(245,158,11,.12)" : d._bloqueado ? "rgba(239,68,68,.08)" : "#f0f4ff";
-                return (
-                <tr key={d.id}
-                  onClick={() => onAbrirAtendimento(d)}
-                  onMouseEnter={() => setHoveredRow(d.id)}
-                  onMouseLeave={() => setHoveredRow(null)}
-                  style={{
-                    borderBottom: "1px solid #f1f5f9",
-                    background: isHovered ? bgHover : bgBase,
-                    cursor: "pointer",
-                    transition: "background .15s",
-                    borderLeft: isHovered ? "3px solid #f97316" : "3px solid transparent",
-                  }}>
-                  <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                      <span>{d.nome}</span>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {d._em_atendimento && <span style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", background: "#FEF3C7", padding: "1px 6px", borderRadius: 99 }}>Em atendimento</span>}
-                        {d._bloqueado && <span style={{ fontSize: 10, fontWeight: 700, color: "#dc2626", background: "#FEE2E2", padding: "1px 6px", borderRadius: 99 }}>🔒 até {fmtData(d._fila?.bloqueado_ate)}</span>}
-                        <AtendimentoBadge devedor={d} />
+      {/* B2.4 — Status multi-select checkboxes */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12, padding: "6px 0" }}>
+        <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600, alignSelf: "center" }}>Status:</span>
+        {STATUS_CONTRATO.map(s => (
+          <label
+            key={s.v}
+            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: s.cor, background: s.bg, padding: "3px 8px", borderRadius: 99, cursor: "pointer" }}
+          >
+            <input
+              type="checkbox"
+              checked={filtros.status_list.includes(s.v)}
+              onChange={e => {
+                const next = e.target.checked
+                  ? [...filtros.status_list, s.v]
+                  : filtros.status_list.filter(x => x !== s.v);
+                setFiltros({ ...filtros, status_list: next });
+              }}
+            />
+            {s.l}
+          </label>
+        ))}
+      </div>
+
+      {/* Tabela contratos */}
+      {carregando ? <p style={{ color: "#94a3b8" }}>Carregando…</p> : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+            <tr>
+              <th style={th}>Devedor</th>
+              <th style={th}>Credor</th>
+              <th style={th}>Saldo / Parcelas</th>
+              <th style={th}>Status</th>
+              <th style={th}>Prioridade</th>
+              <th style={th}>Último Atendimento</th>
+              <th style={th}>Estado</th>
+              <th style={th}>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {contratosFiltrados.map(c => {
+              // Co-devedores: mostrar count se houver múltiplos via _devedores plural (B2.1)
+              const codevs = (c._devedores || []).filter(d => String(d.id) !== String(c._devedor?.id));
+              return (
+                <tr
+                  key={c.id}
+                  style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
+                  onClick={() => setContratoAberto(c.id)}
+                >
+                  <td style={td}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#1f2937" }}>{c._devedor?.nome || "—"}</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{c._devedor?.cpf_cnpj || "—"}</div>
+                    {codevs.length > 0 && (
+                      <div style={{ fontSize: 9, color: "#7c3aed", marginTop: 2 }}>
+                        +{codevs.length} co-devedor{codevs.length > 1 ? "es" : ""}
                       </div>
-                    </div>
+                    )}
                   </td>
-                  <td style={td}>{d.cpf_cnpj || "—"}</td>
-                  <td style={td}><StatusBadge status={d.status} /></td>
-                  <td style={td}><DividaCell devedor={d} /></td>
-                  <td style={td}><CredorCell devedor={d} credores={credores} /></td>
-                  <td style={td}><UltimoAtendimentoCell ultimoEvento={d._ultimo_evento} /></td>
-                  <td style={{ ...td, textAlign: "center" }}>{d._dias_sem_contato !== null ? `${d._dias_sem_contato}d` : "—"}</td>
-                  <td style={td}><PriorityBadge prioridade={d._prioridade} /></td>
-                  <td style={td}>{d.telefone || "—"}</td>
+                  <td style={td}><CredorCell credor={c._credor} /></td>
+                  <td style={td}><ContratoCell contrato={c} /></td>
+                  <td style={td}><StatusBadge status={c.status} /></td>
+                  <td style={td}><PriorityBadge prioridade={c._prioridade} /></td>
+                  <td style={td}><UltimoAtendimentoCell ultimoEvento={c._ultimo_evento} /></td>
+                  <td style={td}><AtendimentoBadge contrato={c} /></td>
                   <td style={td} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                      {d.telefone && (
-                        <a href={`tel:${d.telefone}`} title="Ligar" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
-                          <Btn sm outline>📞</Btn>
-                        </a>
-                      )}
-                      {d.telefone && (
-                        <a href={`https://wa.me/55${d.telefone.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(d.nome)}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" title="WhatsApp" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
-                          <Btn sm outline>💬</Btn>
-                        </a>
-                      )}
-                      {d.email && (
-                        <a href={`mailto:${d.email}`} title="Email" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
-                          <Btn sm outline>📧</Btn>
-                        </a>
-                      )}
-                      <Btn sm outline onClick={e => { e.stopPropagation(); setModalEvento(d); }} title="Registrar Evento">✏️</Btn>
-                      {isHovered && (
-                        <span style={{ color: "#f97316", fontWeight: 700, fontSize: 14, marginLeft: 2 }}>›</span>
-                      )}
-                    </div>
+                    {/* B2.3 — Btn API real: sm + color (não `primary`/`small`) */}
+                    <Btn
+                      sm
+                      color="#3d9970"
+                      disabled={c._bloqueado || c._em_atendimento}
+                      onClick={() => onAbrirAtendimento(c)}
+                    >
+                      Atender
+                    </Btn>
                   </td>
                 </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+          </tbody>
+        </table>
       )}
 
-      {/* Modal: Registrar Evento rápido */}
-      {modalEvento && (
-        <Modal title={`Registrar Evento — ${modalEvento.nome}`} onClose={() => setModalEvento(null)} width={480}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <div>
-              <label style={lbl}>Tipo do Evento *</label>
-              <select style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.tipo_evento} onChange={e => setFormEvento(f => ({ ...f, tipo_evento: e.target.value }))}>
-                {TIPOS_EVENTO.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lbl}>Descrição</label>
-              <textarea style={{ ...inpS, width: "100%", height: 72, resize: "vertical", boxSizing: "border-box" }} value={formEvento.descricao} onChange={e => setFormEvento(f => ({ ...f, descricao: e.target.value }))} placeholder="Descreva o contato..." />
-            </div>
-            {modalEvento.telefone && (
-              <div>
-                <label style={lbl}>Telefone Usado</label>
-                <select style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.telefone_usado} onChange={e => setFormEvento(f => ({ ...f, telefone_usado: e.target.value }))}>
-                  <option value="">— Selecionar —</option>
-                  {[modalEvento.telefone, modalEvento.telefone2, ...(modalEvento.telefones_adicionais || [])].filter(Boolean).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            )}
-            {formEvento.tipo_evento === "PROMESSA_PAGAMENTO" && (
-              <div>
-                <label style={lbl}>Data da Promessa *</label>
-                <InputBR type="date" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.data_promessa} onChange={v => setFormEvento(f => ({ ...f, data_promessa: v }))} min={new Date().toISOString().slice(0, 10)} />
-              </div>
-            )}
-            <div>
-              <label style={lbl}>Giro de Carteira (dias)</label>
-              <InputBR type="value" style={{ ...inpS, width: "100%", boxSizing: "border-box" }} value={formEvento.giro_carteira_dias} onChange={v => setFormEvento(f => ({ ...f, giro_carteira_dias: v }))} placeholder="0 = sem giro" min="0" max="365" />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
-            <Btn onClick={handleRegistrarEvento} disabled={salvandoEvento} color="#6366f1">{salvandoEvento ? "Salvando..." : "Registrar Evento"}</Btn>
-            <Btn outline onClick={() => setModalEvento(null)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
+      {/* DetalheContrato modal overlay (D-pre-3 — Q1 decisão planner) */}
+      {/* B2.1 — DetalheContrato signature REAL: { contrato, dividas, devedores, credores, allPagamentos, allPagamentosDivida, hoje, onVoltar, onVerDetalhe, onCarregarTudo } */}
+      {/* B2.2 — Modal API real: { title, onClose, children, width=560 } — usa width={1200} */}
+      {contratoAberto && (() => {
+        const cAberto = contratos.find(c => c.id === contratoAberto);
+        if (!cAberto) return null;
+        const hojeStr = new Date().toISOString().slice(0, 10);
+        return (
+          <Modal title="Detalhe do Contrato" onClose={() => setContratoAberto(null)} width={1200}>
+            <DetalheContrato
+              contrato={cAberto}
+              dividas={cAberto._dividas || []}
+              devedores={cAberto._devedores || (cAberto._devedor ? [cAberto._devedor] : [])}
+              credores={cAberto._credores || (cAberto._credor ? [cAberto._credor] : [])}
+              allPagamentos={[]}
+              allPagamentosDivida={cAberto._pagamentos_divida || []}
+              hoje={hojeStr}
+              onVoltar={() => setContratoAberto(null)}
+              onVerDetalhe={() => {}}
+              onCarregarTudo={() => carregar(true)}
+            />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
 
-// ─── TELA 2: FilaOperador (Lobby) ────────────────────────────
+// ─── TELA 2: FilaOperador (Lobby — botão Próximo) ─────────────
 function FilaOperador({ usuarioId, onIniciar }) {
-  const [contagem, setContagem] = useState(null);
-  const [prioridadeAtual, setPrioridadeAtual] = useState(null);
-  const [iniciando, setIniciando] = useState(false);
+  const [carregando, setCarregando] = useState(false);
 
-  useEffect(() => {
-    async function carregar() {
-      try {
-        const r = await filaDevedor.listarDevedoresParaFila({});
-        if (r.success) {
-          const disponíveis = (r.data || []).filter(d => !d._em_atendimento && !d._bloqueado);
-          setContagem(disponíveis.length);
-          if (disponíveis.length > 0) setPrioridadeAtual(disponíveis[0]._prioridade);
-        }
-      } catch { setContagem(0); }
+  const handleProximo = async () => {
+    setCarregando(true);
+    const r = await filaDevedor.proximoContrato(usuarioId);
+    setCarregando(false);
+    if (!r.success) {
+      toast.error("Erro ao buscar próximo contrato: " + (r.error || ""));
+      return;
     }
-    carregar();
-  }, []);
-
-  async function iniciar() {
-    setIniciando(true);
-    const r = await filaDevedor.proximoDevedor(usuarioId);
-    if (!r.success) { toast.error("Erro: " + r.error); setIniciando(false); return; }
-    if (!r.data) { toast("Fila vazia no momento.", { icon: "📭" }); setIniciando(false); return; }
+    if (!r.data) {
+      toast.success("Nenhum contrato disponível na fila no momento.");
+      return;
+    }
+    // r.data = { fila, contrato, devedor, dividas, eventos }
     onIniciar(r.data);
-    setIniciando(false);
-  }
+  };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 340 }}>
-      <div style={{ background: "#fff", borderRadius: 20, padding: "40px 48px", textAlign: "center", boxShadow: "0 8px 32px rgba(0,0,0,.08)", border: "1px solid #e8f0f7", maxWidth: 400, width: "100%" }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
-        <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22, color: "#0f172a", marginBottom: 8 }}>Minha Fila</p>
-        {contagem === null ? (
-          <p style={{ color: "#94a3b8", fontSize: 14, marginBottom: 24 }}>Carregando...</p>
-        ) : (
-          <>
-            <p style={{ fontSize: 48, fontWeight: 800, color: "#f97316", fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1 }}>{contagem}</p>
-            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 8 }}>devedor(es) disponíveis</p>
-            {prioridadeAtual && (
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-                <PriorityBadge prioridade={prioridadeAtual} />
-              </div>
-            )}
-          </>
-        )}
-        <Btn onClick={iniciar} disabled={iniciando || contagem === 0} color="#f97316">
-          {iniciando ? "Buscando..." : contagem === 0 ? "Fila Vazia" : "▶ Iniciar Atendimento"}
-        </Btn>
-      </div>
+    <div style={{
+      padding: "60px 20px", textAlign: "center",
+      fontFamily: "'Plus Jakarta Sans',sans-serif",
+    }}>
+      <h2 style={{ margin: "0 0 16px", fontSize: 24, color: "#1f2937" }}>Lobby do Operador</h2>
+      <p style={{ fontSize: 14, color: "#64748b", marginBottom: 32 }}>
+        Clique em "Próximo Contrato" para receber o próximo da fila.
+      </p>
+      {/* B2.3 — Btn color="#3d9970" (brand verde) ao invés de `primary` */}
+      <Btn color="#3d9970" onClick={handleProximo} disabled={carregando}>
+        {carregando ? "Buscando…" : "🎯 Próximo Contrato"}
+      </Btn>
     </div>
   );
 }
 
-// ─── TELA 3: FilaAtendimento ──────────────────────────────────
-const TIPOS_EVENTO = [
-  { v: "LIGACAO", l: "Ligação" },
-  { v: "WHATSAPP", l: "WhatsApp" },
-  { v: "EMAIL", l: "E-mail" },
-  { v: "SMS", l: "SMS" },
-  { v: "PROMESSA_PAGAMENTO", l: "Promessa de Pagamento" },
-  { v: "SEM_CONTATO", l: "Sem Contato" },
-  { v: "ACORDO", l: "Acordo" },
-  { v: "TELEFONE_NAO_EXISTE", l: "Telefone Não Existe" },
-  { v: "CONTATO_COM_CLIENTE", l: "Contato com Cliente" },
-  { v: "RECADO", l: "Recado" },
-];
-
+// ─── TELA 3: FilaAtendimento (atendimento ativo) ──────────────
 function FilaAtendimento({ usuarioId, dadosIniciais, onProximo, onSair }) {
-  const { fila, devedor: devedorInicial, contrato, parcelas, eventos: evtsIniciais } = dadosIniciais;
-  const [devedor, setDevedor] = useState(devedorInicial);
-  const [eventos, setEventos] = useState(evtsIniciais || []);
-  const [pagamentos, setPagamentos] = useState(devedorInicial?._pagamentos || []);
-  const [eventoRegistrado, setEventoRegistrado] = useState(false);
-  const [modalEvento, setModalEvento] = useState(false);
-  const [modalInfo, setModalInfo] = useState(false);
-  const [form, setForm] = useState({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
+  // dadosIniciais = { fila, contrato, devedor, dividas, eventos }
+  const [fila, setFila] = useState(dadosIniciais.fila);
+  const [contrato, setContrato] = useState(dadosIniciais.contrato);
+  const [devedor, setDevedor] = useState(dadosIniciais.devedor);
+  const [dividas, setDividas] = useState(dadosIniciais.dividas || []);
+  const [eventos, setEventos] = useState(dadosIniciais.eventos || []);
+  const [allPagamentosDivida, setAllPagamentosDivida] = useState([]);
+
+  const [novoStatus, setNovoStatus] = useState(contrato.status);
+  const [tipoEvento, setTipoEvento] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [telefoneUsado, setTelefoneUsado] = useState("");
+  const [dataPromessa, setDataPromessa] = useState("");
+  const [giroDias, setGiroDias] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const [proximando, setProximando] = useState(false);
-  const [alterandoStatus, setAlterandoStatus] = useState(false);
 
-  // Carregar eventos e pagamentos_parciais por devedor_id
+  // Carrega pagamentos_divida do contrato (saldo realtime)
   useEffect(() => {
-    if (!devedorInicial?.id) return;
-    setDevedor(devedorInicial);
-    setEventos(evtsIniciais || []);
-    setPagamentos([]);
-    setEventoRegistrado(false);
-    Promise.all([
-      dbGet("eventos_andamento", `devedor_id=eq.${devedorInicial.id}&order=data_evento.desc&limit=50`),
-      dbGet("pagamentos_parciais", `devedor_id=eq.${devedorInicial.id}&order=data_pagamento.asc`),
-    ]).then(([evRows, pgRows]) => {
-      if (Array.isArray(evRows)) setEventos(evRows);
-      if (Array.isArray(pgRows)) setPagamentos(pgRows);
-    }).catch(() => {});
-  }, [devedorInicial?.id]);
+    if (!dividas?.length) return;
+    const ids = dividas.map(d => d.id);
+    dbGet("pagamentos_divida", `divida_id=in.(${ids.join(",")})&select=*`)
+      .then(rows => setAllPagamentosDivida(rows || []))
+      .catch(() => setAllPagamentosDivida([]));
+  }, [dividas]);
 
-  function F(k, v) { setForm(f => ({ ...f, [k]: v })); }
+  const detalheEncargos = useMemo(() => {
+    if (!dividas?.length) return null;
+    const hoje = new Date().toISOString().slice(0, 10);
+    return calcularDetalheEncargosContrato(dividas, allPagamentosDivida, hoje);
+  }, [dividas, allPagamentosDivida]);
 
-  const telefones = [devedor?.telefone, devedor?.telefone2, ...(devedor?.telefones_adicionais || [])].filter(Boolean);
+  // W2.4 — _totalPago per divida calculado client-side via allPagamentosDivida
+  const dividasComPagamento = useMemo(() => {
+    return (dividas || []).map(d => {
+      const totalPago = (allPagamentosDivida || [])
+        .filter(p => String(p.divida_id) === String(d.id))
+        .reduce((s, p) => s + (parseFloat(p.valor_pago || p.valor) || 0), 0);
+      return { ...d, _totalPago: totalPago };
+    });
+  }, [dividas, allPagamentosDivida]);
 
-  async function registrar() {
-    if (!form.tipo_evento) { toast("Selecione o tipo de evento.", { icon: "⚠️" }); return; }
+  const handleRegistrarEvento = async () => {
+    if (!tipoEvento) { toast.error("Selecione o tipo de evento"); return; }
     setSalvando(true);
-    const dados = {
-      tipo_evento: form.tipo_evento,
-      descricao: form.descricao || undefined,
-      telefone_usado: form.telefone_usado || undefined,
-      data_promessa: form.data_promessa || undefined,
-      giro_carteira_dias: form.giro_carteira_dias ? Number(form.giro_carteira_dias) : undefined,
-    };
-    const r = await filaDevedor.registrarEvento(devedor.id, usuarioId, dados);
-    if (r.success) {
-      toast.success("Evento registrado!");
-      setEventos(evs => [{ ...r.data, tipo_evento: form.tipo_evento, descricao: form.descricao, data_evento: new Date().toISOString() }, ...evs]);
-      setEventoRegistrado(true);
-      setModalEvento(false);
-      setForm({ tipo_evento: "LIGACAO", descricao: "", telefone_usado: "", data_promessa: "", giro_carteira_dias: "" });
-    } else {
-      toast.error("Erro: " + r.error);
-    }
+    const r = await filaDevedor.registrarEvento(contrato.id, usuarioId, {
+      tipo_evento: tipoEvento,
+      descricao: descricao || undefined,
+      telefone_usado: telefoneUsado || undefined,
+      data_promessa: dataPromessa || undefined,
+      giro_carteira_dias: giroDias ? Number(giroDias) : undefined,
+    });
     setSalvando(false);
-  }
-
-  async function proximo() {
-    setProximando(true);
-    const r = await filaDevedor.proximoDevedor(usuarioId);
-    if (!r.success) { toast.error("Erro: " + r.error); setProximando(false); return; }
-    if (!r.data) { toast("Fila vazia.", { icon: "📭" }); onProximo(null); setProximando(false); return; }
-    onProximo(r.data);
-    setProximando(false);
-  }
-
-  async function handleAlterarStatus(novoStatus) {
-    setAlterandoStatus(true);
-    const r = await filaDevedor.alterarStatusDevedor(devedor.id, novoStatus, usuarioId);
-    if (r.success) {
-      toast.success("Status atualizado para: " + (STATUS_DEV.find(s => s.v === novoStatus)?.l || novoStatus));
-      setDevedor(d => ({ ...d, status: novoStatus }));
-      setEventos(evs => [{ tipo_evento: "CONTATO_COM_CLIENTE", descricao: `Status: ${novoStatus}`, data_evento: new Date().toISOString() }, ...evs]);
-      // Se terminal, voltar para fila
-      if (STATUS_TERMINAIS.includes(novoStatus)) {
-        toast("Devedor removido da fila.", { icon: "✅" });
-        onSair();
-      }
-    } else {
-      toast.error("Erro: " + r.error);
+    if (!r.success) {
+      toast.error("Erro ao registrar evento: " + (r.error || ""));
+      return;
     }
-    setAlterandoStatus(false);
-  }
+    toast.success("Evento registrado.");
+    setEventos([r.data, ...eventos]);
+    // Reset campos
+    setTipoEvento("");
+    setDescricao("");
+    setTelefoneUsado("");
+    setDataPromessa("");
+    setGiroDias("");
+    // Se ACORDO → contrato saiu da fila
+    if (tipoEvento === "ACORDO") onSair();
+  };
 
-  const inpStyle = { width: "100%", padding: "8px 10px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151", boxSizing: "border-box" };
+  const handleAlterarStatus = async () => {
+    if (novoStatus === contrato.status) { toast("Status inalterado."); return; }
+    setSalvando(true);
+    const r = await filaDevedor.alterarStatusContrato(contrato.id, novoStatus, usuarioId);
+    setSalvando(false);
+    if (!r.success) {
+      toast.error("Erro ao alterar status: " + (r.error || ""));
+      return;
+    }
+    toast.success(`Status alterado para: ${novoStatus}`);
+    setContrato({ ...contrato, status: novoStatus });
+    if (STATUS_CONTRATO_TERMINAIS.includes(novoStatus)) {
+      onSair();
+    }
+  };
+
+  // Co-devedores plural (B2.1) — mostra TODOS devedores ligados às dividas do contrato
+  const todosDevedoresContrato = (contrato._devedores && contrato._devedores.length > 0)
+    ? contrato._devedores
+    : (devedor ? [devedor] : []);
+  const coDevedores = todosDevedoresContrato.filter(d => String(d.id) !== String(devedor?.id));
 
   return (
-    <div>
-      {/* Cabeçalho */}
-      <div style={{ background: "#fff", borderRadius: 16, padding: "20px 24px", marginBottom: 16, border: "1px solid #e8f0f7", position: "relative" }}>
-        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "center" }}>
-          <PriorityBadge prioridade={devedor?._prioridade || "BAIXA"} />
-        </div>
-        <p style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22, color: "#0f172a", marginBottom: 4 }}>{devedor?.nome || "—"}</p>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", color: "#64748b", fontSize: 13, marginBottom: 10 }}>
-          <span>CPF/CNPJ: <strong style={{ color: "#374151" }}>{devedor?.cpf_cnpj || "—"}</strong></span>
-          {telefones.length > 0 && <span>Tel: <strong style={{ color: "#374151" }}>{telefones.join(" | ")}</strong></span>}
-          {devedor?.email && <span>Email: <strong style={{ color: "#374151" }}>{devedor.email}</strong></span>}
-          {devedor?.cidade && <span>Cidade: <strong style={{ color: "#374151" }}>{devedor.cidade}</strong></span>}
-        </div>
-
-        {/* Status + ações rápidas */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <StatusBadge status={devedor?.status} />
-          <select
-            style={{ ...inpS, fontSize: 12 }}
-            value={devedor?.status || ""}
-            onChange={e => handleAlterarStatus(e.target.value)}
-            disabled={alterandoStatus}
-            title="Alterar status"
-          >
-            {TODOS_STATUS.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
-          </select>
-          {telefones[0] && (
-            <a href={`tel:${telefones[0]}`} style={{ textDecoration: "none" }}>
-              <Btn sm outline>📞 Ligar</Btn>
-            </a>
-          )}
-          {telefones[0] && (
-            <a href={`https://wa.me/55${telefones[0].replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(devedor?.nome || "")}%2C%20entramos%20em%20contato%20sobre%20seu%20débito.`} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-              <Btn sm outline>💬 WhatsApp</Btn>
-            </a>
+    <div style={{ padding: "16px 20px", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      {/* Header — devedor + contrato */}
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 18, color: "#1f2937" }}>{devedor?.nome || "—"}</h2>
+        <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+          Contrato {contrato.numero_contrato || (contrato.id ? contrato.id.slice(0, 8) : "—")}
+          {detalheEncargos && ` • Saldo Atualizado: ${fmtBRL(detalheEncargos.saldoAtualizado)}`}
+        </p>
+        <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <StatusBadge status={contrato.status} />
+          <span style={{ fontSize: 11, color: "#64748b" }}>{(dividas || []).length} parcela(s)</span>
+          {coDevedores.length > 0 && (
+            <span style={{ fontSize: 11, color: "#7c3aed", background: "#ede9fe", padding: "2px 8px", borderRadius: 99, fontWeight: 700 }}>
+              + {coDevedores.length} co-devedor{coDevedores.length > 1 ? "es" : ""}
+            </span>
           )}
         </div>
-
-        {fila?.bloqueado_ate && fila.bloqueado_ate >= new Date().toISOString().slice(0, 10) && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, background: "#FEF3C7", color: "#D97706", fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 99 }}>
-            🔒 Promessa Ativa até {fmtData(fila.bloqueado_ate)}
-          </span>
-        )}
-      </div>
-
-      {/* Resumo financeiro completo */}
-      {devedor && (() => {
-        const hoje = new Date().toISOString().slice(0, 10);
-        const det = calcularDetalheEncargos(devedor, pagamentos, hoje);
-        const rowStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #f1f5f9" };
-        const labelStyle = { color: "#64748b", fontSize: 12 };
-        const valStyle = (cor) => ({ fontWeight: 600, color: cor, fontSize: 12 });
-        const secStyle = { fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".5px", marginTop: 10, marginBottom: 4, paddingTop: 6, borderTop: "1px dashed #e2e8f0" };
-        return (
-          <div style={{ background: "linear-gradient(135deg,#fff5f5 0%,#fff 100%)", borderRadius: 16, padding: "18px 20px", border: "1px solid #fecaca", marginBottom: 16 }}>
-            <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>💰 Resumo Financeiro</p>
-
-            {/* Saldo destaque */}
-            <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", marginBottom: 12, border: "1px solid #fca5a5", textAlign: "center" }}>
-              <p style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 2 }}>Saldo Devedor Atualizado</p>
-              <p style={{ fontSize: 26, fontWeight: 800, color: "#dc2626", fontFamily: "'Space Grotesk',sans-serif", lineHeight: 1.2 }}>{fmtBRL(det.saldoAtualizado)}</p>
-            </div>
-
-            <div style={{ display: "grid", gap: 2 }}>
-              {/* Valor original */}
-              <div style={rowStyle}>
-                <span style={labelStyle}>Valor Original</span>
-                <span style={valStyle("#374151")}>{fmtBRL(det.valorOriginal)}</span>
-              </div>
-
-              {/* Encargos */}
-              <p style={secStyle}>── Encargos ──</p>
-              {det.multa.valor > 0 && (() => {
-                const pcts = [...new Set(det.detalhePorDivida.filter(d => d.multaPct > 0).map(d => d.multaPct))];
-                const label = pcts.length > 0 ? `Multa (${pcts.join("/")}%)` : "Multa";
-                return (
-                  <div style={rowStyle}>
-                    <span style={labelStyle} title="Multa incidente uma única vez sobre o saldo corrigido">{label}</span>
-                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.multa.valor)}</span>
-                  </div>
-                );
-              })()}
-              {det.juros.valor > 0 && (() => {
-                const pcts = [...new Set(det.detalhePorDivida.filter(d => d.jurosAM > 0).map(d => `${d.jurosAM}% a.m.`))];
-                const label = pcts.length > 0 ? `Juros (${pcts.join("/")})` : "Juros";
-                return (
-                  <div style={rowStyle}>
-                    <span style={labelStyle} title="Juros simples acumulados desde o vencimento">{label}</span>
-                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.juros.valor)}</span>
-                  </div>
-                );
-              })()}
-              {det.correcao.valor > 0 && (() => {
-                const indices = [...new Set(det.detalhePorDivida.filter(d => d.correcao > 0 && d.indexador !== "nenhum").map(d => d.indexador.toUpperCase()))];
-                const label = indices.length > 0 ? `Correção Monetária (${indices.join("/")})` : "Correção Monetária";
-                return (
-                  <div style={rowStyle}>
-                    <span style={labelStyle} title="Correção pelo índice oficial desde o vencimento">{label}</span>
-                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.correcao.valor)}</span>
-                  </div>
-                );
-              })()}
-              {det.honorarios.valor > 0 && (() => {
-                const pcts = [...new Set(det.detalhePorDivida.filter(d => d.honorariosPct > 0).map(d => d.honorariosPct))];
-                const label = pcts.length > 0 ? `Honorários (${pcts.join("/")}%)` : "Honorários";
-                return (
-                  <div style={rowStyle}>
-                    <span style={labelStyle} title="Honorários advocatícios sobre principal + juros + multa">{label}</span>
-                    <span style={valStyle("#f59e0b")}>{fmtBRL(det.honorarios.valor)}</span>
-                  </div>
-                );
-              })()}
-              {det.custas.original > 0 && (
-                <div style={rowStyle}>
-                  <span style={labelStyle} title={`Original: ${fmtBRL(det.custas.original)} — corrigido até hoje`}>Custas Processuais (corrigidas)</span>
-                  <span style={valStyle("#f59e0b")}>{fmtBRL(det.custas.atualizado)}</span>
-                </div>
-              )}
-              {det.totalEncargos > 0 && (
-                <div style={{ ...rowStyle, borderBottom: "none", paddingTop: 6 }}>
-                  <span style={{ ...labelStyle, fontWeight: 700, color: "#374151" }}>Subtotal Encargos</span>
-                  <span style={{ fontWeight: 700, color: "#f59e0b", fontSize: 12 }}>{fmtBRL(det.totalEncargos)}</span>
-                </div>
-              )}
-
-              {/* Pagamentos */}
-              {det.totalPago > 0 && <>
-                <p style={secStyle}>── Pagamentos ──</p>
-                <div style={rowStyle}>
-                  <span style={labelStyle}>Total Pago</span>
-                  <span style={valStyle("#10b981")}>{fmtBRL(det.totalPago)}</span>
-                </div>
-              </>}
-
-              {/* Resultado */}
-              <p style={secStyle}>── Resultado ──</p>
-              <div style={rowStyle}>
-                <span style={{ ...labelStyle, fontWeight: 700, color: "#dc2626" }}>Saldo Devedor</span>
-                <span style={{ fontWeight: 800, color: "#dc2626", fontSize: 13 }}>{fmtBRL(det.saldoAtualizado)}</span>
-              </div>
-              {det.diasEmAtraso > 0 && (
-                <div style={{ ...rowStyle, borderBottom: "none" }}>
-                  <span style={labelStyle}>Dias em Atraso</span>
-                  <span style={valStyle(det.diasEmAtraso > 180 ? "#dc2626" : det.diasEmAtraso > 90 ? "#f59e0b" : "#6366f1")}>{det.diasEmAtraso} dias</span>
-                </div>
-              )}
-            </div>
-
-            {/* Art. 523 §1º CPC — breakdown dos valores já incluídos no saldo */}
-            {det.art523 && det.art523.total > 0 && (
-              <div style={{ marginTop: 12, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10, padding: "10px 14px" }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "#9a3412", marginBottom: 6 }}>⚖️ Art. 523 §1º CPC — incluído no saldo</p>
-                {det.art523.multa > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                    <span style={{ color: "#9a3412" }}>Multa Art. 523 (10%)</span>
-                    <span style={{ fontWeight: 700, color: "#c2410c" }}>{fmtBRL(det.art523.multa)}</span>
-                  </div>
-                )}
-                {det.art523.honorarios > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                    <span style={{ color: "#9a3412" }}>Honorários Art. 523 (10%)</span>
-                    <span style={{ fontWeight: 700, color: "#c2410c" }}>{fmtBRL(det.art523.honorarios)}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Dívidas cadastradas */}
-            {det.detalhePorDivida.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Dívidas Cadastradas ({det.detalhePorDivida.length})</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {det.detalhePorDivida.map((div, i) => {
-                    const diasAtraso = div.dataVencimento ? Math.max(0, Math.floor((Date.now() - new Date(div.dataVencimento + "T12:00:00")) / 86400000)) : null;
-                    const temEncargos = div.correcao > 0 || div.juros > 0 || div.multa > 0 || div.honorarios > 0;
-                    return (
-                      <div key={i} style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px", fontSize: 11, border: "1px solid #e2e8f0" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                          <span style={{ fontWeight: 600, color: "#374151" }}>{div.descricao}</span>
-                          <span style={{ fontWeight: 700, color: "#dc2626" }}>{fmtBRL(div.valorOriginal)}</span>
-                        </div>
-                        <div style={{ display: "flex", gap: 8, color: "#94a3b8", flexWrap: "wrap", marginBottom: temEncargos || div.custas ? 4 : 0 }}>
-                          {div.dataVencimento && <span>Venc: {fmtData(div.dataVencimento)}</span>}
-                          {diasAtraso !== null && <span style={{ color: diasAtraso > 90 ? "#dc2626" : "#f59e0b" }}>{diasAtraso}d atraso</span>}
-                          {div.indexador && div.indexador !== "nenhum" && <span>Idx: {div.indexador.toUpperCase()}</span>}
-                          {(div.jurosTipo === "taxa_legal_406" || div.jurosTipo === "taxa_legal_406_12")
-                            ? <span style={{ color: "#6366f1", fontWeight: 600 }}>Juros: Art. 406 CC{div.jurosTipo === "taxa_legal_406_12" ? " (12%→TL)" : ""}</span>
-                            : div.jurosAM > 0 && <span>Juros: {div.jurosAM}% a.m.</span>}
-                          {div.indexador === "inpc_ipca" && <span style={{ color: "#6366f1", fontWeight: 600 }}>Corr: INPC→IPCA</span>}
-                          {div.multaPct > 0 && <span>Multa: {div.multaPct}%</span>}
-                          {div.honorariosPct > 0 && <span>Honor: {div.honorariosPct}%</span>}
-                        </div>
-                        {div.correcaoPeriodos && div.correcaoPeriodos.length > 0 && (
-                          <div style={{ background: "#f0fdf4", borderRadius: 6, padding: "4px 8px", marginBottom: 4, fontSize: 10 }}>
-                            <span style={{ fontWeight: 700, color: "#059669", display: "block", marginBottom: 2 }}>Correção Monetária (INPC→IPCA) — {fmtBRL(div.correcao)}</span>
-                            {div.correcaoPeriodos.map((p, pi) => (
-                              <div key={pi} style={{ color: "#475569", display: "flex", justifyContent: "space-between" }}>
-                                <span>├ {p.indice} ({(p.acumulado * 100).toFixed(2)}%)</span>
-                                <span style={{ fontWeight: 600, color: "#059669" }}>{fmtBRL(div.valorOriginal * p.acumulado)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {div.jurosPeriodos && div.jurosPeriodos.length > 0 && (
-                          <div style={{ background: "#f0f4ff", borderRadius: 6, padding: "4px 8px", marginBottom: 4, fontSize: 10 }}>
-                            <span style={{ fontWeight: 700, color: "#6366f1", display: "block", marginBottom: 2 }}>Juros Legais (Art. 406 CC) — {fmtBRL(div.juros)}</span>
-                            {div.jurosPeriodos.map((p, pi) => (
-                              <div key={pi} style={{ color: "#475569", display: "flex", justifyContent: "space-between" }}>
-                                <span>├ {p.regime} ({p.meses}m — {(p.taxaAcum * 100).toFixed(2)}%)</span>
-                                <span style={{ fontWeight: 600, color: "#6366f1" }}>{fmtBRL(p.valor)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {div.custas && (
-                          <div style={{ color: "#6366f1", fontSize: 10, marginBottom: 2 }}>
-                            └ Custas: {fmtBRL(div.custas.original)} → Atualizado: {fmtBRL(div.custas.atualizado)}
-                          </div>
-                        )}
-                        {temEncargos && (
-                          <div style={{ color: "#10b981", fontSize: 10, fontWeight: 600 }}>
-                            └ Atualizado: {fmtBRL(div.saldoTeorico)}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* ── Pessoas Vinculadas (collapsible) ── */}
-      {(() => {
-        const [showVinc, setShowVinc] = React.useState(false);
-        const [vincs, setVincs] = React.useState(null); // null = not loaded yet
-        return (
-          <div style={{ background: "#fff", borderRadius: 16, padding: "14px 20px", border: "1px solid #e8f0f7", marginBottom: 16 }}>
-            <button
-              onClick={() => {
-                if (!showVinc && vincs === null) {
-                  import("../services/devedoresVinculados.js").then(({ listar, listarInverso }) => {
-                    Promise.all([listar(devedor.id), listarInverso(devedor.id)]).then(([dir, inv]) => {
-                      setVincs({ dir: Array.isArray(dir) ? dir : [], inv: Array.isArray(inv) ? inv : [] });
-                    }).catch(() => setVincs({ dir: [], inv: [] }));
-                  });
-                }
-                setShowVinc(v => !v);
-              }}
-              style={{ background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#0f172a", display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: 0 }}
-            >
-              👥 Pessoas Vinculadas {vincs && (vincs.dir.length + vincs.inv.length) > 0 && (
-                <span style={{ background: "#ede9fe", color: "#4f46e5", borderRadius: 99, padding: "1px 7px", fontSize: 11 }}>
-                  {vincs.dir.length + vincs.inv.length}
-                </span>
-              )}
-              <span style={{ marginLeft: "auto", fontSize: 11, color: "#94a3b8" }}>{showVinc ? "▲" : "▼"}</span>
-            </button>
-            {showVinc && (
-              <div style={{ marginTop: 12 }}>
-                {vincs === null ? (
-                  <p style={{ color: "#94a3b8", fontSize: 12 }}>Carregando...</p>
-                ) : vincs.dir.length === 0 && vincs.inv.length === 0 ? (
-                  <p style={{ color: "#94a3b8", fontSize: 12 }}>Nenhuma pessoa vinculada.</p>
-                ) : (
-                  <>
-                    {vincs.inv.map(r => (
-                      <div key={r.id} style={{ background: "#fef9c3", borderRadius: 8, padding: "6px 10px", marginBottom: 6, fontSize: 12 }}>
-                        <span style={{ color: "#92400e", fontWeight: 700 }}>Vinculado a: </span>
-                        <span style={{ color: "#0f172a", fontWeight: 600 }}>{r.principal?.nome || "—"}</span>
-                        <span style={{ color: "#64748b" }}> ({r.tipo_vinculo})</span>
-                      </div>
-                    ))}
-                    {vincs.dir.map(r => (
-                      <div key={r.id} style={{ border: "1px solid #e8edf2", borderRadius: 8, padding: "6px 10px", marginBottom: 6, fontSize: 12, background: "#fafafe" }}>
-                        <span style={{ fontWeight: 600, color: "#0f172a" }}>{r.vinculado?.nome || "—"}</span>
-                        <span style={{ marginLeft: 8, background: "#ede9fe", color: "#4f46e5", borderRadius: 99, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>{r.tipo_vinculo}</span>
-                        {r.vinculado?.cpf_cnpj && <span style={{ color: "#94a3b8", marginLeft: 8 }}>{r.vinculado.cpf_cnpj}</span>}
-                        {r.observacao && <p style={{ color: "#64748b", fontSize: 11, fontStyle: "italic", marginTop: 3, marginBottom: 0 }}>{r.observacao}</p>}
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      <div style={{ marginBottom: 16 }}>
-        {/* Histórico de eventos */}
-        <div style={{ background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e8f0f7", maxHeight: 260, overflowY: "auto" }}>
-          <p style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>📋 Histórico</p>
-          {eventos.length === 0 ? (
-            <p style={{ color: "#94a3b8", fontSize: 13 }}>Nenhum evento registrado</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {eventos.map((ev, i) => (
-                <div key={ev.id || i} style={{ borderLeft: "3px solid #e2e8f0", paddingLeft: 10, paddingBottom: 6 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: "#6366f1", marginBottom: 1 }}>
-                    {TIPOS_EVENTO.find(t => t.v === ev.tipo_evento)?.l || ev.tipo_evento}
-                    <span style={{ color: "#94a3b8", fontWeight: 400, marginLeft: 6 }}>{fmtData(ev.data_evento)}</span>
-                  </p>
-                  {ev.descricao && <p style={{ fontSize: 12, color: "#374151" }}>{ev.descricao}</p>}
-                  {ev.data_promessa && <p style={{ fontSize: 11, color: "#f59e0b" }}>Promessa: {fmtData(ev.data_promessa)}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ações */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <Btn onClick={() => setModalEvento(true)} color="#6366f1">+ Novo Evento</Btn>
-        <Btn onClick={proximo} disabled={!eventoRegistrado || proximando} color="#f97316">
-          {proximando ? "Carregando..." : "Próximo ›"}
-        </Btn>
-        <button onClick={() => setModalInfo(true)} style={{ background: "none", border: "none", color: "#6366f1", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
-          Info da Negociação
-        </button>
-        <div style={{ flex: 1 }} />
-        <Btn outline onClick={onSair}>‹ Voltar</Btn>
-      </div>
-
-      {/* Modal: Novo Evento */}
-      {modalEvento && (
-        <Modal title="+ Novo Evento" onClose={() => setModalEvento(false)} width={480}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <div>
-              <label style={lbl}>Tipo do Evento *</label>
-              <select style={inpStyle} value={form.tipo_evento} onChange={e => F("tipo_evento", e.target.value)}>
-                {TIPOS_EVENTO.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lbl}>Descrição</label>
-              <textarea style={{ ...inpStyle, height: 72, resize: "vertical" }} value={form.descricao} onChange={e => F("descricao", e.target.value)} placeholder="Descreva o contato..." />
-            </div>
-            {telefones.length > 0 && (
-              <div>
-                <label style={lbl}>Telefone Usado</label>
-                <select style={inpStyle} value={form.telefone_usado} onChange={e => F("telefone_usado", e.target.value)}>
-                  <option value="">— Selecionar —</option>
-                  {telefones.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            )}
-            {form.tipo_evento === "PROMESSA_PAGAMENTO" && (
-              <div>
-                <label style={lbl}>Data da Promessa *</label>
-                <InputBR type="date" style={inpStyle} value={form.data_promessa} onChange={v => F("data_promessa", v)} min={new Date().toISOString().slice(0, 10)} />
-              </div>
-            )}
-            <div>
-              <label style={lbl}>Giro de Carteira (dias)</label>
-              <InputBR type="value" style={inpStyle} value={form.giro_carteira_dias} onChange={v => F("giro_carteira_dias", v)} placeholder="0 = sem giro" min="0" max="365" />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
-            <Btn onClick={registrar} disabled={salvando} color="#6366f1">{salvando ? "Salvando..." : "Registrar Evento"}</Btn>
-            <Btn outline onClick={() => setModalEvento(false)}>Cancelar</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {/* Modal: Info Negociação */}
-      {modalInfo && (
-        <Modal title="Info da Negociação" onClose={() => setModalInfo(false)} width={400}>
-          <div style={{ display: "grid", gap: 10, fontSize: 13 }}>
-            {[
-              ["Entrada na Fila", fmtData(fila?.data_entrada_fila)],
-              ["Último Acionamento", fmtData(fila?.data_acionamento)],
-              ["Score", fila?.score_prioridade?.toFixed(1)],
-              ["Status Fila", fila?.status_fila || "—"],
-              ["Bloqueado até", fila?.bloqueado_ate ? fmtData(fila.bloqueado_ate) : "—"],
-            ].map(([k, v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
-                <span style={{ color: "#64748b" }}>{k}</span>
-                <span style={{ fontWeight: 600, color: "#0f172a" }}>{v || "—"}</span>
-              </div>
+        {coDevedores.length > 0 && (
+          <div style={{ marginTop: 6, fontSize: 11, color: "#64748b" }}>
+            <strong>Co-devedores:</strong>{" "}
+            {coDevedores.map((d, i) => (
+              <span key={d.id}>
+                {d.nome || "—"} ({d.cpf_cnpj || "—"})
+                {i < coDevedores.length - 1 ? ", " : ""}
+              </span>
             ))}
           </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-const lbl = { display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 };
-
-// ─── TELA 4: FilaPesquisa ─────────────────────────────────────
-function FilaPesquisa({ devedores }) {
-  const [busca, setBusca] = useState("");
-  const [pagina, setPagina] = useState(1);
-  const POR_PAG = 15;
-
-  const resultados = (devedores || []).filter(d => {
-    const q = busca.toLowerCase();
-    if (q && !d.nome?.toLowerCase().includes(q) && !d.cpf_cnpj?.toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  const total = resultados.length;
-  const paginas = Math.ceil(total / POR_PAG);
-  const visiveis = resultados.slice((pagina - 1) * POR_PAG, pagina * POR_PAG);
-
-  const inp2 = { padding: "8px 12px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151" };
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <input style={{ ...inp2, flex: 1, minWidth: 200 }} placeholder="Buscar por nome ou CPF/CNPJ..." value={busca} onChange={e => { setBusca(e.target.value); setPagina(1); }} />
+        )}
       </div>
 
-      {visiveis.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>
-          {busca ? "Nenhum devedor encontrado para essa busca." : "Nenhum devedor cadastrado."}
+      {/* Status select (D-pre-4) */}
+      <div style={{ marginBottom: 12, display: "flex", gap: 8, alignItems: "center" }}>
+        <label style={{ fontSize: 12, color: "#64748b" }}>Alterar status:</label>
+        <select style={inpS} value={novoStatus} onChange={e => setNovoStatus(e.target.value)}>
+          {STATUS_CONTRATO.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+        </select>
+        {/* B2.3 — Btn sm (não `small`) */}
+        <Btn sm onClick={handleAlterarStatus} disabled={salvando || novoStatus === contrato.status}>
+          {salvando ? "..." : "Salvar Status"}
+        </Btn>
+      </div>
+
+      {/* Tabela dívidas (read-only — operador vê todas — Q4) */}
+      <h3 style={{ margin: "12px 0 6px", fontSize: 14, color: "#1f2937" }}>Parcelas / Dívidas do Contrato</h3>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginBottom: 16 }}>
+        <thead style={{ background: "#f8fafc" }}>
+          <tr>
+            <th style={th}>#</th>
+            <th style={th}>Vencimento</th>
+            <th style={th}>Valor Original</th>
+            <th style={th}>Pago</th>
+            <th style={th}>Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* W2.4 — usa dividasComPagamento (com _totalPago calculado client-side) */}
+          {dividasComPagamento.map((d, i) => (
+            <tr key={d.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+              <td style={td}>{i + 1}</td>
+              <td style={td}>{fmtData(d.data_vencimento)}</td>
+              <td style={td}>{fmtBRL(d.valor_total)}</td>
+              <td style={td}>{fmtBRL(d._totalPago || 0)}</td>
+              <td style={td}>{fmtBRL((Number(d.valor_total) || 0) - (Number(d._totalPago) || 0))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Registrar evento */}
+      <h3 style={{ margin: "12px 0 6px", fontSize: 14, color: "#1f2937" }}>Registrar Evento</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+        <select style={inpS} value={tipoEvento} onChange={e => setTipoEvento(e.target.value)}>
+          <option value="">Selecione tipo…</option>
+          {Object.entries(TIPOS_EVENTO_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <input
+          style={inpS}
+          placeholder="Telefone usado"
+          value={telefoneUsado}
+          onChange={e => setTelefoneUsado(e.target.value)}
+        />
+      </div>
+      <textarea
+        style={{ ...inpS, width: "100%", minHeight: 60, marginBottom: 8 }}
+        placeholder="Descrição"
+        value={descricao}
+        onChange={e => setDescricao(e.target.value)}
+      />
+      {tipoEvento === "PROMESSA_PAGAMENTO" && (
+        <div style={{ marginBottom: 8 }}>
+          <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Data prometida</label>
+          <InputBR
+            type="date"
+            value={dataPromessa}
+            onChange={setDataPromessa}
+            style={{ ...inpS }}
+          />
         </div>
+      )}
+      <input
+        type="number"
+        style={{ ...inpS, marginBottom: 8 }}
+        min="0"
+        placeholder="Giro carteira (dias) — opcional"
+        value={giroDias}
+        onChange={e => setGiroDias(e.target.value)}
+      />
+
+      <div style={{ display: "flex", gap: 8 }}>
+        {/* B2.3 — Btn color (não `primary`) */}
+        <Btn color="#3d9970" onClick={handleRegistrarEvento} disabled={salvando}>
+          {salvando ? "Salvando…" : "💾 Registrar Evento"}
+        </Btn>
+        <Btn outline onClick={onProximo}>Próximo →</Btn>
+        <Btn outline onClick={onSair}>Sair</Btn>
+      </div>
+
+      {/* Histórico de eventos */}
+      <h3 style={{ margin: "16px 0 6px", fontSize: 14, color: "#1f2937" }}>Eventos Registrados</h3>
+      {eventos.length === 0 ? (
+        <p style={{ color: "#94a3b8", fontSize: 11 }}>Nenhum evento.</p>
       ) : (
-        <>
-          <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>{total} resultado(s)</p>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  {["Nome", "CPF/CNPJ", "Telefone", "Cidade", "Status"].map(h => (
-                    <th key={h} style={th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visiveis.map(d => (
-                  <tr key={d.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ ...td, fontWeight: 600, color: "#0f172a" }}>{d.nome}</td>
-                    <td style={td}>{d.cpf_cnpj || "—"}</td>
-                    <td style={td}>{d.telefone || "—"}</td>
-                    <td style={td}>{d.cidade || "—"}</td>
-                    <td style={td}><StatusBadge status={d.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {paginas > 1 && (
-            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 16 }}>
-              <Btn sm outline disabled={pagina === 1} onClick={() => setPagina(p => p - 1)}>‹</Btn>
-              <span style={{ fontSize: 13, color: "#64748b", padding: "6px 12px" }}>Página {pagina} de {paginas}</span>
-              <Btn sm outline disabled={pagina === paginas} onClick={() => setPagina(p => p + 1)}>›</Btn>
-            </div>
-          )}
-        </>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {eventos.map(ev => (
+            <li key={ev.id} style={{ padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 12 }}>
+              <strong>{TIPOS_EVENTO_LABEL[ev.tipo_evento] || ev.tipo_evento}</strong> — {fmtData(ev.data_evento)}
+              {ev.descricao && <div style={{ color: "#64748b", fontSize: 11 }}>{ev.descricao}</div>}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
 }
 
-// ─── TELA 5: FilaHistorico ────────────────────────────────────
-function FilaHistorico() {
-  const [eventos, setEventos] = useState([]);
+// ─── TELA 4: FilaPesquisa (busca histórica por contrato) ──────
+function FilaPesquisa({ devedores }) {
+  const [contratos, setContratos] = useState([]);
+  const [busca, setBusca] = useState("");
+  // W2.2 — toggle default ON (D-pre-6 Q6)
+  const [esconderQuitadosArquivados, setEsconderQuitadosArquivados] = useState(true);
+  const [contratoAberto, setContratoAberto] = useState(null);
   const [carregando, setCarregando] = useState(false);
-  const [filtroData, setFiltroData] = useState("7");
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    // FilaPesquisa busca em TODOS os contratos (Q2 — incluindo terminais)
+    // listarContratosParaFila SOMENTE retorna não-terminais; usa dbGet direto
     try {
-      let desde;
-      if (filtroData === "custom") {
-        desde = dataInicio;
-      } else {
-        desde = new Date(Date.now() - Number(filtroData) * 86400000).toISOString();
-      }
-      let query = `select=*&order=data_evento.desc&limit=200`;
-      if (desde) query += `&data_evento=gte.${desde}`;
-      const r = await dbGet("eventos_andamento", query);
-      setEventos(Array.isArray(r) ? r : []);
-    } catch (e) {
-      toast.error("Erro ao carregar histórico: " + e.message);
+      const allContratos = await dbGet(
+        "contratos_dividas",
+        "select=*&order=created_at.desc&limit=1000"
+      );
+      setContratos(allContratos || []);
+    } catch (err) {
+      toast.error("Erro ao carregar contratos: " + (err?.message || ""));
+      setContratos([]);
     }
     setCarregando(false);
-  }, [filtroData, dataInicio, dataFim]);
+  }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  function exportCSV() {
-    const header = "Data,Tipo,Descrição,Devedor ID,Usuário ID,Promessa\n";
-    const rows = eventos.map(ev =>
-      [fmtData(ev.data_evento), ev.tipo_evento, (ev.descricao || "").replace(/,/g, ";"), ev.devedor_id || ev.contrato_id, ev.usuario_id, ev.data_promessa || ""].join(",")
-    ).join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `historico-fila-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click(); URL.revokeObjectURL(url);
-  }
+  const devedoresMap = useMemo(() =>
+    Object.fromEntries((devedores || []).map(d => [String(d.id), d])),
+    [devedores]
+  );
 
-  const inp2 = { padding: "7px 10px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 12, fontFamily: "'Plus Jakarta Sans',sans-serif", background: "#fff", color: "#374151" };
+  // Q7 — busca por devedor.nome/cpf retornando contratos múltiplos
+  const resultados = useMemo(() => {
+    const q = busca.toLowerCase().trim();
+    return contratos.filter(c => {
+      if (esconderQuitadosArquivados && (c.status === 'quitado' || c.status === 'arquivado')) return false;
+      if (!q) return true;
+      const dev = devedoresMap[String(c.devedor_id)];
+      return (dev?.nome || "").toLowerCase().includes(q)
+          || (dev?.cpf_cnpj || "").toLowerCase().includes(q)
+          || (c.numero_contrato || "").toLowerCase().includes(q);
+    });
+  }, [contratos, busca, esconderQuitadosArquivados, devedoresMap]);
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-        <select style={inp2} value={filtroData} onChange={e => setFiltroData(e.target.value)}>
-          <option value="7">Últimos 7 dias</option>
-          <option value="30">Últimos 30 dias</option>
-          <option value="custom">Personalizado</option>
-        </select>
-        {filtroData === "custom" && (
-          <>
-            <InputBR type="date" style={inp2} value={dataInicio} onChange={setDataInicio} />
-            <span style={{ color: "#94a3b8" }}>até</span>
-            <InputBR type="date" style={inp2} value={dataFim} onChange={setDataFim} />
-          </>
-        )}
-        <div style={{ flex: 1 }} />
-        <Btn sm outline onClick={exportCSV} disabled={eventos.length === 0}>⬇ Exportar CSV</Btn>
+    <div style={{ padding: "16px 20px", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+      <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#1f2937" }}>Pesquisar Contratos</h2>
+      <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
+        {resultados.length} contrato(s)
+      </p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+        <input
+          style={{ ...inpS, flex: 1 }}
+          placeholder="Buscar por nome, CPF/CNPJ do devedor ou número do contrato"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
+          <input
+            type="checkbox"
+            checked={esconderQuitadosArquivados}
+            onChange={e => setEsconderQuitadosArquivados(e.target.checked)}
+          />
+          Esconder quitados/arquivados
+        </label>
       </div>
 
-      {carregando ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Carregando...</div>
-      ) : eventos.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Nenhum evento no período.</div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: "#f8fafc" }}>
-                {["Data", "Tipo", "Descrição", "Devedor/Contrato", "Promessa"].map(h => (
-                  <th key={h} style={th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {eventos.map((ev, i) => (
-                <tr key={ev.id || i} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                  <td style={td}>{fmtData(ev.data_evento)}</td>
+      {carregando ? <p style={{ color: "#94a3b8" }}>Carregando…</p> : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+            <tr>
+              <th style={th}>Devedor</th>
+              <th style={th}>Contrato</th>
+              <th style={th}>Status</th>
+              <th style={th}>Valor Original</th>
+              <th style={th}>Criação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resultados.map(c => {
+              const dev = devedoresMap[String(c.devedor_id)];
+              return (
+                <tr
+                  key={c.id}
+                  style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
+                  onClick={() => setContratoAberto(c.id)}
+                >
                   <td style={td}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: "#ede9fe", color: "#6d28d9" }}>
-                      {TIPOS_EVENTO.find(t => t.v === ev.tipo_evento)?.l || ev.tipo_evento}
-                    </span>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#1f2937" }}>{dev?.nome || "—"}</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{dev?.cpf_cnpj || "—"}</div>
                   </td>
-                  <td style={{ ...td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.descricao || "—"}</td>
-                  <td style={{ ...td, fontFamily: "monospace", fontSize: 10, color: "#94a3b8" }}>
-                    {ev.devedor_id ? `dev:${ev.devedor_id}` : ev.contrato_id ? `${ev.contrato_id.slice(0, 8)}...` : "—"}
-                  </td>
-                  <td style={td}>{ev.data_promessa ? fmtData(ev.data_promessa) : "—"}</td>
+                  <td style={td}>{c.numero_contrato || (c.id ? c.id.slice(0, 8) : "—")}</td>
+                  <td style={td}><StatusBadge status={c.status} /></td>
+                  <td style={td}>{fmtBRL(c.valor_original)}</td>
+                  <td style={td}>{fmtData(c.created_at)}</td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+          </tbody>
+        </table>
       )}
+
+      {/* B2.1 + B2.2 — DetalheContrato signature REAL + Modal width prop */}
+      {contratoAberto && (() => {
+        const cAberto = contratos.find(c => c.id === contratoAberto);
+        if (!cAberto) return null;
+        const dev = devedoresMap[String(cAberto.devedor_id)];
+        const hojeStr = new Date().toISOString().slice(0, 10);
+        return (
+          <Modal title="Detalhe do Contrato" onClose={() => setContratoAberto(null)} width={1200}>
+            <DetalheContrato
+              contrato={cAberto}
+              dividas={[]}
+              devedores={dev ? [dev] : []}
+              credores={[]}
+              allPagamentos={[]}
+              allPagamentosDivida={[]}
+              hoje={hojeStr}
+              onVoltar={() => setContratoAberto(null)}
+              onVerDetalhe={() => {}}
+              onCarregarTudo={() => carregar()}
+            />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
 
-// ─── FilaDevedor (container principal) ───────────────────────
+// ─── ROTEADOR INTERNO + EXPORT default ────────────────────────
 export default function FilaDevedor({ user, devedores, credores }) {
-  const [view, setView] = useState("painel");
-  const [atendimentoDados, setAtendimentoDados] = useState(null);
-  // Passar objeto completo para que os serviços gravem nome/email sem depender de FK
-  const usuario = { id: user.id, nome: user.nome || user.nome_completo || user.email, email: user.email };
+  const [view, setView] = useState("painel");  // painel | operador | atendimento | pesquisa
+  const [atendimentoData, setAtendimentoData] = useState(null);
+  const usuario = user?.id || null;
 
-  function handleIniciar(dados) {
-    setAtendimentoDados(dados);
+  const handleAbrirAtendimento = (contrato) => {
+    // Paridade comportamental com HEAD pre-7.13b: supervisor abre atendimento
+    // direto da linha, sem service call. Lock real (PATCH fila_cobranca para
+    // EM_ATENDIMENTO específico do contrato) fica como candidato a phase futura.
+    // CR-02 PROMESSA+giro segue funcionando via registrarEvento.bloqueado_ate
+    // (service L400-414, intocado).
+    setAtendimentoData({
+      fila: contrato._fila || null,
+      contrato,
+      devedor: contrato._devedor || null,
+      dividas: contrato._dividas || [],
+      eventos: [],
+    });
     setView("atendimento");
-  }
+  };
 
-  // Abrir atendimento direto do Painel (sem pegar da fila)
-  function handleAbrirAtendimento(devedor) {
-    setAtendimentoDados({ fila: devedor._fila || null, devedor, contrato: null, parcelas: [], eventos: [] });
+  const handleIniciar = (data) => {
+    setAtendimentoData(data);
     setView("atendimento");
-  }
+  };
 
-  function handleProximo(dados) {
-    if (dados) {
-      setAtendimentoDados(dados);
-    } else {
-      setAtendimentoDados(null);
-      setView("operador");
-    }
-  }
+  const handleProximo = async () => {
+    setAtendimentoData(null);
+    setView("operador");
+  };
 
-  const tabs = [
-    { id: "painel", label: "Painel" },
-    { id: "operador", label: "Minha Fila" },
-    { id: "pesquisa", label: "Pesquisa" },
-    { id: "historico", label: "Histórico" },
-  ];
+  const handleSair = () => {
+    setAtendimentoData(null);
+    setView("painel");
+  };
 
   return (
     <div>
-      {/* Tabs de navegação */}
-      {view !== "atendimento" && (
-        <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: "2px solid #f1f5f9", paddingBottom: 0 }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setView(t.id)} style={{
-              background: "none", border: "none", cursor: "pointer",
-              padding: "8px 16px", fontSize: 13, fontWeight: view === t.id ? 700 : 500,
-              color: view === t.id ? "#f97316" : "#64748b",
-              borderBottom: view === t.id ? "2px solid #f97316" : "2px solid transparent",
-              marginBottom: -2, fontFamily: "'Plus Jakarta Sans',sans-serif",
-              transition: "all .15s",
-            }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {view === "atendimento" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button onClick={() => { setView("painel"); setAtendimentoDados(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 13 }}>‹ Fila</button>
-          <span style={{ color: "#d1d5db" }}>›</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Atendimento Ativo</span>
-        </div>
-      )}
+      {/* Tab nav */}
+      <div style={{ display: "flex", gap: 4, padding: "8px 20px", borderBottom: "1px solid #e2e8f0", background: "#fff" }}>
+        {/* B2.3 — Btn API real: sm + color (não `small`/`primary`) */}
+        <Btn sm color={view === "painel" ? "#3d9970" : "#94a3b8"} outline={view !== "painel"} onClick={() => setView("painel")}>Painel</Btn>
+        <Btn sm color={view === "operador" ? "#3d9970" : "#94a3b8"} outline={view !== "operador"} onClick={() => setView("operador")}>Operador</Btn>
+        <Btn sm color={view === "pesquisa" ? "#3d9970" : "#94a3b8"} outline={view !== "pesquisa"} onClick={() => setView("pesquisa")}>Pesquisa</Btn>
+      </div>
 
       {view === "painel" && <FilaPainel usuarioId={usuario} credores={credores} onAbrirAtendimento={handleAbrirAtendimento} />}
       {view === "operador" && <FilaOperador usuarioId={usuario} onIniciar={handleIniciar} />}
-      {view === "atendimento" && atendimentoDados && (
-        <FilaAtendimento
-          usuarioId={usuario}
-          dadosIniciais={atendimentoDados}
-          onProximo={handleProximo}
-          onSair={() => { setView("painel"); setAtendimentoDados(null); }}
-        />
+      {view === "atendimento" && atendimentoData && (
+        <FilaAtendimento usuarioId={usuario} dadosIniciais={atendimentoData}
+          onProximo={handleProximo} onSair={handleSair} />
       )}
       {view === "pesquisa" && <FilaPesquisa devedores={devedores} />}
-      {view === "historico" && <FilaHistorico />}
     </div>
   );
 }

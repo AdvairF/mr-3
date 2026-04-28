@@ -643,10 +643,4 @@ export const filaDevedor = {
   removerDaFila,
   listarFila,
   atualizarValoresAtrasados,
-
-  // ─── Aliases legacy (DEPRECATED — back-compat com FilaDevedor.jsx pré-Plan 02) ───
-  // Plan 02 reescreve UI consumindo nomes novos. Estes aliases serão removidos em Plan 02 commit.
-  listarDevedoresParaFila: listarContratosParaFila,
-  proximoDevedor: proximoContrato,
-  alterarStatusDevedor: alterarStatusContrato,
 };
