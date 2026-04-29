@@ -3940,9 +3940,6 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   </div>
                 );
               })}
-
-              {/* ── Lançamento rápido de custas avulsas ── */}
-              <CustasAvulsasForm onSalvar={adicionarCustasAvulsas} />
             </div>
           )}
 
