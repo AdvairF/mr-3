@@ -141,6 +141,7 @@ export const INDICES = {
 export const TAXA_MEDIA = { igpm:0.0045, ipca:0.0038, selic:0.0080, inpc:0.0040, nenhum:0 };
 export const ULTIMA_COMPETENCIA_INDICES = { igpm:"2026-03", ipca:"2026-03", inpc:"2026-03", selic:"2026-04" };
 export const INDICE_OPTIONS = [
+  { v:"", l:"— Selecione —", disabled:true },
   { v:"igpm", l:"IGP-M" },
   { v:"ipca", l:"IPCA" },
   { v:"selic", l:"SELIC" },
@@ -151,6 +152,7 @@ export const INDICE_OPTIONS = [
 export const IDX_LABEL = Object.fromEntries(INDICE_OPTIONS.map(({ v, l }) => [v, l]));
 
 export const JUROS_OPTIONS = [
+  { v:"", l:"— Selecione —", disabled:true },
   { v:"taxa_legal_406", l:"Taxa Legal (Art. 406 CC) — STJ Tema 1368" },
   { v:"taxa_legal_406_12", l:"Taxa Legal/art.406 CC: a partir de ago/2024; antes 1% a.m." },
   { v:"legal_classico", l:"0,5% a.m. até 01/2003 e 1% a.m. após" },

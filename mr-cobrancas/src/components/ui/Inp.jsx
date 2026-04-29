@@ -18,7 +18,11 @@ export function Inp({ label, value, onChange, type = "text", options, span, ...r
       {options ? (
         <select value={value} onChange={e => onChange(e.target.value)} style={st} {...rest}>
           {options.map(o => (
-            <option key={typeof o === "string" ? o : o.v} value={typeof o === "string" ? o : o.v}>
+            <option
+              key={typeof o === "string" ? o : o.v}
+              value={typeof o === "string" ? o : o.v}
+              disabled={typeof o === "object" && o.disabled === true}
+            >
               {typeof o === "string" ? o : o.l}
             </option>
           ))}
@@ -56,7 +60,11 @@ export function INP({ label, value, onChange, type = "text", opts, options, span
       {allOpts ? (
         <select value={value} onChange={e => onChange(e.target.value)} style={st} {...rest}>
           {allOpts.map(o => (
-            <option key={typeof o === "string" ? o : o.v} value={typeof o === "string" ? o : o.v}>
+            <option
+              key={typeof o === "string" ? o : o.v}
+              value={typeof o === "string" ? o : o.v}
+              disabled={typeof o === "object" && o.disabled === true}
+            >
               {typeof o === "string" ? o : o.l}
             </option>
           ))}

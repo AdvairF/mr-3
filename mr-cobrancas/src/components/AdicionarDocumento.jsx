@@ -25,23 +25,33 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
   const [parcelasCustom, setParcelasCustom] = useState(null); // Phase 7.5 D-03 — null até valor+N preenchidos; Array<{numero,valor_total,data_vencimento}> depois
   const [salvando, setSalvando] = useState(false);
 
+  // D-pre-5 — fallbacks alinhados com Path E (5 críticos vazios, 2 semânticos mantidos)
   const [encargos, setEncargos] = useState({
-    indexador:               contrato.indice_correcao         ?? "igpm",
+    indexador:               contrato.indice_correcao         ?? "",
     data_inicio_atualizacao: contrato.data_inicio_atualizacao ?? "",
-    multa_pct:               String(contrato.multa_percentual    ?? "2"),
-    juros_tipo:              contrato.juros_tipo               ?? "fixo_1",
-    juros_am:                String(contrato.juros_am_percentual ?? "1"),
-    honorarios_pct:          String(contrato.honorarios_percentual ?? "10"),
-    despesas:                String(contrato.despesas           ?? "0"),
-    art523_opcao:            contrato.art523_opcao             ?? "nao_aplicar",
+    multa_pct:               String(contrato.multa_percentual    ?? ""),
+    juros_tipo:              contrato.juros_tipo               ?? "",
+    juros_am:                String(contrato.juros_am_percentual ?? ""),
+    honorarios_pct:          String(contrato.honorarios_percentual ?? ""),
+    despesas:                String(contrato.despesas           ?? "0"),         // semântico mantido
+    art523_opcao:            contrato.art523_opcao             ?? "nao_aplicar", // semântico mantido
   });
+
+  // D-pre-3 — 5 campos críticos + condicional juros_am quando juros_tipo === "outros"
+  const camposCriticosOk =
+    !!encargos.indexador &&
+    !!encargos.multa_pct &&
+    !!encargos.juros_tipo &&
+    !!encargos.honorarios_pct &&
+    (encargos.juros_tipo !== "outros" || !!encargos.juros_am);
 
   const podesSalvar =
     !!tipo &&
     !!valor && parseFloat(valor) > 0 &&
     !!dataEmissao &&
     !!numParcelas && parseInt(numParcelas) >= 1 && parseInt(numParcelas) <= 999 &&
-    Array.isArray(parcelasCustom) && parcelasCustom.length === parseInt(numParcelas);
+    Array.isArray(parcelasCustom) && parcelasCustom.length === parseInt(numParcelas) &&
+    camposCriticosOk;
 
   function handleEncargos(field, val) {
     setEncargos(e => ({ ...e, [field]: val }));
@@ -67,6 +77,10 @@ export default function AdicionarDocumento({ contrato, onDocumentoAdicionado, on
     if (!dataEmissao) { toast("Informe a data de emissão.", { icon: "⚠️" }); return; }
     if (!numParcelas || parseInt(numParcelas) < 1) { toast("Informe o número de parcelas.", { icon: "⚠️" }); return; }
     if (parseInt(numParcelas) > 999) { toast.error("Número de parcelas máximo é 999 (limite prático para empréstimos imobiliários de até 35 anos)."); return; }
+    if (!camposCriticosOk) {
+      toast.error("Preencha todos os encargos antes de salvar.");
+      return;
+    }
 
     // Validação parcelas (Phase 7.5 D-07 — redundância; tabela também valida via onChange)
     if (!Array.isArray(parcelasCustom) || parcelasCustom.length !== parseInt(numParcelas)) {

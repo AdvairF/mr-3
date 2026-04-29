@@ -5,14 +5,14 @@ import DiretrizesContrato from "./DiretrizesContrato.jsx";
 import { criarContrato } from "../services/contratos.js";
 
 const ENCARGOS_PADRAO = {
-  indexador: "igpm",
+  indexador: "",                  // D-pre-1 crítico (era "igpm")
   data_inicio_atualizacao: "",
-  multa_pct: "2",
-  juros_tipo: "fixo_1",
-  juros_am: "1",
-  honorarios_pct: "10",
-  despesas: "0",
-  art523_opcao: "nao_aplicar",
+  multa_pct: "",                  // D-pre-1 crítico (era "2")
+  juros_tipo: "",                 // D-pre-1 crítico (era "fixo_1")
+  juros_am: "",                   // D-pre-1 crítico condicional (era "1")
+  honorarios_pct: "",             // D-pre-1 crítico (era "10")
+  despesas: "0",                  // D-pre-2 semântico (zero = sem despesas)
+  art523_opcao: "nao_aplicar",    // D-pre-2 semântico (Art.523 CPC opt-in)
 };
 
 const labelStyle = { fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 4 };
@@ -35,7 +35,14 @@ export default function NovoContrato({ devedores, credores, onCarregarTudo, onVo
       .slice(0, 8);
   }
 
-  const podesSalvar = !!devedor_id;
+  // D-pre-3 — 5 campos críticos + condicional juros_am quando juros_tipo === "outros"
+  const camposCriticosOk =
+    !!encargos.indexador &&
+    !!encargos.multa_pct &&
+    !!encargos.juros_tipo &&
+    !!encargos.honorarios_pct &&
+    (encargos.juros_tipo !== "outros" || !!encargos.juros_am);
+  const podesSalvar = !!devedor_id && camposCriticosOk;
 
   function handleEncargos(field, val) {
     setEncargos(e => ({ ...e, [field]: val }));
@@ -44,6 +51,10 @@ export default function NovoContrato({ devedores, credores, onCarregarTudo, onVo
   async function handleSalvar() {
     if (!devedor_id) { toast("Selecione o devedor.", { icon: "⚠️" }); return; }
     if (!credor_id)  { toast("Selecione o credor.",  { icon: "⚠️" }); return; }
+    if (!camposCriticosOk) {
+      toast.error("Preencha todos os encargos antes de salvar.");
+      return;
+    }
     setSalvando(true);
     try {
       const payload = {
@@ -160,7 +171,7 @@ export default function NovoContrato({ devedores, credores, onCarregarTudo, onVo
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <span title={!devedor_id ? "Selecione o devedor" : undefined}>
+        <span title={!devedor_id ? "Selecione o devedor" : !camposCriticosOk ? "Preencha todos os encargos" : undefined}>
           <Btn color="#0d9488" onClick={handleSalvar} disabled={!podesSalvar || salvando}>
             {salvando ? "Criando contrato..." : "Criar Contrato"}
           </Btn>
