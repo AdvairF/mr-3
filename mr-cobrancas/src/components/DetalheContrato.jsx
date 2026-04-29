@@ -78,12 +78,14 @@ function initEditForm(c) {
     credor_id:  String(c.credor_id  || ""),
     devedor_id: String(c.devedor_id || ""),
     encargos: {
-      indexador:               c.indice_correcao       ?? "igpm",
+      // D-pre-1 — 5 críticos vazios (Path E: força operador a confirmar valores reais; race-safe se contrato.X for null/undefined)
+      indexador:               c.indice_correcao       ?? "",
       data_inicio_atualizacao: c.data_inicio_atualizacao ?? "",
-      multa_pct:               String(c.multa_percentual    ?? "2"),
-      juros_tipo:              c.juros_tipo            ?? "fixo_1",
-      juros_am:                String(c.juros_am_percentual ?? "1"),
-      honorarios_pct:          String(c.honorarios_percentual ?? "10"),
+      multa_pct:               String(c.multa_percentual    ?? ""),
+      juros_tipo:              c.juros_tipo            ?? "",
+      juros_am:                String(c.juros_am_percentual ?? ""),
+      honorarios_pct:          String(c.honorarios_percentual ?? ""),
+      // D-pre-2 — 2 semânticos preservados
       despesas:                String(c.despesas        ?? "0"),
       art523_opcao:            c.art523_opcao          ?? "nao_aplicar",
     },
@@ -230,12 +232,27 @@ export default function DetalheContrato({
     setEditForm(f => ({ ...f, encargos: { ...f.encargos, [field]: val } }));
   }
 
+  // D-pre-3 — 5 campos críticos + condicional juros_am quando juros_tipo === "outros"
+  // useMemo cacheia: recalcula só quando editForm.encargos muda (arquivo grande, alta freq render).
+  const camposCriticosOk = useMemo(() =>
+    !!editForm.encargos.indexador &&
+    !!editForm.encargos.multa_pct &&
+    !!editForm.encargos.juros_tipo &&
+    !!editForm.encargos.honorarios_pct &&
+    (editForm.encargos.juros_tipo !== "outros" || !!editForm.encargos.juros_am),
+    [editForm.encargos]
+  );
+
   function handleCancelar() {
     setEditForm(initEditForm(contrato));
     setEditando(false);
   }
 
   async function handleSalvar() {
+    if (!camposCriticosOk) {
+      toast.error("Preencha todos os encargos antes de salvar.");
+      return;
+    }
     const payload = {
       referencia:            editForm.referencia.trim() || null,
       credor_id:             editForm.credor_id  || null,
@@ -723,9 +740,11 @@ export default function DetalheContrato({
             <Btn outline color="#64748b" sm onClick={handleCancelar} disabled={salvando}>
               Cancelar
             </Btn>
-            <Btn color="#4f46e5" sm disabled={salvando} onClick={handleSalvar}>
-              {salvando ? <Spinner /> : "Salvar"}
-            </Btn>
+            <span title={!camposCriticosOk ? "Preencha todos os encargos" : undefined}>
+              <Btn color="#4f46e5" sm disabled={salvando || !camposCriticosOk} onClick={handleSalvar}>
+                {salvando ? <Spinner /> : "Salvar"}
+              </Btn>
+            </span>
           </div>
         </div>
       )}
