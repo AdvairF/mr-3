@@ -29,7 +29,6 @@ import {
   calcularArt523,
 } from "./utils/correcao.js";
 import Art523Option from "./components/Art523Option.jsx";
-import DividaForm from "./components/DividaForm.jsx";
 import DevedoresDaDivida from "./components/DevedoresDaDivida.jsx";
 import PessoasVinculadas from "./components/PessoasVinculadas.jsx";
 import { listarTodosIds as listarVinculadosIds, listar as listarVincPdf } from "./services/devedoresVinculados.js";
@@ -3941,29 +3940,6 @@ function Devedores({ devedores, setDevedores, credores, onModalChange, user, pro
                   </div>
                 );
               })}
-              {/* Formulário nova dívida */}
-              <div style={{ background: "#f1f5f9", borderRadius: 14, padding: 16, border: "1.5px dashed #e2e8f0", marginTop: 8 }}>
-                <p style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 12 }}>➕ Nova Dívida</p>
-                <DividaForm
-                  value={nd}
-                  onChange={ND}
-                  credores={credores}
-                  onConfirmarParcelas={confirmarParcelas}
-                  onEditParc={editParc}
-                  onAddParc={addParc}
-                  onRemParc={remParc}
-                />
-                <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-                  <Btn onClick={adicionarDivida} color="#059669">
-                    💾 Salvar Dívida{nd.parcelas.length > 0 ? ` (${nd.parcelas.length} parcela${nd.parcelas.length > 1 ? "s" : ""})` : nd.valor_total ? " (à vista)" : ""}
-                  </Btn>
-                  {(nd.custas || []).filter(c => c.descricao && c.valor && c.data).length > 0 && (
-                    <Btn onClick={() => adicionarCustasAvulsas((nd.custas || []).filter(c => c.descricao && c.valor && c.data))} color="#c2410c" outline>
-                      🏛 Salvar Só as Custas
-                    </Btn>
-                  )}
-                </div>
-              </div>
 
               {/* ── Lançamento rápido de custas avulsas ── */}
               <CustasAvulsasForm onSalvar={adicionarCustasAvulsas} />
