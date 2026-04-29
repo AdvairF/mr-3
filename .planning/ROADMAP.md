@@ -447,12 +447,15 @@ Plans:
 **UI hint**: yes (remoção UI App.jsx drawer)
 **Status**: Backlog 2026-04-27 — reabrir após 7.14 SHIP em prod e usuário usar por 1-2 dias
 
-### Phase 7.13d: Encargos UI — clarificar fonte (BACKLOG, NOVA 2026-04-30)
-**Severidade:** BAIXA — UX clarification, não bug financeiro
-**Goal:** Limpar campos `contratos_dividas.*_percentual` que não refletem termo de acordo das dividas individuais. UI deve mostrar encargos das dividas (fonte de verdade jurídica), não do contrato (que é apenas configuração default de cadastro inicial).
-**Trigger:** Phase 7.13c REJECTED descoberta — campos contratuais são confusos pra operador olhando UI achando que refletem termo de acordo
+### Phase 7.13d: Encargos Defaults Vazios — NovoContrato wizard (INSERTED 2026-04-30)
+**Severidade:** BAIXA — UX cleanup, não bug financeiro (escopo trivial mas dor UX real)
+**Goal:** Remover defaults arbitrários hardcoded em `NovoContrato.ENCARGOS_PADRAO` (multa 2%, juros 1%, honor 10%, igpm, fixo_1) que operador apaga + redigita a cada cadastro. Path E: 5 campos críticos vazios + validação obrigatória client-side + "— Selecione —" disabled em dropdowns. `art523_opcao` e `despesas` mantêm defaults semânticos. `juros_am_percentual` condicional (crítico só se `juros_tipo === "outros"`). Cascata em `AdicionarDocumento` alinha (fallback `?? ""`). D-01 motor INTOCADO trivialmente.
+**Trigger:** Descoberta na Phase 7.13c REJECT (TASK 0 com dono 2026-04-30) — investigação pré-discuss original assumiu UI Diretrizes confusa em DetalheContrato (Path C); operador real reportou OUTRA dor: fricção de cadastro NovoContrato wizard. Phase redirecionada de Path C → Path E sem custo de implementação errada.
 **Depends on:** nenhuma — phase independente
-**Status:** BACKLOG 2026-04-30 — sem prioridade fixa, pode ser deferida indefinidamente (não há dano financeiro real)
+**Decisions:** ver `.planning/phases/07.13d-encargos-defaults-vazios/07.13d-CONTEXT.md` (Path E locked PAUSA #1 2026-04-30, 5 D-pre lockeds: D-pre-1 5 campos críticos vazios + nota condicional juros_am, D-pre-2 2 defaults semânticos mantidos, D-pre-3 validação client-side bloqueia submit + nota condicional juros_am, D-pre-4 dropdowns "— Selecione —" disabled, D-pre-5 AdicionarDocumento fallback alinhado). Discuss formal SKIPPED — briefing v2 substantivo, Q1-Q5 respondidas pelo orchestrator.
+**Plans:** 1 plan único (`07.13d-01-PLAN.md`), 5 tasks, ~25-30 linhas em 2-3 arquivos. autonomous:false.
+**UI hint:** yes (NovoContrato + AdicionarDocumento + DiretrizesContrato).
+**Status:** **INSERTED** 2026-04-30 — CONTEXT.md (~180 linhas) commitado no pai. Path E locked. Pendente: `/gsd-plan-phase 7.13d`. Memory feedbacks aplicados: uat_humano_pega_bugs_que_gates_automatizados_nao_pegam + post_hoc_d_pre_must_be_validated_in_child_phase + discuss_walkthrough_fluxo_real.
 
 ### Phase 8: PDF Demonstrativo (v1.4)
 **Goal**: Advogado pode gerar um PDF demonstrativo de débito profissional do contrato com um clique — documento pronto para enviar ao devedor ou anexar em execução judicial, contendo parcelas atualizadas pelos encargos do contrato, pagamentos recebidos e totais finais
