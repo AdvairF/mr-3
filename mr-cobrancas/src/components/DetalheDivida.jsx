@@ -81,17 +81,19 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
   const saldoDivida = saldosMap != null ? (saldosMap[String(divida.id)] ?? null) : null;
   // Phase 7.10.bug2.sub1 D-pre-3 — branch _so_custas (motor filtra L172-176, helper espelha L479-491).
   // Para _so_custas, saldoDividaLocal NÃO se aplica — fantasma não tem pagamentos parciais (PagamentosDivida não opera).
-  const saldoCustas = divida._so_custas
+  // Helper retorna { original, atualizado } pra exibir ambos em UI (expansion mid-UAT 2026-05-01).
+  const custasResult = divida._so_custas
     ? calcularValorAtualizadoCustasAvulsas(divida.custas || [], hoje)
     : null;
+  const valorOriginalExibido = divida._so_custas ? custasResult.original : divida.valor_total;
   // saldoDividaLocal: sobrescreve saldoDivida quando PagamentosDivida reporta novo saldo via onSaldoChange
   const [saldoDividaLocal, setSaldoDividaLocal] = useState(null);
   const [totalPagoDivida, setTotalPagoDivida] = useState(null);
   // Valor efetivo:
-  //  - _so_custas → saldoCustas (helper INPC)
+  //  - _so_custas → custasResult.atualizado (helper INPC)
   //  - regular: saldoDividaLocal (PagamentosDivida) ou saldoDivida (motor)
   const saldoAtual = divida._so_custas
-    ? saldoCustas
+    ? custasResult.atualizado
     : (saldoDividaLocal !== null ? saldoDividaLocal : saldoDivida);
   const pagoPorDividaMap = devedor ? calcularTotalPagoPorDivida(devedor, pagamentosDoDevedor, hoje) : {};
   const totalPago = pagoPorDividaMap[String(divida.id)] ?? 0;
@@ -141,7 +143,7 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
               Valor Original
             </p>
             <p style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>
-              {fmtBRL(divida.valor_total)}
+              {fmtBRL(valorOriginalExibido)}
             </p>
           </div>
           <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", border: "1px solid #e2e8f0", textAlign: "center" }}>

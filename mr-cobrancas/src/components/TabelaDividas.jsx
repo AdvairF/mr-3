@@ -95,12 +95,14 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                 const saldosMap = obj ? calcularSaldosPorDivida(obj.devedor, obj.pagamentos, hoje) : null;
                 const saldo = saldosMap != null ? (saldosMap[String(d.id)] ?? null) : null;
                 // Phase 7.10.bug2.sub1 D-pre-2 — branch _so_custas (motor filtra L172-176, helper espelha L479-491).
-                const saldoCustas = d._so_custas
+                // Helper retorna { original, atualizado } pra exibir ambos em UI (expansion mid-UAT 2026-05-01).
+                const custasResult = d._so_custas
                   ? calcularValorAtualizadoCustasAvulsas(d.custas || [], hoje)
                   : null;
+                const valorOriginalExibido = d._so_custas ? custasResult.original : d.valor_total;
                 const saldoExibido = d.saldo_quitado === true
                   ? 0
-                  : (d._so_custas ? saldoCustas : saldo);
+                  : (d._so_custas ? custasResult.atualizado : saldo);
                 return (
                   <tr
                     key={d.id}
@@ -135,7 +137,7 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                         );
                       })()}
                     </td>
-                    <td style={td}>{fmtBRL(d.valor_total)}</td>
+                    <td style={td}>{fmtBRL(valorOriginalExibido)}</td>
                     <td style={td}>
                       {saldoExibido == null
                         ? <span style={{ color: "#94a3b8", fontSize: 13 }}>Calculando...</span>
