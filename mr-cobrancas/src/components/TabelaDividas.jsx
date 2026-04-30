@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AtrasoCell from "./AtrasoCell.jsx";
 import Btn from "./ui/Btn.jsx";
 import { calcularSaldosPorDivida } from "../utils/devedorCalc.js";
+import { calcularValorAtualizadoCustasAvulsas } from "../utils/custasAvulsas.js";
 
 function fmtBRL(v) {
   if (v == null || v === "") return "—";
@@ -93,7 +94,13 @@ export default function TabelaDividas({ dividas, devedores, credores, allPagamen
                 const obj = buildDevedorObjParaSaldo(d, devedores, allPagamentos);
                 const saldosMap = obj ? calcularSaldosPorDivida(obj.devedor, obj.pagamentos, hoje) : null;
                 const saldo = saldosMap != null ? (saldosMap[String(d.id)] ?? null) : null;
-                const saldoExibido = d.saldo_quitado === true ? 0 : saldo;
+                // Phase 7.10.bug2.sub1 D-pre-2 — branch _so_custas (motor filtra L172-176, helper espelha L479-491).
+                const saldoCustas = d._so_custas
+                  ? calcularValorAtualizadoCustasAvulsas(d.custas || [], hoje)
+                  : null;
+                const saldoExibido = d.saldo_quitado === true
+                  ? 0
+                  : (d._so_custas ? saldoCustas : saldo);
                 return (
                   <tr
                     key={d.id}

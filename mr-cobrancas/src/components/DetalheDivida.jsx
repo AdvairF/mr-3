@@ -5,6 +5,7 @@ import Btn from "./ui/Btn.jsx";
 import DevedoresDaDivida from "./DevedoresDaDivida.jsx";
 import Art523Option from "./Art523Option.jsx";
 import { calcularSaldosPorDivida, calcularTotalPagoPorDivida } from "../utils/devedorCalc.js";
+import { calcularValorAtualizadoCustasAvulsas } from "../utils/custasAvulsas.js";
 import PagamentosDivida from "./PagamentosDivida.jsx";
 
 function fmtBRL(v) {
@@ -78,12 +79,20 @@ export default function DetalheDivida({ divida, devedores, credores, allPagament
 
   const saldosMap = devedor ? calcularSaldosPorDivida(devedor, pagamentosDoDevedor, hoje) : null;
   const saldoDivida = saldosMap != null ? (saldosMap[String(divida.id)] ?? null) : null;
+  // Phase 7.10.bug2.sub1 D-pre-3 — branch _so_custas (motor filtra L172-176, helper espelha L479-491).
+  // Para _so_custas, saldoDividaLocal NÃO se aplica — fantasma não tem pagamentos parciais (PagamentosDivida não opera).
+  const saldoCustas = divida._so_custas
+    ? calcularValorAtualizadoCustasAvulsas(divida.custas || [], hoje)
+    : null;
   // saldoDividaLocal: sobrescreve saldoDivida quando PagamentosDivida reporta novo saldo via onSaldoChange
   const [saldoDividaLocal, setSaldoDividaLocal] = useState(null);
   const [totalPagoDivida, setTotalPagoDivida] = useState(null);
-  // Valor efetivo: se PagamentosDivida já propagou um saldo (saldoDividaLocal !== null), usar esse;
-  // senão usar o calculado pelos pagamentos_parciais do devedor (saldoDivida).
-  const saldoAtual = saldoDividaLocal !== null ? saldoDividaLocal : saldoDivida;
+  // Valor efetivo:
+  //  - _so_custas → saldoCustas (helper INPC)
+  //  - regular: saldoDividaLocal (PagamentosDivida) ou saldoDivida (motor)
+  const saldoAtual = divida._so_custas
+    ? saldoCustas
+    : (saldoDividaLocal !== null ? saldoDividaLocal : saldoDivida);
   const pagoPorDividaMap = devedor ? calcularTotalPagoPorDivida(devedor, pagamentosDoDevedor, hoje) : {};
   const totalPago = pagoPorDividaMap[String(divida.id)] ?? 0;
 
