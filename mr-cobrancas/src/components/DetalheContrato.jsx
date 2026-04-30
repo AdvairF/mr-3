@@ -515,6 +515,12 @@ export default function DetalheContrato({
 
   async function handleCriarCusta(payload) {
     try {
+      // Phase 7.10.bug3 D-pre-3 — anti-zero client-side (espelha guard server-side).
+      const valorNumericoCliente = Number(payload?.valor || 0);
+      if (!(valorNumericoCliente > 0)) {
+        toast.error("Valor da custa deve ser maior que zero");
+        throw new Error("Valor da custa deve ser maior que zero");
+      }
       await criarCusta(contrato.id, payload);
       invalidateContrato(contrato.id);            // D-05 — antes do toast
       toast.success("Custa criada.");

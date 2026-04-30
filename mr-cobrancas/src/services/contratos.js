@@ -592,6 +592,15 @@ export async function criarCusta(contratoId, payload) {
   const contrato = Array.isArray(contratoRows) ? contratoRows[0] : null;
   if (!contrato) throw new Error("contrato não encontrado");
 
+  // Phase 7.10.bug3 D-pre-3 — bloquear valor <= 0 (estrito: NÃO valor >= 0).
+  // Custa zero não é cadastro de escritório: isenção de custas é decisão
+  // do juiz registrada em decisão judicial específica, não custa cadastrada
+  // com valor 0 no sistema de cobrança.
+  const valorNumerico = Number(payload?.valor || 0);
+  if (!(valorNumerico > 0)) {
+    throw new Error("Valor da custa deve ser maior que zero");
+  }
+
   const dataCusta = payload?.data || "";
   const custaItem = {
     id:             payload?.id || gerarCustaId(),
@@ -644,8 +653,10 @@ export async function editarCusta(contratoId, dividaId, custaId, patch) {
 }
 
 /**
- * Exclui uma custa do array JSONB. Se ficar vazio E divida._so_custas === true,
- * mantém a dívida vazia (Q2 conservative — evita cascade de effects não auditados).
+ * Exclui uma custa do array JSONB.
+ * Phase 7.10.bug3 D-pre-2 — substitui Q2 conservative Phase 7.9.
+ * Quando array vira vazio E divida._so_custas === true, deleta a dívida-fantasma
+ * (cascade automático via junction devedores_dividas FK CASCADE — Migration 002:161).
  */
 export async function excluirCusta(contratoId, dividaId, custaId) {
   const dividaRows = await dbGet("dividas", `id=eq.${encodeURIComponent(dividaId)}&limit=1`);
@@ -653,8 +664,14 @@ export async function excluirCusta(contratoId, dividaId, custaId) {
   if (!divida) throw new Error("divida não encontrada");
   const custasAtuais = Array.isArray(divida.custas) ? divida.custas : [];
   const novasCustas = custasAtuais.filter(c => String(c.id) !== String(custaId));
-  await atualizarDivida(dividaId, { custas: novasCustas });
-  // Q2 — dívida avulsa vazia é preservada conservativamente (comment locked).
+  // Phase 7.10.bug3 D-pre-2 — cascade DELETE substitui Q2 conservative Phase 7.9.
+  // Junction devedores_dividas tem ON DELETE CASCADE (Migration 002:161),
+  // portanto DELETE da dívida-fantasma propaga limpeza automática à junction.
+  if (novasCustas.length === 0 && divida._so_custas === true) {
+    await dbDelete("dividas", `id=eq.${encodeURIComponent(dividaId)}`);
+  } else {
+    await atualizarDivida(dividaId, { custas: novasCustas });
+  }
 }
 
 /**
