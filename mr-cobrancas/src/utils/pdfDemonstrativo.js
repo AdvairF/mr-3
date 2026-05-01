@@ -20,6 +20,7 @@
 import { listarDevedoresDoContrato } from "../services/devedoresDividas.js";
 import { calcularDetalheEncargosContrato } from "./devedorCalc.js";
 import { calcularFatorCorrecao } from "./correcao.js";
+import { calcularSaldoPorDividaIndividual } from "../services/pagamentos.js";  // Phase 8 fix UAT — D3 saldo per parcela Art.354 sequencial (espelha App L180)
 
 // ── Constants escritório (D-pre-13) ─────────────────────────────────
 const NOME_ESCRITORIO = "MR Cobranças";
@@ -42,6 +43,21 @@ const RESP_LABELS = {
   SUBSIDIARIA: "Subsidiária",
   DIVISIVEL:   "Divisível",
 };
+
+// ── Helper status parcela (Phase 8 fix UAT D5) ──────────────────────
+// Replica AtrasoCell.jsx em texto puro (PDF não usa JSX). 5 faixas de cor.
+function statusParcelaTexto(divida, hoje) {
+  if (divida.saldo_quitado) return { label: "Quitado", cor: [22, 101, 52] };  // verde
+  const dataVencimento = divida.data_vencimento;
+  if (!dataVencimento) return { label: "—", cor: [148, 163, 184] };
+  const hojeStr = String(hoje).slice(0, 10);
+  const dias = Math.floor((new Date(hojeStr) - new Date(dataVencimento)) / 86400000);
+  if (dias <= 0) return { label: "Em dia", cor: [100, 116, 139] };       // cinza
+  if (dias <= 30) return { label: `${dias} dias`, cor: [133, 77, 14] };  // amarelo
+  if (dias <= 90) return { label: `${dias} dias`, cor: [154, 52, 18] };  // laranja
+  if (dias <= 180) return { label: `${dias} dias`, cor: [153, 27, 27] }; // vermelho
+  return { label: `${dias} dias`, cor: [185, 28, 28] };                  // vermelho-escuro
+}
 
 // ── Helpers locais ──────────────────────────────────────────────────
 function fmtBRL(v) {
@@ -353,7 +369,11 @@ export async function gerarDemonstrativoPDF(contrato, dividas, devedores, credor
   // ─── 9.c RESUMO FINANCEIRO ───────────────────────────────────────
   y = cabecalhoSecao("RESUMO FINANCEIRO", y);
 
-  const totalAtualizado = (detalhe.valorOriginal || 0) + (detalhe.totalEncargos || 0);
+  // Phase 8 fix UAT D2 — Total Atualizado alinha com pattern App L635-636:
+  // saldoFinal (saldoAtualizado + custas.atualizado) + totalPago = total devido atualizado
+  // antes de pagamentos. Soma item-a-item da tabela bate com (=) Total Atualizado.
+  const saldoFinal = (detalhe.saldoAtualizado || 0) + (detalhe.custas?.atualizado || 0);
+  const totalAtualizado = saldoFinal + (detalhe.totalPago || 0);
   const linhasResumo = [
     { label: "Valor Original", valor: detalhe.valorOriginal || 0 },
     ...(detalhe.multa?.valor > 0.005 ? [{ label: "(+) Multa", valor: detalhe.multa.valor }] : []),
@@ -365,7 +385,7 @@ export async function gerarDemonstrativoPDF(contrato, dividas, devedores, credor
     ...(detalhe.art523?.honorarios > 0.005 ? [{ label: "(+) Art. 523 §1º Honor. 10%", valor: detalhe.art523.honorarios }] : []),
     { label: "(=) Total Atualizado", valor: totalAtualizado, bold: true },
     ...(detalhe.totalPago > 0.005 ? [{ label: "(-) Total Pago", valor: detalhe.totalPago, vermelho: true }] : []),
-    { label: "(=) Saldo Devedor", valor: detalhe.saldoAtualizado || 0, bold: true, teal: true },
+    { label: "(=) Saldo Devedor", valor: saldoFinal, bold: true, teal: true },  // D1 fix UAT — saldoFinal inclui custas.atualizado (espelha App L635-636)
   ];
 
   doc.setFontSize(10);
@@ -391,36 +411,40 @@ export async function gerarDemonstrativoPDF(contrato, dividas, devedores, credor
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...branco);
+    // Phase 8 fix UAT D5 — layout 6 cols (Valor Atualizado removido — redundante com Pago + Saldo)
     const cIdx = ML + 2;
     const cVenc = ML + 12;
-    const cVOrig = ML + 80;
-    const cVAtual = ML + 115;
-    const cPago = ML + 150;
-    const cSaldo = ML + 180;
+    const cVOrig = ML + 70;     // right-align edge
+    const cPago = ML + 100;     // right-align edge
+    const cSaldo = ML + 134;    // right-align edge
+    const cStatus = ML + 138;   // left-align start (status texto curto)
     doc.text("#", cIdx, y);
     doc.text("Vencimento", cVenc, y);
     doc.text("Valor Original", cVOrig, y, { align: "right" });
-    doc.text("Valor Atualizado", cVAtual, y, { align: "right" });
     doc.text("Pago", cPago, y, { align: "right" });
     doc.text("Saldo", cSaldo, y, { align: "right" });
+    doc.text("Status", cStatus, y);
     y += 4;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...escuro);
 
-    const detalhesPorIdx = Array.isArray(detalhe.detalhePorDivida) ? detalhe.detalhePorDivida : [];
+    // Phase 8 fix UAT D6 — sort por data_vencimento ASC (espelha ordem app)
+    const dividasOrdenadas = [...dividasRegulares].sort((a, b) =>
+      String(a.data_vencimento || a.data_origem || "").localeCompare(String(b.data_vencimento || b.data_origem || ""))
+    );
 
     let idx = 0;
-    for (const d of dividasRegulares) {
+    for (const d of dividasOrdenadas) {
       y = checkPage(y, 6);
-      const dpd = detalhesPorIdx[idx];
+      // Phase 8 fix UAT D3 — saldo per parcela via helper síncrono pure (services/pagamentos.js:77).
+      // Espelha App L180 (calcularSaldoPorDividaIndividual) — Art.354 amortização sequencial.
+      // Substitui cálculo simplificado dpd.saldoTeorico - pago (que não respeitava sequência Art.354).
       const valorOrig = parseFloat(d.valor_total) || 0;
-      const valorAtual = (dpd && typeof dpd.saldoTeorico === "number") ? dpd.saldoTeorico : valorOrig;
-      const pago = (allPagamentosDivida || [])
-        .filter(p => String(p.divida_id) === String(d.id))
-        .reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-      const saldo = Math.max(0, valorAtual - pago);
+      const pagamentosDessaDivida = (allPagamentosDivida || []).filter(p => String(p.divida_id) === String(d.id));
+      const pago = pagamentosDessaDivida.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      const saldo = calcularSaldoPorDividaIndividual(d, pagamentosDessaDivida, hoje);
 
       if (idx % 2 === 1) {
         doc.setFillColor(248, 250, 252);
@@ -430,9 +454,15 @@ export async function gerarDemonstrativoPDF(contrato, dividas, devedores, credor
       doc.text(String(idx + 1), cIdx, y);
       doc.text(fmtData(d.data_vencimento || d.data_origem), cVenc, y);
       doc.text(fmtBRL(valorOrig), cVOrig, y, { align: "right" });
-      doc.text(fmtBRL(valorAtual), cVAtual, y, { align: "right" });
       doc.text(fmtBRL(pago), cPago, y, { align: "right" });
       doc.text(fmtBRL(saldo), cSaldo, y, { align: "right" });
+
+      // Phase 8 fix UAT D5 — coluna Status com cor por severidade
+      const status = statusParcelaTexto(d, hoje);
+      doc.setTextColor(...status.cor);
+      doc.text(status.label, cStatus, y);
+      doc.setTextColor(...escuro);  // reset cor
+
       y += 5.5;
       idx++;
     }
