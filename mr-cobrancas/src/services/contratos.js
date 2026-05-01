@@ -668,7 +668,9 @@ export async function excluirCusta(contratoId, dividaId, custaId) {
   // Junction devedores_dividas tem ON DELETE CASCADE (Migration 002:161),
   // portanto DELETE da dívida-fantasma propaga limpeza automática à junction.
   if (novasCustas.length === 0 && divida._so_custas === true) {
-    await dbDelete("dividas", `id=eq.${encodeURIComponent(dividaId)}`);
+    // Phase 7.10.bug3 fix — dbDelete espera UUID puro (constrói ?id=eq.${id} internamente em supabase.js:76).
+    // Espelha L393 excluirContrato + L471 excluirDocumento. Original passava "id=eq.${UUID}" → URL duplicava prefix → PostgREST 400.
+    await dbDelete("dividas", dividaId);
   } else {
     await atualizarDivida(dividaId, { custas: novasCustas });
   }
