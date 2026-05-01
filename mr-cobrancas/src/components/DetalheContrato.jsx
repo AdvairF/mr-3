@@ -18,6 +18,8 @@ import DecomposicaoSaldoModal from "./DecomposicaoSaldoModal.jsx";
 import NovaCustaModal from "./NovaCustaModal.jsx";                // Phase 7.9
 // Phase 7.8.2a — D-05 enforcement (callers completude p/ cache SWR de listagem)
 import { invalidateContrato, removeContrato } from "../hooks/useSaldoAtualizadoCache.js";
+// Phase 8 — PDF Demonstrativo do Contrato
+import { gerarDemonstrativoPDF } from "../utils/pdfDemonstrativo.js";
 
 function fmtBRL(v) { if (v == null || v === "") return "—"; return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function fmtData(iso) { if (!iso) return "—"; const d = iso.slice(0, 10).split("-"); return `${d[2]}/${d[1]}/${d[0]}`; }
@@ -160,6 +162,9 @@ export default function DetalheContrato({
   // Phase 7.9 — Custas Judiciais CRUD
   const [custaModalAberta, setCustaModalAberta] = useState(false);
   const [custaEmEdicao, setCustaEmEdicao] = useState(null);  // { id, descricao, valor, data, pago, divida_id (interno — id da dívida-fantasma) } ou null
+
+  // Phase 8 — PDF Demonstrativo do Contrato
+  const [gerandoPDF, setGerandoPDF] = useState(false);
 
   useEffect(() => {
     setLoadingDocumentos(true);
@@ -445,6 +450,19 @@ export default function DetalheContrato({
     }
   }
 
+  // Phase 8 — PDF Demonstrativo do Contrato
+  async function handleGerarPDF() {
+    setGerandoPDF(true);
+    try {
+      await gerarDemonstrativoPDF(contrato, dividas, devedores, credores, allPagamentosDivida, hoje);
+      toast.success("PDF gerado com sucesso.");
+    } catch (e) {
+      toast.error("Erro ao gerar PDF: " + (e.message || "erro desconhecido"));
+    } finally {
+      setGerandoPDF(false);
+    }
+  }
+
   // Phase 7.7 — exclui UM documento específico. Cleanup de UI state ANTES do service
   // (D-07) previne render crash quando onCarregarTudo retorna lista sem o doc. Não
   // navega (SC-4: contrato vazio pós-delete é estado válido, usuário fica no contrato).
@@ -708,6 +726,9 @@ export default function DetalheContrato({
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <Btn color="#4f46e5" sm onClick={() => setEditando(true)}>Editar Contrato</Btn>
+              <Btn color="#0d9488" sm onClick={handleGerarPDF} disabled={gerandoPDF}>
+                {gerandoPDF ? <Spinner /> : "🖨️ Gerar PDF"}
+              </Btn>
               <Btn color="#dc2626" sm outline onClick={handleExcluirContrato} disabled={excluindoContrato}>
                 {excluindoContrato ? "Excluindo…" : "Excluir Contrato"}
               </Btn>
