@@ -374,7 +374,10 @@ export async function gerarDemonstrativoPDF(contrato, dividas, devedores, credor
   // antes de pagamentos. Soma item-a-item da tabela bate com (=) Total Atualizado.
   const saldoFinal = (detalhe.saldoAtualizado || 0) + (detalhe.custas?.atualizado || 0);
   const totalAtualizado = saldoFinal + (detalhe.totalPago || 0);
-  const linhasResumo = [
+  // Phase 8 fix UAT D2-NOTA — split em 2 passes (encargos + resultado)
+  // pra inserir nota explicativa Art.354 ANTES da linha "(=) Total Atualizado".
+  // Nota resiste a refactor futuro do motor (texto puro, sem cálculo client-side).
+  const linhasEncargos = [
     { label: "Valor Original", valor: detalhe.valorOriginal || 0 },
     ...(detalhe.multa?.valor > 0.005 ? [{ label: "(+) Multa", valor: detalhe.multa.valor }] : []),
     ...(detalhe.honorarios?.valor > 0.005 ? [{ label: "(+) Honorários", valor: detalhe.honorarios.valor }] : []),
@@ -383,13 +386,44 @@ export async function gerarDemonstrativoPDF(contrato, dividas, devedores, credor
     ...(detalhe.custas?.atualizado > 0.005 ? [{ label: "(+) Custas Atualizadas", valor: detalhe.custas.atualizado }] : []),
     ...(detalhe.art523?.multa > 0.005 ? [{ label: "(+) Art. 523 §1º Multa 10%", valor: detalhe.art523.multa }] : []),
     ...(detalhe.art523?.honorarios > 0.005 ? [{ label: "(+) Art. 523 §1º Honor. 10%", valor: detalhe.art523.honorarios }] : []),
+  ];
+  const linhasResultado = [
     { label: "(=) Total Atualizado", valor: totalAtualizado, bold: true },
     ...(detalhe.totalPago > 0.005 ? [{ label: "(-) Total Pago", valor: detalhe.totalPago, vermelho: true }] : []),
     { label: "(=) Saldo Devedor", valor: saldoFinal, bold: true, teal: true },  // D1 fix UAT — saldoFinal inclui custas.atualizado (espelha App L635-636)
   ];
 
+  // Pass 1 — encargos brutos
   doc.setFontSize(10);
-  for (const l of linhasResumo) {
+  for (const l of linhasEncargos) {
+    y = checkPage(y, 6);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...escuro);
+    doc.text(l.label, ML + 3, y);
+    doc.text(fmtBRL(l.valor), MR - 3, y, { align: "right" });
+    y += 5.5;
+  }
+
+  // Phase 8 fix UAT D2-NOTA — nota explicativa Art.354 (texto puro, justificado, cinza 7pt)
+  y = checkPage(y, 14);
+  y += 1;
+  doc.setFontSize(7);
+  doc.setTextColor(...cinza);
+  doc.setFont("helvetica", "italic");
+  const notaTotal = "Os valores acima refletem encargos calculados sobre o débito original e o saldo atualizado pós-amortização (Art. 354 do Código Civil), conforme regra de imputação de pagamentos em débitos com juros e principal.";
+  const notaLinhas = doc.splitTextToSize(notaTotal, MR - ML - 6);
+  for (const linha of notaLinhas) {
+    y = checkPage(y, 4);
+    doc.text(linha, ML + 3, y);
+    y += 3.2;
+  }
+  y += 1;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...escuro);
+  doc.setFontSize(10);
+
+  // Pass 2 — resultado (Total Atualizado / Total Pago / Saldo Devedor)
+  for (const l of linhasResultado) {
     y = checkPage(y, 6);
     doc.setFont("helvetica", l.bold ? "bold" : "normal");
     if (l.teal) doc.setTextColor(...teal);
