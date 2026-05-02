@@ -11,9 +11,10 @@ files_modified:
   - src/mr-3/mr-cobrancas/src/utils/pdfDemonstrativo.js (Step 1.9.c rewrite — formato evolução)
   - src/mr-3/mr-cobrancas/package.json (test:regressao script — 8 → 9 test files)
 files_created:
-  - src/mr-3/mr-cobrancas/src/data/indicesHistoricos.json (NEW — INPC/IPCA/Taxa Legal mensais)
+  - src/mr-3/mr-cobrancas/src/data/indicesHistoricos.json (NEW — INPC/IPCA-15/Taxa Legal mensais)
   - src/mr-3/mr-cobrancas/src/services/__tests__/eventProcessor.test.js (NEW — 12-15 cases)
   - src/mr-3/mr-cobrancas/src/services/__tests__/fixtures/goldenMasters.json (NEW — snapshot pre-refactor)
+  - src/mr-3/mr-cobrancas/scripts/fetch-indices.js (NEW — BCB SGS API consumer + fórmula CMN 5.171/24)
 files_preserved:
   - src/mr-3/mr-cobrancas/src/services/pagamentos.js (calcularSaldoPorDividaIndividual — wrapper preservado, refactor interno)
   - src/mr-3/mr-cobrancas/src/services/dividas.js (D-01 cumulative pre-9.1)
@@ -31,7 +32,7 @@ tags:
 # Plan 09.1-01: Refactor motor evolução por eventos (tribunal-style)
 
 <objective>
-Substituir motor monolítico atual (`devedorCalc.js calcularDetalheEncargos` com 3 loops Art.354 duplicados em L59/L172/L277) por **event processor síncrono puro tribunal-style**, alinhando 100% com referência **soscalculos** e aderindo à **Lei 14.905/24** (regime intertemporal taxa legal vigente 30/08/2024). Motor novo expõe API `processarEventos(contrato, dividas, eventos, hoje) → { estado, historico }` — determinístico, replayable, debugável (audit trail jurídico). Custas + multa + honorários calculados sobre **Principal Corrigido apenas** (D-pre-4). Índices INPC/IPCA/Taxa Legal carregados de `src/data/indicesHistoricos.json` populado automaticamente via **BCB SGS API** (séries 433/4449/29541+29542). PDF Demonstrativo reescrito com formato evolução por etapas (deduções → créditos → consolidado). **Constraints invioláveis**: D-01 RELAXED escopo Phase 9.1 apenas (volta estrito pós-SHIP), Schema INTOCADO (D-pre-10 defer), autonomous false (UAT comparativo soscalculos é gate jurídico SC-9 obrigatório), ZERO push até SC-9 PASS. Janela ideal — sistema vazio (zero clientes prod), Phase 8 SHIPPED 2026-05-02 fechou v1.4. Phase 9.1 abre v1.5.
+Substituir motor monolítico atual (`devedorCalc.js calcularDetalheEncargos` com 3 loops Art.354 duplicados em L59/L172/L277) por **event processor síncrono puro tribunal-style**, alinhando 100% com referência **soscalculos** e aderindo à **Lei 14.905/24** (regime intertemporal taxa legal vigente 30/08/2024). Motor novo expõe API `processarEventos(contrato, dividas, eventos, hoje) → { estado, historico }` — determinístico, replayable, debugável (audit trail jurídico). Custas + multa + honorários calculados sobre **Principal Corrigido apenas** (D-pre-4). Índices INPC/IPCA-15/Taxa Legal carregados de `src/data/indicesHistoricos.json` populado automaticamente via **BCB SGS API** (séries 433 INPC, 7849 IPCA-15, 29541+29542 componentes Taxa Legal). Taxa Legal calculada conforme fórmula oficial **Resolução CMN 5.171/24**: `TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 (%)` — NÃO é soma simples (operador validou pós-revisão PLAN, 2026-05-02). PDF Demonstrativo reescrito com formato evolução por etapas (deduções → créditos → consolidado). **Constraints invioláveis**: D-01 RELAXED escopo Phase 9.1 apenas (volta estrito pós-SHIP), Schema INTOCADO (D-pre-10 defer), autonomous false (UAT comparativo soscalculos é gate jurídico SC-9 obrigatório), ZERO push até SC-9 PASS. Janela ideal — sistema vazio (zero clientes prod), Phase 8 SHIPPED 2026-05-02 fechou v1.4. Phase 9.1 abre v1.5.
 </objective>
 
 <must_haves>
@@ -45,7 +46,8 @@ truths:
   - "Multa e honorários sobre Principal Corrigido APENAS (D-pre-4 — alinha 100% soscalculos)"
   - "Taxa juros contratual respeitada (juros_am_percentual quando preenchido, fallback regra legal)"
   - "Índices INPC/IPCA/Taxa Legal mensais carregados de src/data/indicesHistoricos.json (header + fonte + lembrete atualização)"
-  - "JSON populado via BCB SGS API automatizada (códigos 433/4449/29541+29542) — fetch script reproduzível"
+  - "JSON populado via BCB SGS API automatizada (códigos 433 INPC, 7849 IPCA-15, 29541+29542 componentes Taxa Legal) — fetch script reproduzível"
+  - "Taxa Legal calculada conforme fórmula oficial Resolução CMN 5.171/24: TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 (%) — NÃO é soma simples Selic+IPCA"
   - "PDF Demonstrativo Step 1.9.c reescrito formato evolução: deduções → créditos → consolidado (espelha soscalculos)"
   - "Backup Supabase pré-refactor preservado pelo menos 7 dias (rollback safety net)"
   - "Dados teste apagados pré-refactor (TRADIO ce7b8d47 + ROCHA FASHION 335a2ad2 + advair devedor id=8)"
@@ -185,7 +187,42 @@ Source of truth: `.planning/phases/09-1-motor-eventos-tribunal/09-1-CONTEXT.md` 
 
 #### Step 0.2 — Apagar dados teste via SQL DELETE
 
-Executar no Supabase SQL Editor (em ordem de dependência FK):
+##### Step 0.2.0 — SELECT DISCOVERY (obrigatório antes do DELETE)
+
+Antes de qualquer DELETE, descobrir devedor_ids reais e validar visualmente que não há cross-hit em conta operador:
+
+```sql
+-- Discovery 1: devedor_id de cada contrato teste
+SELECT id, devedor_id
+FROM contratos_dividas
+WHERE id IN (
+  'ce7b8d47-e93a-42ed-a909-e5038baf3411',  -- TRADIO
+  '335a2ad2-9481-4836-a88a-55fbe6375827'   -- ROCHA FASHION
+);
+-- Anotar TRADIO_devedor_id e ROCHA_devedor_id resultantes.
+
+-- Discovery 2: validar nomes dos 3 devedores teste
+SELECT id, nome
+FROM devedores
+WHERE id IN (
+  /* TRADIO_devedor_id (do Discovery 1) */,
+  /* ROCHA_devedor_id (do Discovery 1) */,
+  8  -- advair test
+);
+-- Esperado visualmente: 3 rows (TRADIO + ROCHA FASHION + advair).
+-- ABORT GATE: se id=8 NÃO for "advair" ou similar (é a conta de login do operador), PARAR e investigar
+-- antes de qualquer DELETE. Operador valida via leitura humana dos 3 nomes retornados.
+
+-- Discovery 3 (opcional): outros contratos órfãos
+SELECT id, devedor_id, nome_documento
+FROM contratos_dividas
+WHERE devedor_id IN (TRADIO_id, ROCHA_id, 8);
+-- Garante que DELETEs subsequentes capturam tudo.
+```
+
+**Operador cola resultados Discovery 1+2 no chat antes de prosseguir.** Sub-IDs reais substituem placeholders abaixo.
+
+##### Step 0.2.1 — DELETE statements (com IDs reais do Discovery)
 
 ```sql
 -- IDs dos devedores teste a apagar
@@ -443,16 +480,45 @@ Valores são percentuais mensais (ex: 0.43 = 0.43%/mês).
 
 #### Step 2.2 — Script fetch-indices.js (BCB SGS API automatizada)
 
-Criar `scripts/fetch-indices.js` (NEW):
+**Abordagem (CORRIGIDA — operador validou fórmula 2026-05-02 via PDF Resolução CMN 5.171/24)**:
+
+Consumir séries SGS BCB:
+- **INPC**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json` (variação % mensal)
+- **IPCA-15**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.7849/dados?formato=json` (variação % mensal — **não usar 4449 IPCA cheio**, fórmula CMN exige IPCA-15)
+- **Fator Selic mensal**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29541/dados?formato=json` (já contém produtório diários do mês)
+- **Fator IPCA-15 mensal**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29542/dados?formato=json`
+
+Estratégia Taxa Legal:
+- **Tentativa 1**: buscar série Taxa Legal direta no SGS (verificar código exato no portal BCB; candidatos: 0190 ou similar). Se existir e estiver atualizada, usar valor já divulgado.
+- **Tentativa 2 (fallback)**: calcular Taxa Legal localmente conforme **Resolução CMN 5.171/24**:
+  ```
+  TL_m = Max [ (Fator Selic_m / Fator IPCA-15_m) - 1 ; 0 ] × 100  (% mensal)
+  ```
+  Onde:
+  - `Fator Selic_m` = série SGS 29541 (mês anterior, 8 casas decimais)
+  - `Fator IPCA-15_m` = série SGS 29542 (mês anterior, 4 casas decimais)
+  - Floor zero quando IPCA-15 supera Selic (Art. 6º Resolução)
+  - Regime juros simples (não composto)
+  - Pro rata por dias corridos quando subperíodo < 1 mês completo
+  - Resultado expresso em % mensal com 6 casas decimais
+
+Período de cobertura:
+- INPC, IPCA-15, Fator Selic, Fator IPCA-15: 01/2018 → mês corrente
+- Taxa Legal calculada/buscada: 08/2024 → mês corrente (pós-vigência Lei 14.905/24)
+
+Header JSON output: `{ ultimaAtualizacao, fonte: 'BCB SGS', codigos: { INPC: 433, IPCA15: 7849, FatorSelic: 29541, FatorIPCA: 29542, TaxaLegal_serie_direta_OPCIONAL }, formula_taxa_legal: 'TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 — Resolução CMN 5.171/24', lembreteOperador }`.
+
+Script `scripts/fetch-indices.js` (NEW):
 
 ```js
 import fs from 'fs';
 
 const SERIES = {
   INPC: 433,
-  IPCA: 4449,
-  TaxaLegal_c1: 29541,
-  TaxaLegal_c2: 29542,
+  IPCA15: 7849,
+  FatorSelic: 29541,
+  FatorIPCA15: 29542,
+  // TaxaLegalDireta: <CODIGO_VERIFICAR_NO_PORTAL_BCB> — opcional Tentativa 1
 };
 
 const DATA_INICIAL = '01/01/2018';
@@ -474,7 +540,8 @@ async function fetchSerie(codigo) {
 }
 
 function agregarMensal(dadosDiarios) {
-  // BCB SGS retorna [{data: "DD/MM/YYYY", valor: "0.43"}] (já mensal pra 433 e 4449)
+  // BCB SGS retorna [{data: "DD/MM/YYYY", valor: "0.43"}] — séries 433/7849 já mensais;
+  // séries 29541/29542 são fatores mensais (produtório diário já consolidado pelo BCB)
   const mensal = {};
   for (const ponto of dadosDiarios) {
     const [d, m, y] = ponto.data.split('/');
@@ -486,30 +553,36 @@ function agregarMensal(dadosDiarios) {
 
 async function main() {
   const inpc = agregarMensal(await fetchSerie(SERIES.INPC));
-  const ipca = agregarMensal(await fetchSerie(SERIES.IPCA));
-  const tl1 = agregarMensal(await fetchSerie(SERIES.TaxaLegal_c1));
-  const tl2 = agregarMensal(await fetchSerie(SERIES.TaxaLegal_c2));
-  
-  // Taxa Legal = soma dos 2 componentes (validar fórmula com operador)
+  const ipca15 = agregarMensal(await fetchSerie(SERIES.IPCA15));
+  const fatorSelic = agregarMensal(await fetchSerie(SERIES.FatorSelic));
+  const fatorIPCA15 = agregarMensal(await fetchSerie(SERIES.FatorIPCA15));
+
+  // Taxa Legal conforme Resolução CMN 5.171/24 (operador validou 2026-05-02):
+  // TL_m = Max [ (Fator Selic_m / Fator IPCA-15_m) - 1 ; 0 ] × 100  (% mensal, 6 casas)
+  // Floor zero quando IPCA-15 supera Selic (Art. 6º).
   const taxaLegal = {};
-  for (const k of Object.keys(tl1)) {
-    if (tl2[k] != null) taxaLegal[k] = tl1[k] + tl2[k];
+  for (const k of Object.keys(fatorSelic)) {
+    if (fatorIPCA15[k] == null || fatorIPCA15[k] === 0) continue;  // skip se ausente/zero (evita div0)
+    const razao = fatorSelic[k] / fatorIPCA15[k];
+    const tl = Math.max(razao - 1, 0) * 100;
+    taxaLegal[k] = parseFloat(tl.toFixed(6));  // 6 casas decimais conforme Resolução
   }
-  
+
   const json = {
     header: {
       ultimaAtualizacao: new Date().toISOString().slice(0, 10),
       fonte: 'BCB SGS API (api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados)',
-      codigos: { INPC: 433, IPCA: 4449, TaxaLegal_c1: 29541, TaxaLegal_c2: 29542 },
+      codigos: { INPC: 433, IPCA15: 7849, FatorSelic: 29541, FatorIPCA15: 29542 },
+      formula_taxa_legal: 'TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 — Resolução CMN 5.171/24, Art. 6º',
       lembreteOperador: 'Atualizar mensalmente — rodar npm run fetch-indices na primeira semana de cada mês',
     },
     INPC: inpc,
-    IPCA: ipca,
+    IPCA15: ipca15,
     TaxaLegal: taxaLegal,
   };
-  
+
   fs.writeFileSync('src/data/indicesHistoricos.json', JSON.stringify(json, null, 2));
-  console.log(`✅ Atualizado src/data/indicesHistoricos.json — INPC ${Object.keys(inpc).length}m, IPCA ${Object.keys(ipca).length}m, TaxaLegal ${Object.keys(taxaLegal).length}m`);
+  console.log(`✅ Atualizado src/data/indicesHistoricos.json — INPC ${Object.keys(inpc).length}m, IPCA-15 ${Object.keys(ipca15).length}m, TaxaLegal ${Object.keys(taxaLegal).length}m (CMN 5.171/24)`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
@@ -526,19 +599,28 @@ Rodar 1x agora pra popular JSON.
 
 #### Step 2.3 — Helper lerIndice(tipo, mes, ano)
 
+**Comportamento missing**: throw early (D — pattern jurídico não aceita extrapolação silenciosa nem fallback null que gera NaN no motor). Operador é alertado pra rodar `npm run fetch-indices`.
+
 ```js
 import indices from '../data/indicesHistoricos.json' assert { type: 'json' };
 
 export function lerIndice(tipo, mes, ano) {
   const chave = `${ano}-${String(mes).padStart(2, '0')}`;
   const valor = indices[tipo]?.[chave];
-  if (valor == null) {
-    console.warn(`[indicesHistoricos] missing: ${tipo} ${chave} — atualize src/data/indicesHistoricos.json`);
-    return null;
+
+  if (valor === undefined || valor === null) {
+    // Throw early — pattern jurídico não aceita extrapolação silenciosa.
+    // Motor para com mensagem clara; operador atualiza JSON via fetch-indices.
+    throw new Error(
+      `Índice ${tipo} para ${chave} não disponível em indicesHistoricos.json. ` +
+      `Atualize via 'npm run fetch-indices' ou aguarde divulgação BCB SGS para esse mês.`
+    );
   }
   return valor;
 }
 ```
+
+Tipos válidos (`tipo` argumento): `'INPC'`, `'IPCA15'`, `'TaxaLegal'`. Outros tipos → throw genérico (key undefined).
 
 #### Step 2.4 — Substituir calcularFatorCorrecao em correcao.js
 
@@ -594,18 +676,25 @@ Render `historico` array do event processor (Step 1.2 retorna):
 
 Cabeçalho atual preservado (NOME + ENDERECO + TELEFONE + EMAIL). Sem alteração.
 
-#### Step 3.4 — Re-build + smoke render manual
+#### Step 3.4 — Re-build + smoke render manual (DEFER pós-Task 5.1)
 
 ```bash
 npm run build
 ```
 
-Operador gera 1 PDF teste pos-refactor com cenário canônico (pré-cadastrar via UI).
+**DEFER**: smoke render PDF reutiliza dataset cadastrado em **Task 5.1** (cenário canônico para UAT comparativo soscalculos). Após Task 5.1 concluído, retornar a este step pra validar visual do PDF formato evolução tribunal-style. Reuse evita cadastro duplicado pelo operador.
 
-**Post-conditions**:
-- pdfDemonstrativo.js Step 1.9.c rewrite completo
-- Build PASS
-- Smoke render manual operador OK (visual sanity)
+Sequência efetiva:
+1. Task 3.1-3.3 + build PASS aqui (build gate é pré-Task 4)
+2. Task 4 testes
+3. Task 5.1 cadastra cenário canônico
+4. Volta aqui (Step 3.4 retroativo): operador clica "Gerar PDF" no contrato Task 5.1, valida visual (deduções → créditos → consolidado + linha do tempo eventos)
+5. Smoke render PASS gates Step 5.2 (cadastro paralelo soscalculos)
+
+**Post-conditions** (definidas após Task 5.1):
+- pdfDemonstrativo.js Step 1.9.c rewrite completo (✓ aqui)
+- Build PASS (✓ aqui)
+- Smoke render manual operador OK — DEFERRED até Task 5.1 PASS
 
 ---
 
