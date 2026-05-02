@@ -597,6 +597,30 @@ Adicionar em `package.json`:
 
 Rodar 1x agora pra popular JSON.
 
+#### Step 2.2.b — Mini-gate validação cruzada Taxa Legal abril/2026
+
+Após gerar `TaxaLegal["2026-04"]` (via Tentativa 1 série direta OU Tentativa 2 cálculo local conforme fórmula CMN 5.171/24), validar contra **golden reference soscalculos** capturado em Step 0.0:
+
+```js
+// Pos-fetch validation gate (executa após populate JSON em main())
+const TL_ABRIL2026_GOLDEN_SOSCALCULOS = 0.02479;
+const tl_abril2026 = json.TaxaLegal['2026-04'];
+const delta = Math.abs(tl_abril2026 - TL_ABRIL2026_GOLDEN_SOSCALCULOS);
+
+if (delta > 0.001) {
+  throw new Error(
+    `Taxa Legal abril/2026 calculada (${tl_abril2026}%) diverge do golden reference soscalculos (${TL_ABRIL2026_GOLDEN_SOSCALCULOS}%) em ${delta}%. ` +
+    `Possíveis causas: (1) fórmula CMN 5.171/24 mal interpretada, (2) série SGS errada, (3) golden reference desatualizado. ` +
+    `Investigar antes de Task 3+.`
+  );
+}
+console.log(`✅ Taxa Legal abril/2026 = ${tl_abril2026}% bate com soscalculos golden (delta ${delta}%)`);
+```
+
+**Propósito**: detectar erro de fórmula CMN cedo (Task 2), antes de Task 5 UAT comparativo. Custo: ~10 linhas. Falha do gate força investigação imediata (causa #1 mais provável: interpretação errada da fórmula `Max[(Selic/IPCA15)-1; 0]×100`; causa #2 confunde séries 29541 vs 29542 ou usa 4449 IPCA cheio em vez de 7849 IPCA-15; causa #3 raro mas possível).
+
+**Anchor de origem**: Step 0.0 SMOKE TEST SOSCALCULOS 2026-05-02 — operador gerou cálculo R$ 100 venc 01/04/2026 → soscalculos retornou R$ 100,02 (Juros R$ 0,02 / 0,02479% mensal Taxa Legal).
+
 #### Step 2.3 — Helper lerIndice(tipo, mes, ano)
 
 **Comportamento missing**: throw early (D — pattern jurídico não aceita extrapolação silenciosa nem fallback null que gera NaN no motor). Operador é alertado pra rodar `npm run fetch-indices`.
