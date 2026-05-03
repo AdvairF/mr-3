@@ -31,7 +31,7 @@ autonomous: false
 
 Operador quer:
 1. Cálculos padrão tribunal pra **TODOS contratos futuros** (~200 nos primeiros meses do escritório)
-2. Drift vs soscalculos zerado (delta < R$ 0,10)
+2. Drift vs soscalculos zerado (delta < R$ 1,00 cenário TRADIO real ~R$ 26K — D-pre-15; sub-validação opcional cenário simples R$ 100 → delta < R$ 0,10)
 3. Aderência **Lei 14.905/24** (regime intertemporal taxa legal — vigente 30/08/2024)
 
 **Sistema VAZIO atualmente** — apenas dados teste (TRADIO + ROCHA FASHION + advair). Janela ideal pra refactor sem risco produção.
@@ -50,7 +50,8 @@ Operador quer:
 | **D-pre-6** | Storage índices: JSON em `src/data/indicesHistoricos.json` populado AUTOMATICAMENTE via API BCB SGS (script `scripts/fetch-indices.js`). Operador roda `npm run fetch-indices` mensalmente. Códigos SGS: 433 (INPC), 7849 (IPCA-15), 29541+29542 (componentes Taxa Legal). Bandeira 1 AUTORIZADA pelo operador 2026-05-02. | Automação BCB elimina manual mensal + Bandeira 1 autorizada na sessão revisão PLAN | operador 2026-05-02 |
 | **D-pre-7** | **Cutover direto** (sem dual-rail) — ambiente vazio, zero risco produção. Substitui motor antigo de uma vez. | Zero clientes reais | operador 2026-05-02 |
 | **D-pre-8** | **D-01 RELAXED** escopo Phase 9.1 APENAS — invariante D-01 motor INTOCADO cumulative desde Phase 7.8 explicitamente violada nesta phase. Pós-SHIP 9.1, D-01 volta estrito (motor refactored vira nova baseline INTOCADO). Pattern espelha Phase 7.9 D-pre-rename (`feedback_d01_relaxation_protocol`). | Refactor motor é o objetivo da phase | operador 2026-05-02 |
-| **D-pre-9** | Apagar dados teste **ANTES** do refactor (TRADIO `ce7b8d47-...` + ROCHA FASHION `335a2ad2-...` + advair test devedor id=8 + outros se houver). Sub-passo pre-execute obrigatório. | Refactor não pode introduzir drift retroativo em rows existentes pre-refactor | operador 2026-05-02 |
+| **D-pre-9** | Apagar **APENAS advair (id=8 cobaia teste Phase 8)** ANTES do refactor. **TRADIO (id=25 MENDES E MENDES, contrato `ce7b8d47-...`) + ROCHA (id=27 M L FRIOS, contrato `335a2ad2-...`) PRESERVADOS** — viram UAT real Task 5.1 (D-pre-15). Atualizado pós-Discovery 2 (2026-05-03). | Operador validou que TRADIO + ROCHA têm dados parcialmente reais, recadastro retrabalho desnecessário. Motor novo recalcula automaticamente. | operador 2026-05-03 |
+| **D-pre-15** | TRADIO + ROCHA pre-Phase 9.1 servem como UAT real comparativo soscalculos (Task 5 SC-9). Pos-refactor motor novo deve recalcular esses contratos com saldos tribunal-style: TRADIO delta < R$ 1,00 vs PDF soscalculos prévio R$ 26.633,88. | Aproveitamento de cenário real (com transição Lei 14.905/24, pagamentos parciais, multa+honor) sem recadastro sintético. Tolerância R$ 1,00 sobre R$ 26.633 = 0,004% — alinhado com 4 casas BCB. | operador 2026-05-03 |
 | **D-pre-10** | Schema rename long↔short form (`indice_correcao` ↔ `indexador` + `juros_am_percentual` ↔ `juros_am` + etc.) **DEFERRED** — fora do escopo Phase 9.1. Adapter atual preservado. Memory `feedback_schema_adapter_long_short_form_consumer_replication` aplica como alerta consultivo | Escopo control — refactor motor é grande o suficiente | operador 2026-05-02 |
 | **D-pre-11** | Backup Supabase obrigatório pré-refactor (`pg_dump` via dashboard OU Supabase scheduled backup confirmado). Pre-flight gate Task 0. | Defesa contra falha catastrófica refactor | operador 2026-05-02 |
 | **D-pre-12** | Event processor **síncrono puro** — determinístico (mesmos eventos → mesmo output), replayable (pode ser rerun N vezes sem side-effects), debugável (cada evento inspecionável) | Necessário pra audit trail jurídico | operador 2026-05-02 |
@@ -69,7 +70,7 @@ Operador quer:
 | **SC-6** | 34 testes `test:regressao` PASS — event processor produz resultados equivalentes aos loops antigos para casos antigos sem regime nova | Snapshot test cumulative pre-refactor (golden masters) |
 | **SC-7** | Testes novos `eventProcessor.test.js` cobrindo: regime pre-30/08/2024, regime pos-30/08/2024, transição mid-cálculo, evento art523, taxa contratual override, custa lançada mid-período | ~10-15 cases novos |
 | **SC-8** | PDF Demonstrativo atualizado mostrando evolução por etapas (igual estrutura soscalculos: deduções → créditos → consolidado) | `pdfDemonstrativo.js` Step 1.9.c rewrite |
-| **SC-9** | UAT comparativo: cadastrar contrato igual ao TRADIO no MR Cobranças + soscalculos. Saldo bate (delta < R$ 0,10) entre os 2 sistemas | Cenário canônico: 1 doc + N parcelas + 1 pagamento parcial. Documentar prints comparativos |
+| **SC-9** | UAT comparativo (D-pre-15 reformulado 2026-05-03): TRADIO existente preservado (`ce7b8d47-...`, devedor MENDES E MENDES id=25) — saldo MR pos-refactor vs PDF soscalculos prévio R$ 26.633,88 (Phase 8 captura). **Delta < R$ 1,00** (tolerância proporcional magnitude TRADIO ~R$ 26K, 0,004%). Sub-validação opcional: cenário simples R$ 100 venc 01/04/2026 → ~R$ 100,02 (delta < R$ 0,10, golden Step 0.0). | Sem recadastro sintético — cenário real cobre transição Lei 14.905/24 + pagamentos parciais + multa/honor. Documentar prints comparativos. |
 | **SC-10** | Backup Supabase pre-refactor confirmado disponível pra rollback | Pre-flight gate Task 0 — operador valida snapshot antes de iniciar Task 1 |
 
 ## 5. Memory feedbacks aplicáveis (pre-execute)
@@ -134,11 +135,11 @@ Operador quer:
 
 - ✅ 34 + N novos testes `test:regressao` + `eventProcessor.test.js` PASS
 - ✅ SC-1 a SC-10 todos PASS (com prints + audit trail UAT)
-- ✅ UAT comparativo soscalculos: delta saldo < R$ 0,10 (SC-9)
+- ✅ UAT comparativo soscalculos: TRADIO delta < R$ 1,00 vs PDF prévio R$ 26.633,88 (SC-9, D-pre-15)
 - ✅ Tag `v1.5-phase9.1` criada e pushed
 - ✅ Comentários `D-01 INTOCADO` em todo codebase atualizados pra `D-01 RELAXED durante 9.1` ou substituídos por nova baseline
 - ✅ Memory feedback NOVO criado: `feedback_event_processor_pattern_motor_financeiro` (pattern transferível pra phases futuras)
-- ✅ Dados teste apagados pré-refactor (D-pre-9): TRADIO + ROCHA FASHION + advair confirmados deleted
+- ✅ Dados teste apagados pré-refactor (D-pre-9 atualizado): APENAS advair (id=8) deleted. TRADIO (id=25) + ROCHA (id=27) PRESERVADOS por D-pre-15 — UAT real Task 5.1
 - ✅ Backup Supabase preservado pelo menos 7 dias pós-SHIP (rollback safety net)
 
 ## 11. Status

@@ -52,7 +52,7 @@ truths:
   - "Backup Supabase pré-refactor preservado pelo menos 7 dias (rollback safety net)"
   - "Dados teste apagados pré-refactor (TRADIO ce7b8d47 + ROCHA FASHION 335a2ad2 + advair devedor id=8)"
   - "9 test files em test:regressao (era 8): + eventProcessor.test.js — 35+ tests PASS"
-  - "UAT comparativo soscalculos (SC-9): delta saldo < R$ 0,10 — gate jurídico obrigatório"
+  - "UAT comparativo soscalculos (SC-9): TRADIO existente (id=25 MENDES E MENDES, contrato ce7b8d47) — delta saldo < R$ 1,00 vs PDF soscalculos prévio R$ 26.633,88 (Phase 8 captura). Tolerância proporcional magnitude TRADIO ~R$ 26K. Gate jurídico obrigatório (D-pre-15)"
   - "D-01 RELAXED escopo Phase 9.1 APENAS: motor refactored vira nova baseline INTOCADO pós-SHIP"
   - "Schema INTOCADO (D-pre-10 rename long↔short DEFERRED v1.6)"
 
@@ -94,12 +94,13 @@ Source of truth: `.planning/phases/09-1-motor-eventos-tribunal/09-1-CONTEXT.md` 
 | **D-pre-6** | Storage índices JSON hardcoded | Task 2.1 — estrutura + Task 2.2 BCB SGS API |
 | **D-pre-7** | Cutover direto (sem dual-rail) | Task 1.4 — substitui loops in-place |
 | **D-pre-8** | D-01 RELAXED escopo Phase 9.1 APENAS | Task 1.6 — comments headers + commit message |
-| **D-pre-9** | Apagar dados teste pré-refactor | Task 0.2 — SQL DELETE TRADIO+ROCHA+advair |
+| **D-pre-9** | Apagar APENAS advair (id=8) — TRADIO (id=25) + ROCHA (id=27) PRESERVADOS | Task 0.2 — SQL DELETE escopo reduzido (advair only). Atualizado 2026-05-03 pós-Discovery 2 |
 | **D-pre-10** | Schema rename long↔short DEFERRED v1.6 | NÃO toca DB names |
 | **D-pre-11** | Backup Supabase obrigatório | Task 0.1 pre-flight gate |
 | **D-pre-12** | Event processor síncrono puro | Task 1.2 — sem side-effects + replayable |
 | **D-pre-13** | 5 tipos eventos canônicos | Task 1.1 — definir + Task 4 testar todos |
 | **D-pre-14** | Taxa contratual respeitada (fallback regra legal) | Task 1 — hierarchy contrato.juros_am_percentual > regra |
+| **D-pre-15** | TRADIO + ROCHA pre-Phase 9.1 viram UAT real comparativo soscalculos | Task 5.1 reformulada — usar TRADIO existente (PDF prévio R$ 26.633,88), NÃO cadastrar sintético. Delta < R$ 1,00 (proporcional magnitude). Adicionado 2026-05-03 |
 
 ## Q-pendentes resolvidas (CONTEXT seção 8)
 
@@ -222,48 +223,61 @@ WHERE devedor_id IN (TRADIO_id, ROCHA_id, 8);
 
 **Operador cola resultados Discovery 1+2 no chat antes de prosseguir.** Sub-IDs reais substituem placeholders abaixo.
 
-##### Step 0.2.1 — DELETE statements (com IDs reais do Discovery)
+##### Step 0.2.1 — DELETE statements (escopo reduzido — D-pre-9 atualizado 2026-05-03)
+
+**Decisão pós-Discovery 2 (2026-05-03)**: TRADIO (id=25 MENDES E MENDES, contrato `ce7b8d47-...`) + ROCHA (id=27 M L FRIOS, contrato `335a2ad2-...`) **PRESERVADOS** — viram UAT real comparativo Task 5.1 (D-pre-15). Apagar APENAS advair (id=8 cobaia teste Phase 8).
+
+Executar no Supabase SQL Editor (ordem FK-safe — tabelas filhas antes das pais):
 
 ```sql
--- IDs dos devedores teste a apagar
--- TRADIO devedor: descobrir via SELECT id FROM devedores WHERE nome ILIKE '%TRADIO%' OR ...
--- ROCHA FASHION devedor: descobrir via contrato_id 335a2ad2-...
--- advair devedor: id=8 (devedor de teste do operador)
+-- Validação count antes (snapshot pré-DELETE)
+SELECT 
+  (SELECT COUNT(*) FROM pagamentos_divida WHERE divida_id IN (SELECT id FROM dividas WHERE devedor_id = 8)) AS pagamentos_count,
+  (SELECT COUNT(*) FROM devedores_dividas WHERE devedor_id = 8) AS junction_count,
+  (SELECT COUNT(*) FROM eventos_andamento WHERE devedor_id = 8) AS eventos_count,
+  (SELECT COUNT(*) FROM fila_cobranca WHERE contrato_id IN (SELECT id FROM contratos_dividas WHERE devedor_id = 8)) AS fila_count,
+  (SELECT COUNT(*) FROM dividas WHERE devedor_id = 8) AS dividas_count,
+  (SELECT COUNT(*) FROM contratos_dividas WHERE devedor_id = 8) AS contratos_count;
+-- Anotar counts. Cada DELETE abaixo deve devolver mesmo count.
 
 -- Step 1: pagamentos_divida (FK pra dividas)
-DELETE FROM pagamentos_divida 
-WHERE divida_id IN (
-  SELECT id FROM dividas WHERE devedor_id IN (8, /* TRADIO devedor_id */, /* ROCHA devedor_id */)
-);
+DELETE FROM pagamentos_divida
+WHERE divida_id IN (SELECT id FROM dividas WHERE devedor_id = 8);
 
--- Step 2: devedores_dividas (junction Phase 7.13)
-DELETE FROM devedores_dividas 
-WHERE devedor_id IN (8, /* TRADIO devedor_id */, /* ROCHA devedor_id */);
+-- Step 2: devedores_dividas (junction Phase 7.13 — FK divida_id + devedor_id)
+DELETE FROM devedores_dividas WHERE devedor_id = 8;
 
--- Step 3: contratos_dividas (header)
-DELETE FROM contratos_dividas 
-WHERE id IN ('ce7b8d47-e93a-42ed-a909-e5038baf3411', '335a2ad2-9481-4836-a88a-55fbe6375827', /* outros se houver */);
+-- Step 3: eventos_andamento (Phase 7.13b)
+DELETE FROM eventos_andamento WHERE devedor_id = 8;
+-- Se schema usar contrato_id em vez de devedor_id, ajustar:
+-- DELETE FROM eventos_andamento WHERE contrato_id IN (SELECT id FROM contratos_dividas WHERE devedor_id = 8);
 
--- Step 4: dividas
-DELETE FROM dividas 
-WHERE devedor_id IN (8, /* TRADIO devedor_id */, /* ROCHA devedor_id */);
+-- Step 4: fila_cobranca (Phase 7.13b)
+DELETE FROM fila_cobranca
+WHERE contrato_id IN (SELECT id FROM contratos_dividas WHERE devedor_id = 8);
 
--- Step 5: eventos_andamento (Phase 7.13b)
-DELETE FROM eventos_andamento 
-WHERE contrato_id IN ('ce7b8d47-...', '335a2ad2-...', /* outros */)
-   OR devedor_id IN (8, ...);
+-- Step 5: dividas (FK contrato_id, devedor_id)
+DELETE FROM dividas WHERE devedor_id = 8;
 
--- Step 6: fila_cobranca (Phase 7.13b)
-DELETE FROM fila_cobranca 
-WHERE contrato_id IN ('ce7b8d47-...', '335a2ad2-...', /* outros */);
+-- Step 6: contratos_dividas (header)
+DELETE FROM contratos_dividas WHERE devedor_id = 8;
 
--- Step 7: devedores (último — todos os outros já foram cleaned)
--- ATENÇÃO: NÃO apagar devedor que é a conta de login do operador
-DELETE FROM devedores WHERE id IN (8, /* TRADIO devedor_id */, /* ROCHA devedor_id */);
+-- Step 7: devedores (último — todas as filhas já cleaned)
+DELETE FROM devedores WHERE id = 8;
+
+-- Validação count depois (deve dar 0 em tudo de id=8)
+SELECT
+  (SELECT COUNT(*) FROM devedores WHERE id = 8) AS dev_id8,
+  (SELECT COUNT(*) FROM contratos_dividas WHERE devedor_id = 8) AS contratos_id8,
+  (SELECT COUNT(*) FROM dividas WHERE devedor_id = 8) AS dividas_id8;
+-- Esperado: 0 / 0 / 0
 ```
 
-- **Must have**: `SELECT count(*) FROM devedores WHERE nome ILIKE '%advair%' OR ...` = 0
-- **Must have**: `SELECT count(*) FROM contratos_dividas` = 0 (ou apenas contratos legítimos do operador)
+- **Must have**: `SELECT count(*) FROM devedores WHERE id = 8` = 0 (advair removido)
+- **Must have preservado**: `SELECT count(*) FROM devedores WHERE id IN (25, 27)` = 2 (TRADIO + ROCHA intactos)
+- **Must have preservado**: `SELECT count(*) FROM contratos_dividas WHERE id IN ('ce7b8d47-e93a-42ed-a909-e5038baf3411', '335a2ad2-9481-4836-a88a-55fbe6375827')` = 2
+
+**ATENÇÃO**: Operador valida visualmente cada count DELETE bate com snapshot pré-DELETE. Discrepância → investigar antes de prosseguir.
 
 #### Step 0.3 — Audits 2.A.1..2.A.6 (read-only)
 
@@ -797,35 +811,38 @@ Se algum quebrar: investigar. Permitido drift se justificado (ver Task 1.7).
 
 **Steps**:
 
-#### Step 5.1 — Cadastrar contrato canônico em MR Cobranças
+#### Step 5.1 — Capturar saldo TRADIO pos-refactor MR Cobranças (D-pre-15)
 
-Cenário canônico:
-- 1 documento com 3 parcelas mensais R$ 1.000 cada
-- Vencimentos: 01/06/2024, 01/07/2024, 01/08/2024
-- 1 pagamento parcial R$ 1.500 em 15/07/2024 (cruza 30/08/2024 quando hoje é depois)
-- Juros 1% a.m., Multa 10%, Honor 10%
-- Indexador: INPC (até 30/08/2024) → IPCA (depois) automatic
-- Hoje = 02/05/2026 (data corrente)
+**Reformulado 2026-05-03**: em vez de cadastrar contrato sintético, **usar TRADIO ACORDO existente** (preservado por D-pre-9 atualizado).
 
-Operador clica "Gerar PDF" → baixa PDF → anota saldo final do MR Cobranças.
+- Operador abre MR Cobranças app
+- Navega para devedor **MENDES E MENDES LTDA** (id=25), contrato TRADIO ACORDO (`ce7b8d47-e93a-42ed-a909-e5038baf3411`)
+- Captura saldo computado pelo motor novo (event processor pós-refactor) — print ou anotar valor
+- Operador também clica "Gerar PDF" → baixa PDF demonstrativo formato evolução (smoke render Task 3.4 retroativo é validado aqui)
 
-#### Step 5.2 — Cadastrar mesmo cenário em soscalculos
+**Output**: `saldo_MR_pos_refactor` anotado.
 
-Operador entra na conta gratuita soscalculos:
-- Mesmas datas/valores do Step 5.1
-- Indexador equivalente (INPC + IPCA conforme regime)
-- Multa 10%, Honor 10%, Juros 1% a.m.
+#### Step 5.2 — Comparar com PDF soscalculos prévio (referência Phase 8)
 
-Soscalculos calcula → operador anota saldo final.
+**Não precisa re-cadastrar em soscalculos** — referência golden TRADIO já capturada em **Phase 8** quando operador identificou drift R$ 797,92.
 
-#### Step 5.3 — Comparar saldos
+- **Golden TRADIO soscalculos** = R$ 26.633,88 (Phase 8 captura, anchor canônico)
+- Esta é a fonte de verdade jurídica (cálculo tribunal-style independente)
+
+**Output**: nenhum cadastro novo — referência já em mãos.
+
+#### Step 5.3 — Comparar saldos (SC-9 — gate jurídico final)
 
 ```
-Delta = |saldo_MR_Cobranças - saldo_soscalculos|
+Delta = |saldo_MR_pos_refactor - 26.633,88|
 ```
 
-**SC-9 PASS**: Delta < R$ 0,10 ✅
-**SC-9 FAIL**: Delta >= R$ 0,10 → ABORT Task 5, voltar Task 1 investigar drift
+**SC-9 PASS**: Delta < R$ 1,00 ✅ (tolerância proporcional magnitude TRADIO ~R$ 26K — D-pre-15)
+**SC-9 FAIL**: Delta ≥ R$ 1,00 → **ABORT Task 5**, voltar Task 1 investigar drift
+
+**Justificativa tolerância**: cenário real TRADIO tem múltiplas parcelas + pagamentos parciais + transição Lei 14.905/24, com mais oportunidade de divergência por arredondamento entre os dois sistemas. R$ 1,00 sobre ~R$ 26.633 = 0,004% — alinhado com regra de 4 casas decimais BCB.
+
+**Sub-validação adicional (Step 0.0 golden)**: também verificar que cenário simples R$ 100 venc 01/04/2026 retorne ~R$ 100,02 no MR pós-refactor (delta < R$ 0,10 sub-cenário simples). Operador faz cadastro mínimo apenas se quiser cross-check rápido — opcional.
 
 #### Step 5.4 — Print/PDF comparativo lado a lado (anexar evidência UAT)
 
@@ -872,7 +889,7 @@ D-01 RELAXED escopo Phase 9.1 APENAS — motor refactored vira nova
 baseline INTOCADO pós-SHIP. Pattern feedback_d01_relaxation_protocol
 (Phase 7.9 precedente).
 
-UAT comparativo soscalculos PASS — delta saldo < R$ 0,10 (SC-9).
+UAT comparativo soscalculos PASS — TRADIO delta < R$ 1,00 vs PDF prévio R$ 26.633,88 (SC-9, D-pre-15).
 
 Backup Supabase preservado >= 7 dias pós-SHIP (rollback safety net).
 Dados teste apagados pré-refactor (TRADIO + ROCHA + advair).
@@ -905,7 +922,7 @@ Phase 9.1 SHIPPED 2026-05-02 — primeira phase milestone v1.5.
 
 Tag v1.5-phase9.1 criada neste commit (TAG TARGET).
 
-UAT comparativo soscalculos PASS (SC-9): delta saldo < R$ 0,10.
+UAT comparativo soscalculos PASS (SC-9): TRADIO delta saldo < R$ 1,00 vs PDF soscalculos prévio R$ 26.633,88 (D-pre-15).
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -969,7 +986,7 @@ git ls-remote --tags origin | grep v1.5-phase9.1  # deve listar
 
 - ✅ Step 5.1 contrato canônico cadastrado MR
 - ✅ Step 5.2 mesmo cenário em soscalculos
-- ✅ Step 5.3 SC-9 PASS — delta < R$ 0,10
+- ✅ Step 5.3 SC-9 PASS — TRADIO delta < R$ 1,00 vs PDF prévio R$ 26.633,88 (D-pre-15)
 - ✅ Step 5.4 evidência UAT anexada chat
 
 ## Gates post-commit (Task 5)
@@ -985,7 +1002,7 @@ git ls-remote --tags origin | grep v1.5-phase9.1  # deve listar
 
 - ✅ Tasks 0-5 PASS sequencial (autonomous false, PAUSAs operador entre tasks-críticas)
 - ✅ SC-1 a SC-10 todos PASS (cumulative)
-- ✅ UAT comparativo soscalculos delta < R$ 0,10 (SC-9 — gate jurídico)
+- ✅ UAT comparativo soscalculos: TRADIO delta < R$ 1,00 vs PDF prévio R$ 26.633,88 (SC-9 — gate jurídico, D-pre-15)
 - ✅ D-01 RELAXED escopo Phase 9.1 — comments headers atualizados, commit message explícito
 - ✅ Schema INTOCADO (D-pre-10 DEFERRED v1.6)
 - ✅ Backup Supabase >= 7 dias pós-SHIP
