@@ -32,7 +32,7 @@ tags:
 # Plan 09.1-01: Refactor motor evolução por eventos (tribunal-style)
 
 <objective>
-Substituir motor monolítico atual (`devedorCalc.js calcularDetalheEncargos` com 3 loops Art.354 duplicados em L59/L172/L277) por **event processor síncrono puro tribunal-style**, alinhando 100% com referência **soscalculos** e aderindo à **Lei 14.905/24** (regime intertemporal taxa legal vigente 30/08/2024). Motor novo expõe API `processarEventos(contrato, dividas, eventos, hoje) → { estado, historico }` — determinístico, replayable, debugável (audit trail jurídico). Custas + multa + honorários calculados sobre **Principal Corrigido apenas** (D-pre-4). Índices INPC/IPCA-15/Taxa Legal carregados de `src/data/indicesHistoricos.json` populado automaticamente via **BCB SGS API** (séries 433 INPC, 7849 IPCA-15, 29541+29542 componentes Taxa Legal). Taxa Legal calculada conforme fórmula oficial **Resolução CMN 5.171/24**: `TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 (%)` — NÃO é soma simples (operador validou pós-revisão PLAN, 2026-05-02). PDF Demonstrativo reescrito com formato evolução por etapas (deduções → créditos → consolidado). **Constraints invioláveis**: D-01 RELAXED escopo Phase 9.1 apenas (volta estrito pós-SHIP), Schema INTOCADO (D-pre-10 defer), autonomous false (UAT comparativo soscalculos é gate jurídico SC-9 obrigatório), ZERO push até SC-9 PASS. Janela ideal — sistema vazio (zero clientes prod), Phase 8 SHIPPED 2026-05-02 fechou v1.4. Phase 9.1 abre v1.5.
+Substituir motor monolítico atual (`devedorCalc.js calcularDetalheEncargos` com 3 loops Art.354 duplicados em L59/L172/L277) por **event processor síncrono puro tribunal-style**, alinhando 100% com referência **soscalculos** e aderindo à **Lei 14.905/24** (regime intertemporal taxa legal vigente 30/08/2024). Motor novo expõe API `processarEventos(contrato, dividas, eventos, hoje) → { estado, historico }` — determinístico, replayable, debugável (audit trail jurídico). Custas + multa + honorários calculados sobre **Principal Corrigido apenas** (D-pre-4). Índices INPC/IPCA-15/Taxa Legal carregados de `src/data/indicesHistoricos.json` populado automaticamente via **BCB SGS API** (séries 433 INPC, 7478 IPCA-15, 29541+29542 componentes Taxa Legal, **29543 Taxa Legal mensal direta**). Taxa Legal: **Tentativa 1** consome série 29543 (já calculada pelo BCB), **Tentativa 2 fallback** calcula localmente via fórmula oficial **Resolução CMN 5.171/24**: `TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 (%)` — NÃO é soma simples (operador validou pós-revisão PLAN 2026-05-02; códigos validados via curls audit 2.A.1 2026-05-03). PDF Demonstrativo reescrito com formato evolução por etapas (deduções → créditos → consolidado). **Constraints invioláveis**: D-01 RELAXED escopo Phase 9.1 apenas (volta estrito pós-SHIP), Schema INTOCADO (D-pre-10 defer), autonomous false (UAT comparativo soscalculos é gate jurídico SC-9 obrigatório), ZERO push até SC-9 PASS. Janela ideal — sistema vazio (zero clientes prod), Phase 8 SHIPPED 2026-05-02 fechou v1.4. Phase 9.1 abre v1.5.
 </objective>
 
 <must_haves>
@@ -46,7 +46,7 @@ truths:
   - "Multa e honorários sobre Principal Corrigido APENAS (D-pre-4 — alinha 100% soscalculos)"
   - "Taxa juros contratual respeitada (juros_am_percentual quando preenchido, fallback regra legal)"
   - "Índices INPC/IPCA/Taxa Legal mensais carregados de src/data/indicesHistoricos.json (header + fonte + lembrete atualização)"
-  - "JSON populado via BCB SGS API automatizada (códigos 433 INPC, 7849 IPCA-15, 29541+29542 componentes Taxa Legal) — fetch script reproduzível"
+  - "JSON populado via BCB SGS API automatizada (códigos 433 INPC, 7478 IPCA-15, 29541+29542 componentes Taxa Legal, 29543 Taxa Legal mensal direta) — fetch script reproduzível. Códigos validados audit 2.A.1 2026-05-03 via curls direto"
   - "Taxa Legal calculada conforme fórmula oficial Resolução CMN 5.171/24: TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 (%) — NÃO é soma simples Selic+IPCA"
   - "PDF Demonstrativo Step 1.9.c reescrito formato evolução: deduções → créditos → consolidado (espelha soscalculos)"
   - "Backup Supabase pré-refactor preservado pelo menos 7 dias (rollback safety net)"
@@ -464,10 +464,12 @@ npm run build
     "fonte": "BCB SGS API (api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados)",
     "codigos": {
       "INPC": 433,
-      "IPCA": 4449,
-      "TaxaLegal_componente1": 29541,
-      "TaxaLegal_componente2": 29542
+      "IPCA15": 7478,
+      "FatorSelic": 29541,
+      "FatorIPCA15": 29542,
+      "TaxaLegalDireta": 29543
     },
+    "taxa_legal_fonte": "29543_direta",
     "lembreteOperador": "Atualizar mensalmente — rodar npm run fetch-indices na primeira semana de cada mês"
   },
   "INPC": {
@@ -476,10 +478,10 @@ npm run build
     "...": "...",
     "2026-04": 0.43
   },
-  "IPCA": {
+  "IPCA15": {
     "2018-01": 0.32,
     "...": "...",
-    "2026-04": 0.50
+    "2026-04": 0.89
   },
   "TaxaLegal": {
     "2024-08": 0.834880,
@@ -496,21 +498,22 @@ Valores são percentuais mensais (ex: 0.43 = 0.43%/mês).
 
 **Abordagem (CORRIGIDA — operador validou fórmula 2026-05-02 via PDF Resolução CMN 5.171/24)**:
 
-Consumir séries SGS BCB:
+Consumir séries SGS BCB (validadas via curls audit 2.A.1 2026-05-03):
 - **INPC**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json` (variação % mensal)
-- **IPCA-15**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.7849/dados?formato=json` (variação % mensal — **não usar 4449 IPCA cheio**, fórmula CMN exige IPCA-15)
-- **Fator Selic mensal**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29541/dados?formato=json` (já contém produtório diários do mês)
-- **Fator IPCA-15 mensal**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29542/dados?formato=json`
+- **IPCA-15**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.7478/dados?formato=json` (variação % mensal — **não usar 4449 IPCA cheio**, fórmula CMN exige IPCA-15. **Não usar 7849, descontinuada 2019**.)
+- **Fator Selic mensal**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29541/dados?formato=json` (já contém produtório diários do mês, 8 casas decimais)
+- **Fator IPCA-15 mensal**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29542/dados?formato=json` (4 casas decimais)
+- **Taxa Legal mensal direta**: `GET https://api.bcb.gov.br/dados/serie/bcdata.sgs.29543/dados?formato=json` (% mensal já calculada pelo BCB conforme CMN 5.171/24 — **fonte preferencial Tentativa 1**)
 
-Estratégia Taxa Legal:
-- **Tentativa 1**: buscar série Taxa Legal direta no SGS (verificar código exato no portal BCB; candidatos: 0190 ou similar). Se existir e estiver atualizada, usar valor já divulgado.
-- **Tentativa 2 (fallback)**: calcular Taxa Legal localmente conforme **Resolução CMN 5.171/24**:
+Estratégia Taxa Legal (atualizada audit 2.A.1 — série 29543 ATIVADA):
+- **Tentativa 1 (preferencial)**: consumir **série 29543 direta**. BCB já calcula e divulga conforme CMN 5.171/24. Cross-check audit 2.A.1: 29543 abril/2026 = 0.768672% bate com cálculo CMN local 0.7688% (delta 0.000128 = arredondamento 4 casas IPCA-15).
+- **Tentativa 2 (fallback)**: somente se 29543 retornar 404 (improvável, é série oficial), calcular localmente conforme **Resolução CMN 5.171/24**:
   ```
   TL_m = Max [ (Fator Selic_m / Fator IPCA-15_m) - 1 ; 0 ] × 100  (% mensal)
   ```
   Onde:
-  - `Fator Selic_m` = série SGS 29541 (mês anterior, 8 casas decimais)
-  - `Fator IPCA-15_m` = série SGS 29542 (mês anterior, 4 casas decimais)
+  - `Fator Selic_m` = série SGS 29541 (8 casas decimais)
+  - `Fator IPCA-15_m` = série SGS 29542 (4 casas decimais)
   - Floor zero quando IPCA-15 supera Selic (Art. 6º Resolução)
   - Regime juros simples (não composto)
   - Pro rata por dias corridos quando subperíodo < 1 mês completo
@@ -520,7 +523,7 @@ Período de cobertura:
 - INPC, IPCA-15, Fator Selic, Fator IPCA-15: 01/2018 → mês corrente
 - Taxa Legal calculada/buscada: 08/2024 → mês corrente (pós-vigência Lei 14.905/24)
 
-Header JSON output: `{ ultimaAtualizacao, fonte: 'BCB SGS', codigos: { INPC: 433, IPCA15: 7849, FatorSelic: 29541, FatorIPCA: 29542, TaxaLegal_serie_direta_OPCIONAL }, formula_taxa_legal: 'TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 — Resolução CMN 5.171/24', lembreteOperador }`.
+Header JSON output: `{ ultimaAtualizacao, fonte: 'BCB SGS', codigos: { INPC: 433, IPCA15: 7478, FatorSelic: 29541, FatorIPCA15: 29542, TaxaLegalDireta: 29543 }, formula_taxa_legal: 'TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 — Resolução CMN 5.171/24 (fallback Tentativa 2; Tentativa 1 = série 29543 direta)', lembreteOperador }`.
 
 Script `scripts/fetch-indices.js` (NEW):
 
@@ -529,10 +532,10 @@ import fs from 'fs';
 
 const SERIES = {
   INPC: 433,
-  IPCA15: 7849,
+  IPCA15: 7478,             // ✅ código correto (7849 está descontinuada desde 2019)
   FatorSelic: 29541,
   FatorIPCA15: 29542,
-  // TaxaLegalDireta: <CODIGO_VERIFICAR_NO_PORTAL_BCB> — opcional Tentativa 1
+  TaxaLegalDireta: 29543,   // ✅ Tentativa 1 — série dedicada Taxa Legal mensal CMN 5.171/24
 };
 
 const DATA_INICIAL = '01/01/2018';
@@ -554,8 +557,9 @@ async function fetchSerie(codigo) {
 }
 
 function agregarMensal(dadosDiarios) {
-  // BCB SGS retorna [{data: "DD/MM/YYYY", valor: "0.43"}] — séries 433/7849 já mensais;
-  // séries 29541/29542 são fatores mensais (produtório diário já consolidado pelo BCB)
+  // BCB SGS retorna [{data: "DD/MM/YYYY", valor: "0.43"}] — séries 433/7478 já mensais (variação %);
+  // séries 29541/29542 são fatores mensais (produtório diário já consolidado pelo BCB);
+  // série 29543 é Taxa Legal mensal % já calculada pelo BCB (CMN 5.171/24).
   const mensal = {};
   for (const ponto of dadosDiarios) {
     const [d, m, y] = ponto.data.split('/');
@@ -568,26 +572,39 @@ function agregarMensal(dadosDiarios) {
 async function main() {
   const inpc = agregarMensal(await fetchSerie(SERIES.INPC));
   const ipca15 = agregarMensal(await fetchSerie(SERIES.IPCA15));
-  const fatorSelic = agregarMensal(await fetchSerie(SERIES.FatorSelic));
-  const fatorIPCA15 = agregarMensal(await fetchSerie(SERIES.FatorIPCA15));
 
-  // Taxa Legal conforme Resolução CMN 5.171/24 (operador validou 2026-05-02):
-  // TL_m = Max [ (Fator Selic_m / Fator IPCA-15_m) - 1 ; 0 ] × 100  (% mensal, 6 casas)
-  // Floor zero quando IPCA-15 supera Selic (Art. 6º).
-  const taxaLegal = {};
-  for (const k of Object.keys(fatorSelic)) {
-    if (fatorIPCA15[k] == null || fatorIPCA15[k] === 0) continue;  // skip se ausente/zero (evita div0)
-    const razao = fatorSelic[k] / fatorIPCA15[k];
-    const tl = Math.max(razao - 1, 0) * 100;
-    taxaLegal[k] = parseFloat(tl.toFixed(6));  // 6 casas decimais conforme Resolução
+  // Taxa Legal — Tentativa 1 (preferencial): consumir série 29543 direta do BCB.
+  // BCB já calcula conforme CMN 5.171/24, Art. 6º.
+  // Cross-check audit 2.A.1 (2026-05-03): 29543 abril/2026 = 0.768672% bate
+  // com cálculo CMN local 0.7688% (delta 0.000128 = arredondamento 4 casas IPCA-15).
+  let taxaLegal = {};
+  let fonteTL = '29543_direta';
+  try {
+    taxaLegal = agregarMensal(await fetchSerie(SERIES.TaxaLegalDireta));
+    if (Object.keys(taxaLegal).length === 0) throw new Error('série 29543 retornou vazio');
+  } catch (err) {
+    // Tentativa 2 (fallback): calcular localmente via fórmula CMN com 29541+29542.
+    // Só executa se 29543 retornar 404, vazio, ou erro de rede.
+    console.warn(`⚠️ Tentativa 1 (série 29543) falhou (${err.message}). Caindo pra Tentativa 2 (cálculo local CMN 5.171/24).`);
+    fonteTL = '29541_29542_calculo_local_CMN';
+    const fatorSelic = agregarMensal(await fetchSerie(SERIES.FatorSelic));
+    const fatorIPCA15 = agregarMensal(await fetchSerie(SERIES.FatorIPCA15));
+    taxaLegal = {};
+    for (const k of Object.keys(fatorSelic)) {
+      if (fatorIPCA15[k] == null || fatorIPCA15[k] === 0) continue;  // skip se ausente/zero (evita div0)
+      const razao = fatorSelic[k] / fatorIPCA15[k];
+      const tl = Math.max(razao - 1, 0) * 100;
+      taxaLegal[k] = parseFloat(tl.toFixed(6));  // 6 casas decimais conforme Resolução
+    }
   }
 
   const json = {
     header: {
       ultimaAtualizacao: new Date().toISOString().slice(0, 10),
       fonte: 'BCB SGS API (api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados)',
-      codigos: { INPC: 433, IPCA15: 7849, FatorSelic: 29541, FatorIPCA15: 29542 },
-      formula_taxa_legal: 'TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 — Resolução CMN 5.171/24, Art. 6º',
+      codigos: { INPC: 433, IPCA15: 7478, FatorSelic: 29541, FatorIPCA15: 29542, TaxaLegalDireta: 29543 },
+      formula_taxa_legal: 'TL_m = Max[(Fator Selic_m / Fator IPCA-15_m) - 1; 0] × 100 — Resolução CMN 5.171/24, Art. 6º (Tentativa 2 fallback; Tentativa 1 = série 29543 direta)',
+      taxa_legal_fonte: fonteTL,  // '29543_direta' OU '29541_29542_calculo_local_CMN'
       lembreteOperador: 'Atualizar mensalmente — rodar npm run fetch-indices na primeira semana de cada mês',
     },
     INPC: inpc,
@@ -613,27 +630,32 @@ Rodar 1x agora pra popular JSON.
 
 #### Step 2.2.b — Mini-gate validação cruzada Taxa Legal abril/2026
 
-Após gerar `TaxaLegal["2026-04"]` (via Tentativa 1 série direta OU Tentativa 2 cálculo local conforme fórmula CMN 5.171/24), validar contra **golden reference soscalculos** capturado em Step 0.0:
+Após gerar `TaxaLegal["2026-04"]` (via Tentativa 1 série 29543 direta OU Tentativa 2 cálculo local CMN 5.171/24), validar contra **valor oficial BCB SGS 29543** capturado em audit 2.A.1:
 
 ```js
 // Pos-fetch validation gate (executa após populate JSON em main())
-const TL_ABRIL2026_GOLDEN_SOSCALCULOS = 0.02479;
+// Anchor BCB oficial série 29543 (Taxa Legal mensal direta) — abril/2026 = 0.768672%
+// Validado audit 2.A.1 (2026-05-03) via curl direto api.bcb.gov.br/dados/serie/bcdata.sgs.29543
+const TL_ABRIL2026_BCB_OFICIAL = 0.768672;
 const tl_abril2026 = json.TaxaLegal['2026-04'];
-const delta = Math.abs(tl_abril2026 - TL_ABRIL2026_GOLDEN_SOSCALCULOS);
+const delta = Math.abs(tl_abril2026 - TL_ABRIL2026_BCB_OFICIAL);
 
 if (delta > 0.001) {
   throw new Error(
-    `Taxa Legal abril/2026 calculada (${tl_abril2026}%) diverge do golden reference soscalculos (${TL_ABRIL2026_GOLDEN_SOSCALCULOS}%) em ${delta}%. ` +
-    `Possíveis causas: (1) fórmula CMN 5.171/24 mal interpretada, (2) série SGS errada, (3) golden reference desatualizado. ` +
+    `Taxa Legal abril/2026 calculada (${tl_abril2026}%) diverge do BCB SGS 29543 oficial ` +
+    `(${TL_ABRIL2026_BCB_OFICIAL}%) em ${delta}%. ` +
+    `Possíveis causas: (1) série 29543 mudou de identidade ou foi descontinuada, ` +
+    `(2) fórmula CMN local errada (fallback Tentativa 2), ` +
+    `(3) IPCA-15 série 7478 mudou. ` +
     `Investigar antes de Task 3+.`
   );
 }
-console.log(`✅ Taxa Legal abril/2026 = ${tl_abril2026}% bate com soscalculos golden (delta ${delta}%)`);
+console.log(`✅ Taxa Legal abril/2026 = ${tl_abril2026}% bate com BCB oficial 29543 (delta ${delta}%, fonte: ${json.header.taxa_legal_fonte})`);
 ```
 
-**Propósito**: detectar erro de fórmula CMN cedo (Task 2), antes de Task 5 UAT comparativo. Custo: ~10 linhas. Falha do gate força investigação imediata (causa #1 mais provável: interpretação errada da fórmula `Max[(Selic/IPCA15)-1; 0]×100`; causa #2 confunde séries 29541 vs 29542 ou usa 4449 IPCA cheio em vez de 7849 IPCA-15; causa #3 raro mas possível).
+**Propósito**: detectar erro cedo (Task 2), antes de Task 5 UAT comparativo. Custo: ~12 linhas. Falha do gate força investigação imediata.
 
-**Anchor de origem**: Step 0.0 SMOKE TEST SOSCALCULOS 2026-05-02 — operador gerou cálculo R$ 100 venc 01/04/2026 → soscalculos retornou R$ 100,02 (Juros R$ 0,02 / 0,02479% mensal Taxa Legal).
+**Anchor histórico — explicação golden Step 0.0**: operador inicialmente capturou em Step 0.0 SMOKE TEST SOSCALCULOS 2026-05-02 cálculo R$ 100 venc 01/04/2026 → soscalculos R$ 100,02 (juros R$ 0,02 / 0,02479%). Investigação audit 2.A.1 (2026-05-03) revelou que **0.02479% NÃO é a Taxa Legal mensal** — é Taxa Legal × pro rata 1 dia (0.768672 / 31 ≈ 0.02479). Soscalculos calculou apenas 1 dia além do mês completo (venc 01/04 → cálculo 02/05 = 31 dias). Anchor real (mensal) é série BCB 29543 = 0.768672% pra abril/2026.
 
 #### Step 2.3 — Helper lerIndice(tipo, mes, ano)
 
