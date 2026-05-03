@@ -1,0 +1,491 @@
+{
+  "C1_vencimento_simples": {
+    "descricao": "1 dívida R$ 1.000, vencimento 01/06/2024, hoje 31/07/2024, sem pagamento",
+    "input": {
+      "devedor": {
+        "id": "GM-C1",
+        "dividas": [
+          {
+            "id": "C1-D1",
+            "valor_total": 1000,
+            "data_vencimento": "2024-06-01",
+            "data_inicio_atualizacao": "2024-06-01",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc"
+          }
+        ]
+      },
+      "pagamentos": [],
+      "hoje": "2024-07-31"
+    },
+    "output": {
+      "valorOriginal": 1000,
+      "multa": {
+        "valor": 100.51065
+      },
+      "juros": {
+        "valor": 20.10213
+      },
+      "correcao": {
+        "valor": 5.106499999999903
+      },
+      "honorarios": {
+        "valor": 112.57192799999999
+      },
+      "custas": {
+        "original": 0,
+        "atualizado": 0
+      },
+      "art523": {
+        "multa": 0,
+        "honorarios": 0,
+        "total": 0
+      },
+      "totalEncargos": 238.29120799999987,
+      "totalPago": 0,
+      "saldoAtualizado": 1238.2912079999999,
+      "diasEmAtraso": 701,
+      "detalhePorDivida": [
+        {
+          "descricao": "Dívida 1",
+          "valorOriginal": 1000,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 5.106499999999903,
+          "correcaoPeriodos": null,
+          "juros": 20.10213,
+          "jurosPeriodos": null,
+          "multa": 100.51065,
+          "honorarios": 112.57192799999999,
+          "custas": null,
+          "art523": {
+            "multa": 0,
+            "honorarios_sucumbenciais": 0,
+            "total_art523": 0,
+            "opcao": "nao_aplicar"
+          },
+          "saldoTeorico": 1238.2912079999999,
+          "dataVencimento": "2024-06-01"
+        }
+      ]
+    },
+    "capturadoEm": "2026-05-03T15:22:56.671Z"
+  },
+  "C2_pagamento_parcial_preLei14905": {
+    "descricao": "1 dívida R$ 1.000, venc 01/06/2024, pag R$ 500 em 15/07/2024, hoje 29/08/2024",
+    "input": {
+      "devedor": {
+        "id": "GM-C2",
+        "dividas": [
+          {
+            "id": "C2-D1",
+            "valor_total": 1000,
+            "data_vencimento": "2024-06-01",
+            "data_inicio_atualizacao": "2024-06-01",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc"
+          }
+        ]
+      },
+      "pagamentos": [
+        {
+          "divida_id": "C2-D1",
+          "valor": 500,
+          "data_pagamento": "2024-07-15"
+        }
+      ],
+      "hoje": "2024-08-29"
+    },
+    "output": {
+      "valorOriginal": 1000,
+      "multa": {
+        "valor": 100.51065
+      },
+      "juros": {
+        "valor": 30.153194999999997
+      },
+      "correcao": {
+        "valor": 5.106499999999903
+      },
+      "honorarios": {
+        "valor": 113.5770345
+      },
+      "custas": {
+        "original": 0,
+        "atualizado": 0
+      },
+      "art523": {
+        "multa": 0,
+        "honorarios": 0,
+        "total": 0
+      },
+      "totalEncargos": 249.34737949999987,
+      "totalPago": 500,
+      "saldoAtualizado": 755.0149804436159,
+      "diasEmAtraso": 701,
+      "detalhePorDivida": [
+        {
+          "descricao": "Dívida 1",
+          "valorOriginal": 1000,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 5.106499999999903,
+          "correcaoPeriodos": null,
+          "juros": 30.153194999999997,
+          "jurosPeriodos": null,
+          "multa": 100.51065,
+          "honorarios": 113.5770345,
+          "custas": null,
+          "art523": {
+            "multa": 0,
+            "honorarios_sucumbenciais": 0,
+            "total_art523": 0,
+            "opcao": "nao_aplicar"
+          },
+          "saldoTeorico": 1249.3473795,
+          "dataVencimento": "2024-06-01"
+        }
+      ]
+    },
+    "capturadoEm": "2026-05-03T15:22:56.671Z"
+  },
+  "C3_custa_avulsa_preLei14905": {
+    "descricao": "1 dívida R$ 1.000 + 1 custa R$ 100 lançada em 15/06/2024, hoje 31/07/2024",
+    "input": {
+      "devedor": {
+        "id": "GM-C3",
+        "dividas": [
+          {
+            "id": "C3-D1",
+            "valor_total": 1000,
+            "data_vencimento": "2024-06-01",
+            "data_inicio_atualizacao": "2024-06-01",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc",
+            "custas": [
+              {
+                "id": "C3-C1",
+                "valor": 100,
+                "data": "2024-06-15",
+                "descricao": "Custa avulsa teste"
+              }
+            ]
+          }
+        ]
+      },
+      "pagamentos": [],
+      "hoje": "2024-07-31"
+    },
+    "output": {
+      "valorOriginal": 1000,
+      "multa": {
+        "valor": 100.51065
+      },
+      "juros": {
+        "valor": 20.10213
+      },
+      "correcao": {
+        "valor": 5.106499999999903
+      },
+      "honorarios": {
+        "valor": 112.57192799999999
+      },
+      "custas": {
+        "original": 100,
+        "atualizado": 100.51064999999998
+      },
+      "art523": {
+        "multa": 0,
+        "honorarios": 0,
+        "total": 0
+      },
+      "totalEncargos": 238.80185799999987,
+      "totalPago": 0,
+      "saldoAtualizado": 1238.2912079999999,
+      "diasEmAtraso": 701,
+      "detalhePorDivida": [
+        {
+          "descricao": "Dívida 1",
+          "valorOriginal": 1000,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 5.106499999999903,
+          "correcaoPeriodos": null,
+          "juros": 20.10213,
+          "jurosPeriodos": null,
+          "multa": 100.51065,
+          "honorarios": 112.57192799999999,
+          "custas": {
+            "original": 100,
+            "atualizado": 100.51064999999998
+          },
+          "art523": {
+            "multa": 0,
+            "honorarios_sucumbenciais": 0,
+            "total_art523": 0,
+            "opcao": "nao_aplicar"
+          },
+          "saldoTeorico": 1238.8018579999998,
+          "dataVencimento": "2024-06-01"
+        }
+      ]
+    },
+    "capturadoEm": "2026-05-03T15:22:56.671Z"
+  },
+  "C4_art523_aplicado_multa_honorarios": {
+    "descricao": "1 dívida R$ 1.000 com art523_opcao=multa_honorarios, hoje 31/07/2024",
+    "input": {
+      "devedor": {
+        "id": "GM-C4",
+        "dividas": [
+          {
+            "id": "C4-D1",
+            "valor_total": 1000,
+            "data_vencimento": "2024-06-01",
+            "data_inicio_atualizacao": "2024-06-01",
+            "art523_opcao": "multa_honorarios",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc"
+          }
+        ]
+      },
+      "pagamentos": [],
+      "hoje": "2024-07-31"
+    },
+    "output": {
+      "valorOriginal": 1000,
+      "multa": {
+        "valor": 100.51065
+      },
+      "juros": {
+        "valor": 20.10213
+      },
+      "correcao": {
+        "valor": 5.106499999999903
+      },
+      "honorarios": {
+        "valor": 112.57192799999999
+      },
+      "custas": {
+        "original": 0,
+        "atualizado": 0
+      },
+      "art523": {
+        "multa": 123.8291208,
+        "honorarios": 123.8291208,
+        "total": 247.6582416
+      },
+      "totalEncargos": 485.94944959999987,
+      "totalPago": 0,
+      "saldoAtualizado": 1485.9494495999998,
+      "diasEmAtraso": 701,
+      "detalhePorDivida": [
+        {
+          "descricao": "Dívida 1",
+          "valorOriginal": 1000,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 5.106499999999903,
+          "correcaoPeriodos": null,
+          "juros": 20.10213,
+          "jurosPeriodos": null,
+          "multa": 100.51065,
+          "honorarios": 112.57192799999999,
+          "custas": null,
+          "art523": {
+            "multa": 123.8291208,
+            "honorarios_sucumbenciais": 123.8291208,
+            "total_art523": 247.6582416,
+            "opcao": "multa_honorarios"
+          },
+          "saldoTeorico": 1485.9494495999998,
+          "dataVencimento": "2024-06-01"
+        }
+      ]
+    },
+    "capturadoEm": "2026-05-03T15:22:56.671Z"
+  },
+  "C5_multi_parcelas_Art354_sequencial": {
+    "descricao": "3 parcelas R$ 500 (vencs 01/06, 01/07, 01/08/2024) + 2 pagamentos (R$ 400 em 15/07, R$ 600 em 15/08), hoje 29/08/2024",
+    "input": {
+      "devedor": {
+        "id": "GM-C5",
+        "dividas": [
+          {
+            "id": "C5-D1",
+            "valor_total": 500,
+            "data_vencimento": "2024-06-01",
+            "data_inicio_atualizacao": "2024-06-01",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc"
+          },
+          {
+            "id": "C5-D2",
+            "valor_total": 500,
+            "data_vencimento": "2024-07-01",
+            "data_inicio_atualizacao": "2024-07-01",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc"
+          },
+          {
+            "id": "C5-D3",
+            "valor_total": 500,
+            "data_vencimento": "2024-08-01",
+            "data_inicio_atualizacao": "2024-08-01",
+            "multa_pct": 10,
+            "honorarios_pct": 10,
+            "juros_am": 1,
+            "juros_tipo": "juros_simples",
+            "indexador": "inpc"
+          }
+        ]
+      },
+      "pagamentos": [
+        {
+          "divida_id": "C5-D1",
+          "valor": 400,
+          "data_pagamento": "2024-07-15"
+        },
+        {
+          "divida_id": "C5-D2",
+          "valor": 600,
+          "data_pagamento": "2024-08-15"
+        }
+      ],
+      "hoje": "2024-08-29"
+    },
+    "output": {
+      "valorOriginal": 1500,
+      "multa": {
+        "valor": 150.385325
+      },
+      "juros": {
+        "valor": 30.102597499999998
+      },
+      "correcao": {
+        "valor": 3.8532499999999192
+      },
+      "honorarios": {
+        "valor": 168.43411724999999
+      },
+      "custas": {
+        "original": 0,
+        "atualizado": 0
+      },
+      "art523": {
+        "multa": 0,
+        "honorarios": 0,
+        "total": 0
+      },
+      "totalEncargos": 352.7752897499999,
+      "totalPago": 1000,
+      "saldoAtualizado": 852.4092777600648,
+      "diasEmAtraso": 701,
+      "detalhePorDivida": [
+        {
+          "descricao": "Dívida 1",
+          "valorOriginal": 500,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 2.5532499999999514,
+          "correcaoPeriodos": null,
+          "juros": 15.076597499999998,
+          "jurosPeriodos": null,
+          "multa": 50.255325,
+          "honorarios": 56.78851725,
+          "custas": null,
+          "art523": {
+            "multa": 0,
+            "honorarios_sucumbenciais": 0,
+            "total_art523": 0,
+            "opcao": "nao_aplicar"
+          },
+          "saldoTeorico": 624.67368975,
+          "dataVencimento": "2024-06-01"
+        },
+        {
+          "descricao": "Dívida 2",
+          "valorOriginal": 500,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 1.2999999999999678,
+          "correcaoPeriodos": null,
+          "juros": 10.026,
+          "jurosPeriodos": null,
+          "multa": 50.129999999999995,
+          "honorarios": 56.145599999999995,
+          "custas": null,
+          "art523": {
+            "multa": 0,
+            "honorarios_sucumbenciais": 0,
+            "total_art523": 0,
+            "opcao": "nao_aplicar"
+          },
+          "saldoTeorico": 617.6015999999998,
+          "dataVencimento": "2024-07-01"
+        },
+        {
+          "descricao": "Dívida 3",
+          "valorOriginal": 500,
+          "indexador": "inpc",
+          "jurosTipo": "juros_simples",
+          "multaPct": 10,
+          "jurosAM": 1,
+          "honorariosPct": 10,
+          "correcao": 0,
+          "correcaoPeriodos": null,
+          "juros": 5,
+          "jurosPeriodos": null,
+          "multa": 50,
+          "honorarios": 55.5,
+          "custas": null,
+          "art523": {
+            "multa": 0,
+            "honorarios_sucumbenciais": 0,
+            "total_art523": 0,
+            "opcao": "nao_aplicar"
+          },
+          "saldoTeorico": 610.5,
+          "dataVencimento": "2024-08-01"
+        }
+      ]
+    },
+    "capturadoEm": "2026-05-03T15:22:56.671Z"
+  }
+}
